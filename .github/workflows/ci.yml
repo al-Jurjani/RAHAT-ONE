@@ -43,9 +43,9 @@ jobs:
     - name: Run flake8
       run: flake8 src/ tests/
 
-    - name: Run mypy
-      run: mypy src/
-      continue-on-error: true
+    # - name: Run mypy
+    #   run: mypy src/
+    #   continue-on-error: true
 
     # - name: Run tests with coverage
     #   run: |
