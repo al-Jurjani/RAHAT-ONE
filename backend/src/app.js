@@ -40,6 +40,13 @@ app.get('/test-odoo', async (req, res) => {
   }
 });
 
+// Routes
+// Import routes
+const onboardingRoutes = require('./routes/onboardingRoutes');
+
+// Register routes
+app.use('/api/onboarding', onboardingRoutes);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);

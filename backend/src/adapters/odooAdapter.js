@@ -102,14 +102,14 @@ class OdooAdapter {
     return await this.execute(model, 'write', [[id], values]);
   }
 
-  /**
+/**
    * Get employee by ID
    */
   async getEmployee(employeeId) {
     const employees = await this.search(
       'hr.employee',
       [['id', '=', employeeId]],
-      ['name', 'work_email', 'department_id', 'job_id']
+      ['name', 'work_email', 'department_id', 'job_id', 'onboarding_status', 'onboarding_progress_percentage']
     );
     return employees[0] || null;
   }
