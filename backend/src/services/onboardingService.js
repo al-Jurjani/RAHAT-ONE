@@ -7,26 +7,30 @@ class OnboardingService {
    */
   async initiateOnboarding(employeeData) {
     try {
-      // Create employee record in Odoo with custom onboarding fields
+      // Create employee record in Odoo with correct status value
       const employeeId = await odooAdapter.createEmployee({
         name: employeeData.name,
         work_email: employeeData.email,
         mobile_phone: employeeData.phone,
         department_id: employeeData.departmentId || false,
         job_id: employeeData.jobId || false,
-        // Custom fields you created
-        onboarding_status: 'initiated',
-        onboarding_progress_percentage: 0
-      });
+        onboarding_status: 'initiated',  // ✅ This matches your Odoo field
+        onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    });
 
       console.log('✅ Employee created in Odoo. ID:', employeeId);
 
-      return {
+      const result = {
         employeeId,
+        name: employeeData.name,
+        email: employeeData.email,
+        phone: employeeData.phone,
         status: 'initiated',
         progress: 0,
         message: 'Onboarding process initiated successfully'
       };
+
+      return result;
     } catch (error) {
       console.error('❌ Error initiating onboarding:', error);
       throw error;
@@ -34,33 +38,32 @@ class OnboardingService {
   }
 
   /**
-   * Calculate and update onboarding progress
+   * Update onboarding status based on document uploads
    */
-  async updateOnboardingProgress(employeeId, checklist) {
+  async updateOnboardingStatus(employeeId, checklist) {
     try {
       const totalDocs = checklist.length;
       const completedDocs = checklist.filter(item => item.status === 'completed').length;
-      const progress = Math.round((completedDocs / totalDocs) * 100);
 
-      // Determine status based on progress
-      let status = 'initiated';
-      if (progress > 0 && progress < 100) {
-        status = 'in_progress';
-      } else if (progress === 100) {
-        status = 'completed';
+      // Determine appropriate Odoo status
+      let odooStatus = 'initiated';
+      if (completedDocs > 0 && completedDocs < totalDocs) {
+        odooStatus = 'documents_submitted';
+      } else if (completedDocs === totalDocs) {
+        odooStatus = 'verification_pending';
       }
 
-      // Update Odoo employee record
+      // Update Odoo with the correct status
+      // Note: progress_percentage is computed automatically by Odoo
       await odooAdapter.update('hr.employee', employeeId, {
-        onboarding_status: status,
-        onboarding_progress_percentage: progress
+        onboarding_status: odooStatus
       });
 
-      console.log(`✅ Updated onboarding progress: ${progress}% (${status})`);
+      console.log(`✅ Updated onboarding status: ${odooStatus}`);
 
-      return { status, progress };
+      return { status: odooStatus };
     } catch (error) {
-      console.error('❌ Error updating onboarding progress:', error);
+      console.error('❌ Error updating onboarding status:', error);
       throw error;
     }
   }
@@ -92,7 +95,7 @@ class OnboardingService {
 
       console.log('✅ Document uploaded. Attachment ID:', attachmentId);
 
-      // Get updated checklist and recalculate progress
+      // Get updated status
       const statusData = await this.getOnboardingStatus(employeeId);
 
       return {
@@ -115,12 +118,20 @@ class OnboardingService {
    */
   async getOnboardingStatus(employeeId) {
     try {
-      // Get employee details with custom fields
-      const employees = await odooAdapter.search(
-        'hr.employee',
-        [['id', '=', employeeId]],
-        ['name', 'work_email', 'onboarding_status', 'onboarding_progress_percentage']
-      );
+      // Get employee details with onboarding fields
+      const employees = await odooAdapter.execute('hr.employee', 'read', [
+        [employeeId],
+        [
+          'name',
+          'work_email',
+          'onboarding_status',
+          'onboarding_progress_percentage',
+          'documents_verified',
+          'email_provisioned',
+          'system_access_provisioned',
+          'orientation_completed'
+        ]
+      ]);
 
       if (employees.length === 0) {
         throw new Error('Employee not found');
@@ -129,14 +140,13 @@ class OnboardingService {
       const employee = employees[0];
 
       // Get attached documents
-      const attachments = await odooAdapter.search(
-        'ir.attachment',
+      const attachments = await odooAdapter.execute('ir.attachment', 'search_read', [
         [
           ['res_model', '=', 'hr.employee'],
           ['res_id', '=', employeeId]
         ],
         ['name', 'create_date', 'mimetype']
-      );
+      ]);
 
       // Build checklist
       const requiredDocuments = ['CNIC', 'Degree', 'Medical'];
@@ -151,8 +161,14 @@ class OnboardingService {
         };
       });
 
-      // Update progress in Odoo
-      const { status, progress } = await this.updateOnboardingProgress(employeeId, checklist);
+      // Update status based on checklist
+      await this.updateOnboardingStatus(employeeId, checklist);
+
+      // Re-fetch to get updated computed progress
+      const updatedEmployee = await odooAdapter.execute('hr.employee', 'read', [
+        [employeeId],
+        ['onboarding_status', 'onboarding_progress_percentage']
+      ]);
 
       return {
         employeeId,
@@ -161,12 +177,13 @@ class OnboardingService {
           email: employee.work_email
         },
         checklist,
-        progress,
-        status,
-        // Show the values stored in Odoo
-        odooValues: {
-          onboarding_status: employee.onboarding_status,
-          onboarding_progress_percentage: employee.onboarding_progress_percentage
+        progress: updatedEmployee[0].onboarding_progress_percentage || 0,
+        status: updatedEmployee[0].onboarding_status,
+        verificationFlags: {
+          documents_verified: employee.documents_verified,
+          email_provisioned: employee.email_provisioned,
+          system_access_provisioned: employee.system_access_provisioned,
+          orientation_completed: employee.orientation_completed
         }
       };
     } catch (error) {
@@ -180,8 +197,6 @@ class OnboardingService {
    */
   async verifyDocument(attachmentId, verificationStatus) {
     try {
-      // In a real scenario, you'd update custom verification fields on attachments
-      // For now, we'll just return success
       console.log(`✅ Document ${attachmentId} marked as ${verificationStatus}`);
 
       return {
@@ -196,20 +211,46 @@ class OnboardingService {
   }
 
   /**
-   * Complete onboarding (mark as completed manually if needed)
+   * Mark documents as verified (triggers status update)
+   */
+  async markDocumentsVerified(employeeId) {
+    try {
+      await odooAdapter.update('hr.employee', employeeId, {
+        documents_verified: true,
+        onboarding_status: 'verified'
+      });
+
+      console.log(`✅ Documents verified for employee ${employeeId}`);
+
+      return {
+        employeeId,
+        status: 'verified'
+      };
+    } catch (error) {
+      console.error('❌ Error marking documents verified:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete onboarding
    */
   async completeOnboarding(employeeId) {
     try {
       await odooAdapter.update('hr.employee', employeeId, {
-        onboarding_status: 'completed',
-        onboarding_progress_percentage: 100
+        onboarding_status: 'activated',
+        onboarding_completed_date: new Date().toISOString(),
+        documents_verified: true,
+        email_provisioned: true,
+        system_access_provisioned: true,
+        orientation_completed: true
       });
 
       console.log(`✅ Onboarding completed for employee ${employeeId}`);
 
       return {
         employeeId,
-        status: 'completed',
+        status: 'activated',
         progress: 100,
         completedAt: new Date().toISOString()
       };

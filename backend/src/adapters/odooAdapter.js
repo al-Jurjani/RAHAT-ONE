@@ -82,11 +82,31 @@ class OdooAdapter {
   /**
    * Search for records
    */
+  // async search(model, domain = [], fields = [], limit = 100) {
+  //   const ids = await this.execute(model, 'search', [domain, { limit }]);
+  //   if (ids.length === 0) return [];
+  //   return await this.execute(model, 'read', [ids, fields]);
+  // }
+  /**
+   * Search for records
+   */
   async search(model, domain = [], fields = [], limit = 100) {
-    const ids = await this.execute(model, 'search', [domain, { limit }]);
-    if (ids.length === 0) return [];
-    return await this.execute(model, 'read', [ids, fields]);
+    try {
+      // First, search for IDs only
+      const ids = await this.execute(model, 'search', [domain, 0, limit, false]);
+
+      if (!ids || ids.length === 0) {
+        return [];
+      }
+
+      // Then read the records with specified fields
+      return await this.execute(model, 'read', [ids, fields]);
+    } catch (error) {
+      console.error(`❌ Search error on ${model}:`, error);
+      throw error;
+    }
   }
+
 
   /**
    * Create a new record
@@ -105,13 +125,40 @@ class OdooAdapter {
 /**
    * Get employee by ID
    */
+  // async getEmployee(employeeId) {
+  //   const employees = await this.search(
+  //     'hr.employee',
+  //     [['id', '=', employeeId]],
+  //     ['name', 'work_email', 'department_id', 'job_id', 'onboarding_status', 'onboarding_progress_percentage']
+  //   );
+  //   return employees[0] || null;
+  // }
+  /**
+   * Get employee by ID
+   */
+  /**
+   * Get employee by ID
+   */
   async getEmployee(employeeId) {
-    const employees = await this.search(
-      'hr.employee',
-      [['id', '=', employeeId]],
-      ['name', 'work_email', 'department_id', 'job_id', 'onboarding_status', 'onboarding_progress_percentage']
-    );
-    return employees[0] || null;
+    try {
+      const employees = await this.execute('hr.employee', 'read', [
+        [employeeId],
+        [
+          'name',
+          'work_email',
+          'department_id',
+          'job_id',
+          'onboarding_status',
+          'onboarding_progress_percentage',
+          'mobile_phone'
+        ]
+      ]);
+
+      return employees[0] || null;
+    } catch (error) {
+      console.error('❌ Error getting employee:', error);
+      throw error;
+    }
   }
 
   /**
