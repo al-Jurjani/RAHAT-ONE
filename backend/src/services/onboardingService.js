@@ -1,4 +1,5 @@
 const odooAdapter = require('../adapters/odooAdapter');
+const powerAutomateService = require('./powerAutomateService');
 const fs = require('fs').promises;
 
 class OnboardingService {
@@ -30,7 +31,10 @@ class OnboardingService {
         message: 'Onboarding process initiated successfully'
       };
 
+      // 🚀 TRIGGER POWER AUTOMATE FLOW
+      await powerAutomateService.triggerOnboardingFlow(result);
       return result;
+
     } catch (error) {
       console.error('❌ Error initiating onboarding:', error);
       throw error;
