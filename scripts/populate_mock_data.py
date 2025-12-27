@@ -621,7 +621,7 @@ if __name__ == "__main__":
 
         print("\n" + "=" * 60)
         print("✅ Mock data population completed successfully!")
-        print(f"Summary:")
+        print("Summary:")
         print(f"   • {len(dept_ids)} departments")
         print(f"   • {len(job_ids)} job positions")
         print(f"   • {len(employee_ids)} employees")

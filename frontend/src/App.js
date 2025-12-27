@@ -1,24 +1,49 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+// Pages (we'll create these next)
+import RegistrationPage from './pages/RegistrationPage';
+import StatusPage from './pages/StatusPage';
+import HRDashboard from './pages/HRDashboard';
+import HRVerificationDetails from './pages/HRVerificationDetails';
+
+// Outfitters theme colors
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2', // Blue
+    },
+    secondary: {
+      main: '#00897b', // Teal
+    },
+  },
+  typography: {
+    fontFamily: 'Roboto, sans-serif',
+  },
+});
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<RegistrationPage />} />
+          <Route path="/register" element={<RegistrationPage />} />
+          <Route path="/status" element={<StatusPage />} />
+
+          {/* HR Routes */}
+          <Route path="/hr/dashboard" element={<HRDashboard />} />
+          <Route path="/hr/verify/:employeeId" element={<HRVerificationDetails />} />
+        </Routes>
+      </Router>
+      <ToastContainer position="top-right" autoClose={3000} />
+    </ThemeProvider>
   );
 }
 
