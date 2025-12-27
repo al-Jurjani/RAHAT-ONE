@@ -1,3 +1,5 @@
+const documentIntelligenceService = require('./documentIntelligenceService');
+const verificationService = require('./verificationService');
 const odooAdapter = require('../adapters/odooAdapter');
 const powerAutomateService = require('./powerAutomateService');
 const fs = require('fs').promises;
@@ -260,6 +262,59 @@ class OnboardingService {
       };
     } catch (error) {
       console.error('❌ Error completing onboarding:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Run AI verification on uploaded CNIC
+   * Called after candidate submits registration
+   */
+  async runAIVerification(employeeId, cnicFilePath, enteredData) {
+    try {
+      console.log(`🤖 Running AI verification for employee ${employeeId}`);
+
+      // Step 1: Extract data from CNIC image using Azure AI
+      const extractedData = await documentIntelligenceService.extractCNICData(cnicFilePath);
+
+      console.log('📄 Extracted CNIC data:', extractedData);
+
+      // Step 2: Compare extracted vs entered data
+      const verificationResults = await verificationService.verifyCNICData(
+        extractedData,
+        enteredData
+      );
+
+      console.log('🔍 Verification results:', verificationResults);
+
+      // Step 3: Update employee record in Odoo
+      const aiStatus = verificationResults.passed ? 'passed' : 'failed';
+
+      await odooAdapter.updateEmployee(employeeId, {
+        ai_verification_status: aiStatus,
+        ai_verification_score: verificationResults.overallScore,
+        ai_verification_details: JSON.stringify(verificationResults.details),
+        ai_verification_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        extracted_name: extractedData.name,
+        extracted_cnic_number: extractedData.cnicNumber,
+        extracted_father_name: extractedData.fatherName,
+        extracted_dob: extractedData.dob,
+        ocr_confidence: extractedData.confidence,
+        onboarding_status: 'verification_pending'
+      });
+
+      console.log(`✅ AI verification complete: ${aiStatus.toUpperCase()}`);
+
+      return {
+        success: true,
+        status: aiStatus,
+        score: verificationResults.overallScore,
+        details: verificationResults,
+        summary: verificationService.generateVerificationSummary(verificationResults)
+      };
+
+    } catch (error) {
+      console.error('❌ AI verification error:', error);
       throw error;
     }
   }

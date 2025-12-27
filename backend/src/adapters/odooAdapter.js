@@ -82,14 +82,6 @@ class OdooAdapter {
   /**
    * Search for records
    */
-  // async search(model, domain = [], fields = [], limit = 100) {
-  //   const ids = await this.execute(model, 'search', [domain, { limit }]);
-  //   if (ids.length === 0) return [];
-  //   return await this.execute(model, 'read', [ids, fields]);
-  // }
-  /**
-   * Search for records
-   */
   async search(model, domain = [], fields = [], limit = 100) {
     try {
       // First, search for IDs only
@@ -107,7 +99,6 @@ class OdooAdapter {
     }
   }
 
-
   /**
    * Create a new record
    */
@@ -122,20 +113,6 @@ class OdooAdapter {
     return await this.execute(model, 'write', [[id], values]);
   }
 
-/**
-   * Get employee by ID
-   */
-  // async getEmployee(employeeId) {
-  //   const employees = await this.search(
-  //     'hr.employee',
-  //     [['id', '=', employeeId]],
-  //     ['name', 'work_email', 'department_id', 'job_id', 'onboarding_status', 'onboarding_progress_percentage']
-  //   );
-  //   return employees[0] || null;
-  // }
-  /**
-   * Get employee by ID
-   */
   /**
    * Get employee by ID
    */
@@ -146,11 +123,34 @@ class OdooAdapter {
         [
           'name',
           'work_email',
+          'private_email',
           'department_id',
           'job_id',
           'onboarding_status',
           'onboarding_progress_percentage',
-          'mobile_phone'
+          'mobile_phone',
+          'birthday',
+          'entered_cnic_number',
+          'entered_father_name',
+          'extracted_name',
+          'extracted_cnic_number',
+          'extracted_father_name',
+          'extracted_dob',
+          'ocr_confidence',
+          'ai_verification_status',
+          'ai_verification_score',
+          'ai_verification_details',
+          'ai_verification_date',
+          'hr_verification_status',
+          'hr_verification_notes',
+          'hr_verified_by',
+          'hr_verified_date',
+          'rejection_reason',
+          'rejection_details',
+          'create_date',
+          'cnic_uploaded',
+          'degree_uploaded',
+          'medical_uploaded'
         ]
       ]);
 
@@ -166,6 +166,13 @@ class OdooAdapter {
    */
   async createEmployee(employeeData) {
     return await this.create('hr.employee', employeeData);
+  }
+
+  /**
+   * Update employee record
+   */
+  async updateEmployee(employeeId, values) {
+    return await this.update('hr.employee', employeeId, values);
   }
 
   /**
@@ -190,6 +197,137 @@ class OdooAdapter {
       throw error;
     }
   }
+
+  /**
+   * Upload document to Odoo
+   */
+  async uploadDocument(fileBuffer, fileName, resModel, resId, description = '') {
+    return await this.uploadAttachment(fileName, fileBuffer, resModel, resId);
+  }
+
+  /**
+   * Get employee documents (attachments)
+   */
+  async getEmployeeDocuments(employeeId) {
+    const attachmentIds = await this.execute(
+      'ir.attachment',
+      'search',
+      [[['res_model', '=', 'hr.employee'], ['res_id', '=', employeeId]]]
+    );
+
+    if (attachmentIds.length === 0) return [];
+
+    const attachments = await this.execute(
+      'ir.attachment',
+      'read',
+      [attachmentIds, ['name', 'datas_fname', 'mimetype', 'create_date', 'description']]
+    );
+
+    return attachments.map(att => ({
+      id: att.id,
+      name: att.name,
+      filename: att.datas_fname,
+      type: att.mimetype,
+      uploadedDate: att.create_date,
+      description: att.description || ''
+    }));
+  }
+
+  /**
+   * Search employees with domain filters
+   */
+  async searchEmployees(domain) {
+    const employeeIds = await this.execute(
+      'hr.employee',
+      'search',
+      [domain]
+    );
+
+    return employeeIds;
+  }
+
+  /**
+   * Get all departments
+   */
+  async getDepartments() {
+    const departmentIds = await this.execute(
+      'hr.department',
+      'search',
+      [[]]
+    );
+
+    if (departmentIds.length === 0) return [];
+
+    const departments = await this.execute(
+      'hr.department',
+      'read',
+      [departmentIds, ['name']]
+    );
+
+    return departments.map(dept => ({
+      id: dept.id,
+      name: dept.name
+    }));
+  }
+
+  /**
+   * Get all job positions
+   */
+  async getAllJobPositions() {
+    const jobIds = await this.execute(
+      'hr.job',
+      'search',
+      [[]]
+    );
+
+    if (jobIds.length === 0) return [];
+
+    const jobs = await this.execute(
+      'hr.job',
+      'read',
+      [jobIds, ['name', 'department_id']]
+    );
+
+    return jobs.map(job => ({
+      id: job.id,
+      name: job.name,
+      departmentId: job.department_id?.[0] || null,
+      departmentName: job.department_id?.[1] || ''
+    }));
+  }
+
+  /**
+   * Get job positions by department
+   */
+  async getJobPositionsByDepartment(departmentId) {
+    const jobIds = await this.execute(
+      'hr.job',
+      'search',
+      [[['department_id', '=', departmentId]]]
+    );
+
+    if (jobIds.length === 0) return [];
+
+    const jobs = await this.execute(
+      'hr.job',
+      'read',
+      [jobIds, ['name', 'department_id']]
+    );
+
+    return jobs.map(job => ({
+      id: job.id,
+      name: job.name,
+      departmentId: job.department_id?.[0],
+      departmentName: job.department_id?.[1]
+    }));
+  }
 }
 
-module.exports = new OdooAdapter();
+const adapterInstance = new OdooAdapter();
+
+// Auto-authenticate on import
+adapterInstance.authenticate()
+  .then(() => console.log('✅ Odoo adapter ready'))
+  .catch(err => console.error('❌ Odoo connection failed:', err.message));
+
+module.exports = adapterInstance;

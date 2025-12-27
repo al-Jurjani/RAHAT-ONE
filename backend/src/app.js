@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const fileUpload = require('express-fileupload');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -10,6 +11,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// File upload middleware
+app.use(fileUpload({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  createParentPath: true
+}));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -40,22 +47,6 @@ app.get('/test-odoo', async (req, res) => {
   }
 });
 
-// Routes
-// Import routes
-const onboardingRoutes = require('./routes/onboardingRoutes');
-
-// Register routes
-app.use('/api/onboarding', onboardingRoutes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error'
-  });
-});
-
 // List available databases
 app.get('/test-databases', async (req, res) => {
   try {
@@ -76,6 +67,33 @@ app.get('/test-databases', async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// Import routes
+const onboardingRoutes = require('./routes/onboardingRoutes');
+const registrationRoutes = require('./routes/registrationRoutes');
+const hrVerificationRoutes = require('./routes/hrVerificationRoutes');
+const lookupRoutes = require('./routes/lookupRoutes');
+
+// DEBUG: Check what we imported
+console.log('onboardingRoutes:', typeof onboardingRoutes);
+console.log('registrationRoutes:', typeof registrationRoutes);
+console.log('hrVerificationRoutes:', typeof hrVerificationRoutes);
+console.log('lookupRoutes:', typeof lookupRoutes);
+
+// Register routes
+app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/registration', registrationRoutes);
+app.use('/api/hr/verification', hrVerificationRoutes);
+app.use('/api/lookup', lookupRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error'
+  });
 });
 
 module.exports = app;

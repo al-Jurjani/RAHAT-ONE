@@ -1,10 +1,16 @@
-from odoo import api, fields, models  # type: ignore
+import json
+from datetime import datetime
+
+from odoo import api, fields, models
 
 
-class HrEmployeeOnboarding(models.Model):
+class HrEmployeeCustom(models.Model):
     _inherit = "hr.employee"
 
-    # Onboarding Status
+    # ============================================
+    # ONBOARDING STATUS FIELDS
+    # ============================================
+
     onboarding_status = fields.Selection(
         [
             ("not_started", "Not Started"),
@@ -19,86 +25,344 @@ class HrEmployeeOnboarding(models.Model):
         string="Onboarding Status",
         default="not_started",
         readonly=True,
+        tracking=True,
+    )
+
+    onboarding_progress_percentage = fields.Float(
+        string="Onboarding Progress (%)",
+        compute="_compute_onboarding_progress",
+        store=True,
     )
 
     onboarding_initiated_date = fields.Datetime(
         string="Onboarding Initiated",
-        help="Date when onboarding process started",
         readonly=True,
     )
 
     onboarding_completed_date = fields.Datetime(
         string="Onboarding Completed",
-        help="Date when employee was fully activated",
         readonly=True,
     )
 
-    # Document Verification
+    # ============================================
+    # DOCUMENT VERIFICATION FLAGS
+    # ============================================
+
     documents_verified = fields.Boolean(
-        string="Documents Verified", default=False, readonly=True
+        string="Documents Verified",
+        default=False,
     )
 
-    document_verification_notes = fields.Text(
-        string="Verification Notes",
-        help="Notes from document verification process",
+    cnic_uploaded = fields.Boolean(
+        string="CNIC Uploaded",
+        default=False,
+    )
+
+    degree_uploaded = fields.Boolean(
+        string="Degree Uploaded",
+        default=False,
+    )
+
+    medical_uploaded = fields.Boolean(
+        string="Medical Certificate Uploaded",
+        default=False,
+    )
+
+    # ============================================
+    # AI VERIFICATION FIELDS
+    # ============================================
+
+    ai_verification_status = fields.Selection(
+        [("pending", "Pending"), ("passed", "Passed"), ("failed", "Failed")],
+        string="AI Verification Status",
+        default="pending",
+        tracking=True,
+    )
+
+    ai_verification_score = fields.Float(
+        string="AI Verification Score",
+        help="AI confidence score (0-100)",
+        default=0.0,
+    )
+
+    ai_verification_details = fields.Text(
+        string="AI Verification Details",
+        help="JSON with detailed verification results",
+    )
+
+    ai_verification_date = fields.Datetime(
+        string="AI Verification Date",
         readonly=True,
     )
 
-    # System Provisioning
+    # ============================================
+    # EXTRACTED CNIC DATA (from AI)
+    # ============================================
+
+    extracted_name = fields.Char(
+        string="Extracted Name (OCR)", help="Name extracted from CNIC via AI"
+    )
+
+    extracted_cnic_number = fields.Char(
+        string="Extracted CNIC (OCR)", help="CNIC number extracted from uploaded image"
+    )
+
+    extracted_father_name = fields.Char(
+        string="Extracted Father Name (OCR)",
+    )
+
+    extracted_dob = fields.Date(
+        string="Extracted Date of Birth (OCR)",
+    )
+
+    ocr_confidence = fields.Float(
+        string="OCR Confidence",
+        help="Overall confidence of OCR extraction (0-100)",
+    )
+
+    # ============================================
+    # USER-ENTERED DATA (from registration form)
+    # ============================================
+
+    entered_cnic_number = fields.Char(
+        string="Entered CNIC Number",
+        help="CNIC number entered by candidate during registration",
+    )
+
+    entered_father_name = fields.Char(
+        string="Entered Father Name",
+    )
+
+    private_email = fields.Char(
+        string="Personal Email", help="Candidate's personal email for communication"
+    )
+
+    # ============================================
+    # HR MANUAL VERIFICATION FIELDS
+    # ============================================
+
+    hr_verification_status = fields.Selection(
+        [
+            ("pending", "Pending Review"),
+            ("approved", "Approved"),
+            ("rejected", "Rejected"),
+        ],
+        string="HR Verification Status",
+        default="pending",
+        tracking=True,
+    )
+
+    hr_verification_notes = fields.Text(
+        string="HR Verification Notes", help="Manual verification notes by HR staff"
+    )
+
+    hr_verified_by = fields.Many2one(
+        "res.users",
+        string="Verified By",
+        readonly=True,
+    )
+
+    hr_verified_date = fields.Datetime(
+        string="HR Verification Date",
+        readonly=True,
+    )
+
+    # ============================================
+    # REJECTION HANDLING
+    # ============================================
+
+    rejection_reason = fields.Selection(
+        [
+            ("cnic_mismatch", "CNIC Information Mismatch"),
+            ("name_mismatch", "Name Mismatch"),
+            ("dob_mismatch", "Date of Birth Mismatch"),
+            ("invalid_documents", "Invalid or Unclear Documents"),
+            ("wrong_department", "Incorrect Department/Role Selection"),
+            ("duplicate_entry", "Duplicate Registration"),
+            ("failed_background_check", "Failed Background Check"),
+            ("other", "Other Reason"),
+        ],
+        string="Rejection Reason",
+    )
+
+    rejection_details = fields.Text(
+        string="Rejection Details", help="Detailed explanation for rejection"
+    )
+
+    rejection_date = fields.Datetime(
+        string="Rejection Date",
+        readonly=True,
+    )
+
+    # ============================================
+    # PROVISIONING FLAGS
+    # ============================================
+
     email_provisioned = fields.Boolean(
-        string="Email Account Created", default=False, readonly=True
+        string="Work Email Provisioned",
+        default=False,
     )
 
     system_access_provisioned = fields.Boolean(
-        string="System Access Granted", default=False, readonly=True
+        string="System Access Granted",
+        default=False,
     )
 
     orientation_completed = fields.Boolean(
-        string="Orientation Completed", default=False, readonly=True
+        string="Orientation Completed",
+        default=False,
     )
 
-    # Workflow Tracking
-    current_onboarding_task = fields.Char(
-        string="Current Task", help="Current step in onboarding workflow", readonly=True
-    )
-
-    onboarding_progress_percentage = fields.Float(
-        string="Onboarding Progress", compute="_compute_onboarding_progress", store=True
-    )
+    # ============================================
+    # COMPUTED FIELDS
+    # ============================================
 
     @api.depends(
-        "onboarding_status",
-        "documents_verified",
+        "cnic_uploaded",
+        "degree_uploaded",
+        "medical_uploaded",
+        "ai_verification_status",
+        "hr_verification_status",
         "email_provisioned",
-        "system_access_provisioned",
         "orientation_completed",
     )
     def _compute_onboarding_progress(self):
         """Calculate onboarding completion percentage"""
         for record in self:
-            if record.onboarding_status == "not_started":
-                record.onboarding_progress_percentage = 0.0
-            elif record.onboarding_status == "activated":
-                record.onboarding_progress_percentage = 100.0
-            else:
-                # Calculate based on completed steps
-                total_steps = 5
-                completed = sum(
-                    [
-                        1
-                        if record.onboarding_status
-                        in [
-                            "initiated",
-                            "documents_submitted",
-                            "verification_pending",
-                            "verified",
-                            "provisioning",
-                        ]
-                        else 0,
-                        1 if record.documents_verified else 0,
-                        1 if record.email_provisioned else 0,
-                        1 if record.system_access_provisioned else 0,
-                        1 if record.orientation_completed else 0,
-                    ]
+            progress = 0.0
+
+            # Documents uploaded (30%)
+            if record.cnic_uploaded:
+                progress += 10
+            if record.degree_uploaded:
+                progress += 10
+            if record.medical_uploaded:
+                progress += 10
+
+            # AI verification passed (20%)
+            if record.ai_verification_status == "passed":
+                progress += 20
+
+            # HR verification approved (20%)
+            if record.hr_verification_status == "approved":
+                progress += 20
+
+            # Email provisioned (15%)
+            if record.email_provisioned:
+                progress += 15
+
+            # Orientation completed (15%)
+            if record.orientation_completed:
+                progress += 15
+
+            record.onboarding_progress_percentage = progress
+
+    # ============================================
+    # STATE TRANSITION LOGIC
+    # ============================================
+
+    def _update_onboarding_status(self):
+        """
+        Automatically update onboarding status based on verification states
+        Called after AI verification or HR approval
+        """
+        for record in self:
+            # Rule 1: Both verifications passed → Verified
+            if (
+                record.ai_verification_status == "passed"
+                and record.hr_verification_status == "approved"
+            ):
+                record.write(
+                    {
+                        "onboarding_status": "verified",
+                    }
                 )
-                record.onboarding_progress_percentage = (completed / total_steps) * 100
+                # Trigger email provisioning (Power Automate webhook)
+                self._trigger_provisioning_flow(record)
+
+            # Rule 2: Either verification failed → Rejected
+            elif (
+                record.ai_verification_status == "failed"
+                or record.hr_verification_status == "rejected"
+            ):
+                record.write(
+                    {
+                        "onboarding_status": "rejected",
+                        "rejection_date": datetime.now(),
+                    }
+                )
+                # Trigger rejection email (Power Automate webhook)
+                self._trigger_rejection_flow(record)
+
+            # Rule 3: Waiting for verifications → Verification Pending
+            elif (
+                record.ai_verification_status == "pending"
+                or record.hr_verification_status == "pending"
+            ):
+                if record.onboarding_status == "documents_submitted":
+                    record.onboarding_status = "verification_pending"
+
+    def _trigger_provisioning_flow(self, record):
+        """Trigger Power Automate flow for email provisioning"""
+        # This will be called by the backend API
+        pass
+
+    def _trigger_rejection_flow(self, record):
+        """Trigger Power Automate flow for rejection notification"""
+        # This will be called by the backend API
+        pass
+
+    # ============================================
+    # HELPER METHODS FOR API
+    # ============================================
+
+    def set_ai_verification_result(self, verification_data):
+        """
+        Update employee with AI verification results
+        Called by backend after OCR + matching
+        """
+        self.ensure_one()
+
+        self.write(
+            {
+                "ai_verification_status": verification_data.get("status", "pending"),
+                "ai_verification_score": verification_data.get("score", 0.0),
+                "ai_verification_details": json.dumps(
+                    verification_data.get("details", {})
+                ),
+                "ai_verification_date": datetime.now(),
+                "extracted_name": verification_data.get("extracted_name"),
+                "extracted_cnic_number": verification_data.get("extracted_cnic"),
+                "extracted_father_name": verification_data.get("extracted_father_name"),
+                "extracted_dob": verification_data.get("extracted_dob"),
+                "ocr_confidence": verification_data.get("ocr_confidence", 0.0),
+            }
+        )
+
+        # Check if we should update onboarding status
+        self._update_onboarding_status()
+
+        return True
+
+    def set_hr_verification_result(self, approved, notes, verified_by_uid):
+        """
+        Update employee with HR verification decision
+        Called when HR approves/rejects
+        """
+        self.ensure_one()
+
+        status = "approved" if approved else "rejected"
+
+        self.write(
+            {
+                "hr_verification_status": status,
+                "hr_verification_notes": notes,
+                "hr_verified_by": verified_by_uid,
+                "hr_verified_date": datetime.now(),
+            }
+        )
+
+        # Check if we should update onboarding status
+        self._update_onboarding_status()
+
+        return True

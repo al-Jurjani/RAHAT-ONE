@@ -1,32 +1,18 @@
-/**
- * Standardized API response handlers
- */
-
-const successResponse = (res, data, message = 'Success', statusCode = 200) => {
-  return res.status(statusCode).json({
+function respondSuccess(res, data, statusCode = 200) {
+  res.status(statusCode).json({
     success: true,
-    message,
-    data,
-    timestamp: new Date().toISOString()
+    data: data
   });
-};
+}
 
-const errorResponse = (res, message = 'Error occurred', statusCode = 500, error = null) => {
-  const response = {
+function respondError(res, message, statusCode = 500) {
+  res.status(statusCode).json({
     success: false,
-    message,
-    timestamp: new Date().toISOString()
-  };
-
-  if (error && process.env.NODE_ENV === 'development') {
-    response.error = error.message;
-    response.stack = error.stack;
-  }
-
-  return res.status(statusCode).json(response);
-};
+    message: message
+  });
+}
 
 module.exports = {
-  successResponse,
-  errorResponse
+  respondSuccess,
+  respondError
 };

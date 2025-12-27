@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "RAHAT-ONE Employee Onboarding Status",  # Changed name
+    "name": "RAHAT-ONE Employee Onboarding Status",
     "version": "1.0",
     "category": "Human Resources",
-    "summary": "Adds onboarding status tracking to HR Employees for RAHAT-ONE FYP",
+    "summary": "Custom fields for AI-powered onboarding verification",
     "description": """
-        This module extends the hr.employee model with onboarding workflow fields:
-        - Onboarding status/state
-        - Document verification status
-        - Provisioning completion tracking
-        - Onboarding date tracking
+        Adds custom fields to hr.employee for:
+        - AI verification status and scoring
+        - HR manual verification
+        - Onboarding state tracking
+        - Rejection handling
     """,
-    "author": "Zuhair Farhan - IBA FYP CS-26",
-    "depends": ["hr"],
+    "author": "RAHAT-ONE Team",
+    "depends": ["hr", "hr_expense"],
     "data": [],
     "installable": True,
     "application": False,
