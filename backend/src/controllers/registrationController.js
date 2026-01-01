@@ -196,30 +196,38 @@ async function completeRegistration(req, res) {
 }
 
 /**
- * Run AI verification asynchronously (don't block response)
+ * Run AI verification asynchronously (non-blocking)
  */
 async function runAIVerificationAsync(employeeId, cnicFilePath, enteredData) {
   try {
-    const verificationResult = await onboardingService.runAIVerification(
+    console.log(`🤖 Running AI verification for employee ${employeeId}`);
+
+    // Extract CNIC data using Azure Document Intelligence
+    const documentIntelligenceService = require('../services/documentIntelligenceService');
+    const extractedData = await documentIntelligenceService.extractCNICData(cnicFilePath);
+
+    console.log('📄 Extracted CNIC data:', extractedData);
+
+    // Run verification
+    const onboardingService = require('../services/onboardingService');
+    await onboardingService.runAIVerification(
       employeeId,
       cnicFilePath,
-      enteredData
+      enteredData,
+      extractedData
     );
 
-    console.log(`✅ AI Verification completed for employee ${employeeId}: ${verificationResult.status}`);
+    console.log(`✅ AI verification complete for employee ${employeeId}`);
 
     // Clean up temp file
     const fs = require('fs');
     if (fs.existsSync(cnicFilePath)) {
       fs.unlinkSync(cnicFilePath);
+      console.log('🗑️ Cleaned up temp CNIC file');
     }
 
-    // TODO: Trigger Power Automate flow based on verification result
-    // If passed AND hr_approved: send activation email
-    // If failed: send rejection email
-
   } catch (error) {
-    console.error(`❌ AI Verification failed for employee ${employeeId}:`, error);
+    console.error('❌ AI verification error:', error);
   }
 }
 

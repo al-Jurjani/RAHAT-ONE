@@ -1,5 +1,5 @@
 const stringSimilarity = require('string-similarity');
-const levenshtein = require('levenshtein-edit-distance');
+const levenshtein = require('fast-levenshtein'); // Changed this line
 
 class VerificationService {
 
@@ -9,11 +9,11 @@ class VerificationService {
    * @param {Object} enteredData - Data from registration form
    * @returns {Object} Verification results with score and details
    */
-  async verifyCNICData(extractedData, enteredData) {
+  verifyCNICData(extractedData, enteredData) {
     const results = {
       nameMatch: this._fuzzyNameMatch(extractedData.name, enteredData.name),
       cnicMatch: this._exactCNICMatch(extractedData.cnicNumber, enteredData.cnicNumber),
-      dobMatch: this._dateMatch(extractedData.dob, enteredData.dob),
+      dobMatch: this._verifyDateOfBirth(extractedData.dob, enteredData.dateOfBirth),
       fatherNameMatch: this._fuzzyNameMatch(extractedData.fatherName, enteredData.fatherName),
       overallScore: 0,
       passed: false,
@@ -51,13 +51,13 @@ class VerificationService {
     };
 
     // DOB matching
-    const dobScore = results.dobMatch ? 100 : 0;
+    const dobScore = results.dobMatch.score;
     totalScore += dobScore * weights.dob;
     results.details.dob = {
       extracted: extractedData.dob,
-      entered: enteredData.dob,
+      entered: enteredData.dateOfBirth,
       score: dobScore,
-      match: results.dobMatch
+      match: results.dobMatch.match
     };
 
     // Father name matching
@@ -85,7 +85,7 @@ class VerificationService {
       if (results.nameMatch.score < 70) {
         results.reasons.push(`Name similarity too low (${results.nameMatch.score}%)`);
       }
-      if (!results.dobMatch && enteredData.dob) {
+      if (!results.dobMatch.match && enteredData.dateOfBirth) {
         results.reasons.push('Date of birth does not match');
       }
     }
@@ -110,7 +110,7 @@ class VerificationService {
     const similarityScore = Math.round(similarity * 100);
 
     // Method 2: Levenshtein distance
-    const distance = levenshtein(normalized1, normalized2);
+    const distance = levenshtein.get(normalized1, normalized2);
     const maxLength = Math.max(normalized1.length, normalized2.length);
     const levenshteinScore = Math.round((1 - distance / maxLength) * 100);
 
@@ -146,24 +146,72 @@ class VerificationService {
   }
 
   /**
-   * Date matching (handles different formats)
+   * Verify date of birth match (handles dd.mm.yyyy format from CNIC)
    */
-  _dateMatch(date1, date2) {
-    if (!date1 || !date2) return false;
+  _verifyDateOfBirth(extracted, entered) {
+    try {
+      // Handle malformed dates
+      if (!extracted || !entered) {
+        return { score: 0, match: false };
+      }
 
-    // Convert to Date objects
-    const d1 = new Date(date1);
-    const d2 = new Date(date2);
+      // Clean and parse dates
+      const extractedDate = this._parseDate(extracted);
+      const enteredDate = this._parseDate(entered);
 
-    // Check if both are valid dates
-    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return false;
+      if (!extractedDate || !enteredDate) {
+        console.warn('⚠️ Could not parse dates:', { extracted, entered });
+        return { score: 0, match: false };
+      }
 
-    // Compare dates (year, month, day)
-    return (
-      d1.getFullYear() === d2.getFullYear() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getDate() === d2.getDate()
-    );
+      const match =
+        extractedDate.getFullYear() === enteredDate.getFullYear() &&
+        extractedDate.getMonth() === enteredDate.getMonth() &&
+        extractedDate.getDate() === enteredDate.getDate();
+
+      return {
+        score: match ? 100 : 0,
+        match: match
+      };
+    } catch (error) {
+      console.error('❌ DOB verification error:', error);
+      return { score: 0, match: false };
+    }
+  }
+
+  /**
+   * Parse date string safely (handles dd.mm.yyyy from CNIC)
+   */
+  _parseDate(dateStr) {
+    if (!dateStr) return null;
+
+    // Try standard format first (YYYY-MM-DD)
+    let date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+
+    // Try dd.mm.yyyy format (common in Pakistani CNIC)
+    const match = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (match) {
+      const [, day, month, year] = match;
+      date = new Date(`${year}-${month}-${day}`);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+
+    // Try dd-mm-yyyy or dd/mm/yyyy
+    const match2 = dateStr.match(/(\d{2})[\-\/](\d{2})[\-\/](\d{4})/);
+    if (match2) {
+      const [, day, month, year] = match2;
+      date = new Date(`${year}-${month}-${day}`);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+
+    return null;
   }
 
   /**

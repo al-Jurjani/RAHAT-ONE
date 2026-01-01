@@ -54,63 +54,91 @@ async function getVerificationDetails(req, res) {
   try {
     const { employeeId } = req.params;
 
-    const employee = await odooAdapter.getEmployee(employeeId);
+    console.log('📋 Getting verification details for employee:', employeeId);
 
-    // Parse AI verification details
-    let aiDetails = {};
+    // Get employee details from Odoo
+    const employee = await odooAdapter.getEmployee(parseInt(employeeId));
+
+    console.log('👤 Employee found:', employee ? employee.name : 'NULL');
+
+    if (!employee) {
+      console.error('❌ Employee not found in Odoo:', employeeId);
+      return respondError(res, 'Employee not found', 404);
+    }
+
+    // Parse AI verification details (with null check)
+    let aiVerificationDetails = null;
     if (employee.ai_verification_details) {
       try {
-        aiDetails = JSON.parse(employee.ai_verification_details);
-      } catch (e) {
-        console.warn('Failed to parse AI verification details');
+        aiVerificationDetails = JSON.parse(employee.ai_verification_details);
+      } catch (parseError) {
+        console.warn('⚠️ Could not parse AI verification details:', parseError);
+        aiVerificationDetails = null;
       }
     }
 
     // Get uploaded documents
+    console.log('📄 Getting documents for employee:', employeeId);
     const documents = await odooAdapter.getEmployeeDocuments(employeeId);
+    console.log('📄 Documents found:', documents.length);
 
-    respondSuccess(res, {
+    // Format response
+    const response = {
       employee: {
         id: employee.id,
         name: employee.name,
         personalEmail: employee.private_email,
         workEmail: employee.work_email,
         phone: employee.mobile_phone,
-        department: employee.department_id?.[1],
-        position: employee.job_id?.[1]
-      },
-      enteredData: {
-        name: employee.name,
-        cnicNumber: employee.entered_cnic_number,
-        fatherName: employee.entered_father_name,
-        dateOfBirth: employee.birthday
-      },
-      extractedData: {
-        name: employee.extracted_name,
-        cnicNumber: employee.extracted_cnic_number,
-        fatherName: employee.extracted_father_name,
-        dateOfBirth: employee.extracted_dob,
-        ocrConfidence: employee.ocr_confidence
+        cnic: employee.cnic_number,
+        fatherName: employee.father_name,
+        dateOfBirth: employee.birthday,
+        department: employee.department_id ? employee.department_id[1] : 'N/A',
+        position: employee.job_id ? employee.job_id[1] : 'N/A',
+        onboardingStatus: employee.onboarding_status,
+        submittedAt: employee.onboarding_initiated_date
       },
       aiVerification: {
-        status: employee.ai_verification_status,
-        score: employee.ai_verification_score,
-        date: employee.ai_verification_date,
-        details: aiDetails
+        status: employee.ai_verification_status || 'pending',
+        score: employee.ai_verification_score || 0,
+        details: aiVerificationDetails || {
+          name: { score: 0, match: false },
+          cnic: { score: 0, match: false },
+          dob: { score: 0, match: false }
+        },
+        verifiedAt: employee.ai_verification_date,
+        extractedData: {
+          name: employee.extracted_name || 'N/A',
+          cnicNumber: employee.extracted_cnic_number || 'N/A',
+          fatherName: employee.extracted_father_name || 'N/A',
+          dob: employee.extracted_dob || 'N/A',
+          confidence: employee.ocr_confidence || 0
+        }
       },
       hrVerification: {
-        status: employee.hr_verification_status,
-        notes: employee.hr_verification_notes,
-        verifiedBy: employee.hr_verified_by,
-        verifiedDate: employee.hr_verified_date
+        status: employee.hr_verification_status || 'pending',
+        verifiedBy: employee.hr_verified_by || null,
+        verifiedAt: employee.hr_verification_date || null,
+        rejectionReason: employee.hr_rejection_reason || null,
+        rejectionDetails: employee.hr_rejection_details || null,
+        notes: employee.hr_verification_notes || null
       },
-      documents: documents,
-      onboardingStatus: employee.onboarding_status
-    });
+      documents: documents.map(doc => ({
+        id: doc.id,
+        name: doc.name,
+        type: doc.mimetype,
+        uploadedAt: doc.create_date
+      }))
+    };
+
+    console.log('✅ Sending response with employee:', response.employee.name);
+    console.log('✅ Response structure:', JSON.stringify(response, null, 2));
+
+    return respondSuccess(res, response);
 
   } catch (error) {
     console.error('❌ Get verification details error:', error);
-    respondError(res, error.message, 500);
+    return respondError(res, 'Failed to get verification details', 500);
   }
 }
 

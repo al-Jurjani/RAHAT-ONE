@@ -270,54 +270,85 @@ class OnboardingService {
    * Run AI verification on uploaded CNIC
    * Called after candidate submits registration
    */
-  async runAIVerification(employeeId, cnicFilePath, enteredData) {
-    try {
-      console.log(`🤖 Running AI verification for employee ${employeeId}`);
+  /**
+ * Run AI verification on employee documents
+ */
+async runAIVerification(employeeId, cnicFilePath, enteredData, extractedData) {
+  try {
+    console.log('🔍 Running verification algorithm...');
 
-      // Step 1: Extract data from CNIC image using Azure AI
-      const extractedData = await documentIntelligenceService.extractCNICData(cnicFilePath);
+    // Run verification algorithm
+    const verificationResult = verificationService.verifyCNICData(
+      extractedData,
+      enteredData
+    );
 
-      console.log('📄 Extracted CNIC data:', extractedData);
+    console.log('📊 Verification results:', {
+      passed: verificationResult.passed,
+      score: verificationResult.overallScore
+    });
 
-      // Step 2: Compare extracted vs entered data
-      const verificationResults = await verificationService.verifyCNICData(
-        extractedData,
-        enteredData
-      );
+    // Convert extracted DOB to Odoo format (YYYY-MM-DD)
+    const extractedDobFormatted = this._convertToOdooDateFormat(extractedData.dob);
 
-      console.log('🔍 Verification results:', verificationResults);
+    // Update employee record in Odoo
+    await odooAdapter.updateEmployee(employeeId, {
+      // Extracted data
+      extracted_name: extractedData.name || '',
+      extracted_cnic_number: extractedData.cnicNumber || '',
+      extracted_father_name: extractedData.fatherName || '',
+      extracted_dob: extractedDobFormatted, // Use converted date
+      ocr_confidence: extractedData.confidence || 0,
 
-      // Step 3: Update employee record in Odoo
-      const aiStatus = verificationResults.passed ? 'passed' : 'failed';
+      // AI verification results
+      ai_verification_status: verificationResult.passed ? 'passed' : 'failed',
+      ai_verification_score: verificationResult.overallScore,
+      ai_verification_details: JSON.stringify(verificationResult.details),
+      ai_verification_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
 
-      await odooAdapter.updateEmployee(employeeId, {
-        ai_verification_status: aiStatus,
-        ai_verification_score: verificationResults.overallScore,
-        ai_verification_details: JSON.stringify(verificationResults.details),
-        ai_verification_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        extracted_name: extractedData.name,
-        extracted_cnic_number: extractedData.cnicNumber,
-        extracted_father_name: extractedData.fatherName,
-        extracted_dob: extractedData.dob,
-        ocr_confidence: extractedData.confidence,
-        onboarding_status: 'verification_pending'
-      });
+      // Update onboarding status
+      onboarding_status: 'verification_pending'
+    });
 
-      console.log(`✅ AI verification complete: ${aiStatus.toUpperCase()}`);
+    console.log('✅ AI verification results saved to Odoo');
 
-      return {
-        success: true,
-        status: aiStatus,
-        score: verificationResults.overallScore,
-        details: verificationResults,
-        summary: verificationService.generateVerificationSummary(verificationResults)
-      };
+    return verificationResult;
 
-    } catch (error) {
-      console.error('❌ AI verification error:', error);
-      throw error;
-    }
+  } catch (error) {
+    console.error('❌ AI verification failed:', error);
+    throw error;
   }
+}
+
+/**
+ * Convert date from dd.mm.yyyy to YYYY-MM-DD format for Odoo
+ */
+_convertToOdooDateFormat(dateStr) {
+  if (!dateStr) return null;
+
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  // Convert dd.mm.yyyy to YYYY-MM-DD
+  const match = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try dd-mm-yyyy or dd/mm/yyyy
+  const match2 = dateStr.match(/(\d{2})[\-\/](\d{2})[\-\/](\d{4})/);
+  if (match2) {
+    const [, day, month, year] = match2;
+    return `${year}-${month}-${day}`;
+  }
+
+  // If can't convert, return null (Odoo will handle)
+  console.warn('⚠️ Could not convert date to Odoo format:', dateStr);
+  return null;
+}
 }
 
 module.exports = new OnboardingService();

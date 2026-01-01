@@ -1,6 +1,7 @@
-function respondSuccess(res, data, statusCode = 200) {
-  res.status(statusCode).json({
+function respondSuccess(res, data, message = 'Success') {
+  return res.status(200).json({
     success: true,
+    message: message,
     data: data
   });
 }

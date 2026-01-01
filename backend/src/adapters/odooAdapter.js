@@ -208,30 +208,39 @@ class OdooAdapter {
   /**
    * Get employee documents (attachments)
    */
-  async getEmployeeDocuments(employeeId) {
+  /**
+ * Get employee documents (attachments)
+ */
+async getEmployeeDocuments(employeeId) {
+  try {
+    // Search for attachments linked to this employee
     const attachmentIds = await this.execute(
       'ir.attachment',
       'search',
-      [[['res_model', '=', 'hr.employee'], ['res_id', '=', employeeId]]]
+      [[
+        ['res_model', '=', 'hr.employee'],
+        ['res_id', '=', employeeId]
+      ]]
     );
 
-    if (attachmentIds.length === 0) return [];
+    if (attachmentIds.length === 0) {
+      return [];
+    }
 
+    // Read attachment details with correct field names for Odoo 17
     const attachments = await this.execute(
       'ir.attachment',
       'read',
-      [attachmentIds, ['name', 'datas_fname', 'mimetype', 'create_date', 'description']]
+      [attachmentIds, ['id', 'name', 'mimetype', 'create_date', 'datas', 'checksum']]
     );
 
-    return attachments.map(att => ({
-      id: att.id,
-      name: att.name,
-      filename: att.datas_fname,
-      type: att.mimetype,
-      uploadedDate: att.create_date,
-      description: att.description || ''
-    }));
+    return attachments;
+
+  } catch (error) {
+    console.error('Odoo getEmployeeDocuments Error:', error.message);
+    return [];
   }
+}
 
   /**
    * Search employees with domain filters
