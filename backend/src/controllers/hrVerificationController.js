@@ -94,7 +94,13 @@ async function getVerificationDetails(req, res) {
         fatherName: employee.father_name,
         dateOfBirth: employee.birthday,
         department: employee.department_id ? employee.department_id[1] : 'N/A',
+        departmentId: employee.department_id ? employee.department_id[0] : null,
         position: employee.job_id ? employee.job_id[1] : 'N/A',
+        positionId: employee.job_id ? employee.job_id[0] : null,
+        hrAssignedDepartment: employee.hr_assigned_department_id ? employee.hr_assigned_department_id[1] : null,
+        hrAssignedDepartmentId: employee.hr_assigned_department_id ? employee.hr_assigned_department_id[0] : null,
+        hrAssignedPosition: employee.hr_assigned_job_id ? employee.hr_assigned_job_id[1] : null,
+        hrAssignedPositionId: employee.hr_assigned_job_id ? employee.hr_assigned_job_id[0] : null,
         onboardingStatus: employee.onboarding_status,
         submittedAt: employee.onboarding_initiated_date
       },
@@ -251,11 +257,11 @@ async function getApprovedEmployees(req, res) {
 async function getRejectedEmployees(req, res) {
   try {
     const employees = await odooAdapter.searchAndReadEmployees([
-      ['hr_verification_status', '=', 'rejected'],
-      ['rejection_date', '!=', false]
+      ['hr_verification_status', '=', 'rejected']
     ], {
       order: 'rejection_date desc',
-      limit: 50
+      limit: 50,
+      includeInactive: true  // Include inactive records (rejected employees are set to inactive)
     });
 
     console.log(`✅ Found ${employees.length} rejected employees`);
@@ -283,12 +289,70 @@ async function getRejectedEmployees(req, res) {
   }
 }
 
+/**
+ * Get document binary data for viewing/download
+ */
+async function getDocument(req, res) {
+  try {
+    const { documentId } = req.params;
+
+    // Validate documentId is a number
+    const id = parseInt(documentId);
+    if (isNaN(id) || id <= 0) {
+      return respondError(res, 'Invalid document ID', 400);
+    }
+
+    console.log('📄 Fetching document:', id);
+
+    // Fetch document from Odoo ir.attachment
+    const documents = await odooAdapter.execute(
+      'ir.attachment',
+      'read',
+      [[id], ['id', 'name', 'mimetype', 'datas']]
+    );
+
+    if (!documents || documents.length === 0) {
+      console.error('❌ Document not found:', id);
+      return respondError(res, 'Document not found', 404);
+    }
+
+    const doc = documents[0];
+
+    // Check if document has data
+    if (!doc.datas) {
+      console.error('❌ Document has no data:', id);
+      return respondError(res, 'Document has no data', 404);
+    }
+
+    console.log('✅ Document found:', doc.name, 'Type:', doc.mimetype);
+
+    // Convert base64 to binary buffer
+    const fileBuffer = Buffer.from(doc.datas, 'base64');
+
+    // Set response headers for inline viewing
+    res.set({
+      'Content-Type': doc.mimetype,
+      'Content-Disposition': `inline; filename="${doc.name}"`,
+      'Content-Length': fileBuffer.length,
+      'Cache-Control': 'private, max-age=3600'
+    });
+
+    // Send binary data
+    return res.send(fileBuffer);
+
+  } catch (error) {
+    console.error('❌ Get document error:', error);
+    return respondError(res, 'Failed to retrieve document', 500);
+  }
+}
+
 
 module.exports = {
-  getPendingRegistrations,    // Your existing one
-  getApprovedEmployees,       // NEW
-  getRejectedEmployees,       // NEW
-  getVerificationDetails,     // Your existing one
-  approveCandidate,           // Your existing one
-  rejectCandidate            // Your existing one
+  getPendingRegistrations,
+  getApprovedEmployees,
+  getRejectedEmployees,
+  getVerificationDetails,
+  getDocument,
+  approveCandidate,
+  rejectCandidate
 };

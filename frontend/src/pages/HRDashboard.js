@@ -19,7 +19,7 @@ import {
   Grid
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, Cancel, Pending, Visibility } from '@mui/icons-material';
+import { CheckCircle, Cancel, Pending, Visibility, ArrowBack } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { hrAPI } from '../services/api';
 import { Tabs, Tab} from '@mui/material';
@@ -97,9 +97,18 @@ function HRDashboard() {
     <Container maxWidth="xl">
       <Box sx={{ mt: 8, mb: 4 }}>
         {/* Header */}
-        <Typography variant="h4" component="h1" gutterBottom>
-          HR Verification Dashboard
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <Button
+            startIcon={<ArrowBack />}
+            onClick={() => navigate('/hr')}
+            sx={{ mr: 2 }}
+          >
+            Back to HR Portal
+          </Button>
+          <Typography variant="h4" component="h1">
+            HR Verification Dashboard
+          </Typography>
+        </Box>
 
         {/* Summary Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -208,7 +217,7 @@ function HRDashboard() {
                       <Button
                         variant="contained"
                         size="small"
-                        onClick={() => navigate(`/hr/verify/${emp.id}`)}
+                        onClick={() => navigate(`/hr/verification/${emp.id}`)}
                       >
                         {currentTab === 0 ? 'Review' : 'View'}
                       </Button>

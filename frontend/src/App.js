@@ -8,6 +8,7 @@ import 'react-toastify/dist/ReactToastify.css';
 // Pages (we'll create these next)
 import RegistrationPage from './pages/RegistrationPage';
 import StatusPage from './pages/StatusPage';
+import HRMainPage from './pages/HRMainPage';
 import HRDashboard from './pages/HRDashboard';
 import HRVerificationDetails from './pages/HRVerificationDetails';
 
@@ -38,8 +39,9 @@ function App() {
           <Route path="/status" element={<StatusPage />} />
 
           {/* HR Routes */}
-          <Route path="/hr/dashboard" element={<HRDashboard />} />
-          <Route path="/hr/verify/:employeeId" element={<HRVerificationDetails />} />
+          <Route path="/hr" element={<HRMainPage />} />
+          <Route path="/hr/verification" element={<HRDashboard />} />
+          <Route path="/hr/verification/:employeeId" element={<HRVerificationDetails />} />
         </Routes>
       </Router>
       <ToastContainer position="top-right" autoClose={3000} />

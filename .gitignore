@@ -50,3 +50,5 @@ htmlcov/
 *.sqlite3
 
 backend/temp/*
+
+.claude/

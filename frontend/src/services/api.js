@@ -39,8 +39,17 @@ export const hrAPI = {
   getApproved: () => api.get('/hr/verification/approved'),
   getRejected: () => api.get('/hr/verification/rejected'),
   getDetails: (employeeId) => api.get(`/hr/verification/details/${employeeId}`),
+  getDocument: (documentId) => api.get(`/hr/verification/document/${documentId}`, {
+    responseType: 'blob'
+  }),
   approve: (employeeId, notes) => api.post(`/hr/verification/approve/${employeeId}`, { notes }),
   reject: (employeeId, reason, details) => api.post(`/hr/verification/reject/${employeeId}`, { reason, details })
+};
+
+// Onboarding endpoints
+export const onboardingAPI = {
+  initiate: (data) => api.post('/onboarding/initiate', data),
+  getStatus: (employeeId) => api.get(`/onboarding/status/${employeeId}`)
 };
 
 export default api;

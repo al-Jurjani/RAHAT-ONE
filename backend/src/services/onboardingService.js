@@ -13,10 +13,12 @@ class OnboardingService {
       // Create employee record in Odoo with correct status value
       const employeeId = await odooAdapter.createEmployee({
         name: employeeData.name,
-        work_email: employeeData.email,
+        private_email: employeeData.email,  // Personal email - used for lookup during registration
         mobile_phone: employeeData.phone,
         department_id: employeeData.departmentId || false,
         job_id: employeeData.jobId || false,
+        hr_assigned_department_id: employeeData.departmentId || false,  // Track HR's assignment
+        hr_assigned_job_id: employeeData.jobId || false,  // Track HR's assignment
         onboarding_status: 'initiated',  // ✅ This matches your Odoo field
         onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
     });

@@ -28,6 +28,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, Cancel, ArrowBack, ThumbUp, ThumbDown } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { hrAPI } from '../services/api';
+import DocumentViewerModal from '../components/DocumentViewerModal';
+import CNICViewerModal from '../components/CNICViewerModal';
 
 function HRVerificationDetails() {
   const { employeeId } = useParams();
@@ -43,6 +45,12 @@ function HRVerificationDetails() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectDetails, setRejectDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Document viewer modals
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [cnicViewerOpen, setCnicViewerOpen] = useState(false);
+  const [cnicDocument, setCnicDocument] = useState(null);
 
   useEffect(() => {
     loadDetails();
@@ -79,7 +87,7 @@ function HRVerificationDetails() {
       await hrAPI.approve(employeeId, approveNotes);
       toast.success('Candidate approved successfully!');
       setApproveDialogOpen(false);
-      navigate('/hr/dashboard');
+      navigate('/hr/verification');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to approve');
     } finally {
@@ -98,7 +106,7 @@ function HRVerificationDetails() {
       await hrAPI.reject(employeeId, rejectReason, rejectDetails);
       toast.success('Candidate rejected');
       setRejectDialogOpen(false);
-      navigate('/hr/dashboard');
+      navigate('/hr/verification');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to reject');
     } finally {
@@ -138,7 +146,7 @@ function HRVerificationDetails() {
           <Alert severity="error">Employee not found</Alert>
           <Button
             startIcon={<ArrowBack />}
-            onClick={() => navigate('/hr/dashboard')}
+            onClick={() => navigate('/hr/verification')}
             sx={{ mt: 2 }}
           >
             Back to Dashboard
@@ -155,7 +163,7 @@ function HRVerificationDetails() {
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
           <Button
             startIcon={<ArrowBack />}
-            onClick={() => navigate('/hr/dashboard')}
+            onClick={() => navigate('/hr/verification')}
             sx={{ mr: 2 }}
           >
             Back to Dashboard
@@ -221,19 +229,33 @@ function HRVerificationDetails() {
                     No documents uploaded
                   </Typography>
                 ) : (
-                  data.documents.map((doc) => (
-                    <Box key={doc.id} sx={{ mb: 1 }}>
-                      <Chip
-                        label={doc.name || 'Document'}
-                        color="primary"
-                        variant="outlined"
-                        size="small"
-                      />
-                      <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                        {doc.type} - {new Date(doc.uploadedAt).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  ))
+                  data.documents.map((doc) => {
+                    const isCNIC = doc.name.toLowerCase().includes('cnic');
+
+                    return (
+                      <Box key={doc.id} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                          label={doc.name || 'Document'}
+                          color="primary"
+                          variant="outlined"
+                          size="small"
+                          onClick={() => {
+                            if (isCNIC) {
+                              setCnicDocument(doc);
+                              setCnicViewerOpen(true);
+                            } else {
+                              setSelectedDocument(doc);
+                              setViewerOpen(true);
+                            }
+                          }}
+                          sx={{ cursor: 'pointer' }}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {doc.type} - {new Date(doc.uploadedAt).toLocaleString()}
+                        </Typography>
+                      </Box>
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -353,6 +375,78 @@ function HRVerificationDetails() {
                 </TableContainer>
               </CardContent>
             </Card>
+
+            {/* Department/Position Assignment Check */}
+            {(data.employee?.hrAssignedDepartment || data.employee?.hrAssignedPosition) && (
+              <Card sx={{ mt: 3 }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Assignment Verification
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+
+                  <TableContainer>
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow sx={{ bgcolor: 'grey.100' }}>
+                          <TableCell><strong>Field</strong></TableCell>
+                          <TableCell>
+                            <Typography variant="subtitle2" color="primary">
+                              HR Assigned
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="subtitle2" color="secondary">
+                              Candidate Selected
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center"><strong>Match</strong></TableCell>
+                        </TableRow>
+
+                        {data.employee?.hrAssignedDepartment && (
+                          <TableRow>
+                            <TableCell><strong>Department:</strong></TableCell>
+                            <TableCell>{data.employee.hrAssignedDepartment}</TableCell>
+                            <TableCell>{data.employee.department || 'N/A'}</TableCell>
+                            <TableCell align="center">
+                              {data.employee.hrAssignedDepartmentId === data.employee.departmentId ? (
+                                <Chip icon={<CheckCircle />} label="Match" color="success" size="small" />
+                              ) : (
+                                <Chip icon={<Cancel />} label="Mismatch" color="error" size="small" />
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {data.employee?.hrAssignedPosition && (
+                          <TableRow>
+                            <TableCell><strong>Position:</strong></TableCell>
+                            <TableCell>{data.employee.hrAssignedPosition}</TableCell>
+                            <TableCell>{data.employee.position || 'N/A'}</TableCell>
+                            <TableCell align="center">
+                              {data.employee.hrAssignedPositionId === data.employee.positionId ? (
+                                <Chip icon={<CheckCircle />} label="Match" color="success" size="small" />
+                              ) : (
+                                <Chip icon={<Cancel />} label="Mismatch" color="error" size="small" />
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+
+                  {(data.employee.hrAssignedDepartmentId !== data.employee.departmentId ||
+                    data.employee.hrAssignedPositionId !== data.employee.positionId) && (
+                    <Box sx={{ mt: 2 }}>
+                      <Alert severity="warning">
+                        <strong>Assignment Mismatch Detected:</strong> The candidate selected a different department or position than what HR assigned during initiation.
+                      </Alert>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* HR Verification Status */}
             <Card sx={{ mt: 3 }}>
@@ -487,6 +581,31 @@ function HRVerificationDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Document Viewer Modal */}
+      <DocumentViewerModal
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        documentId={selectedDocument?.id}
+        documentName={selectedDocument?.name}
+        documentType={selectedDocument?.type}
+      />
+
+      {/* CNIC Viewer Modal with OCR Comparison */}
+      <CNICViewerModal
+        open={cnicViewerOpen}
+        onClose={() => setCnicViewerOpen(false)}
+        documentId={cnicDocument?.id}
+        documentName={cnicDocument?.name}
+        enteredData={{
+          name: data?.employee?.name,
+          cnic: data?.employee?.cnic,
+          fatherName: data?.employee?.fatherName,
+          dob: data?.employee?.dateOfBirth
+        }}
+        extractedData={data?.aiVerification?.extractedData}
+        verificationDetails={data?.aiVerification?.details}
+      />
     </Container>
   );
 }

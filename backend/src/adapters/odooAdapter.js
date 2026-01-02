@@ -285,11 +285,18 @@ async getEmployeeDocuments(employeeId) {
         'hr_verification_status', 'onboarding_initiated_date',
         'hr_verified_date', 'rejection_date', 'rejection_reason',
         'cnic_uploaded', 'degree_uploaded', 'medical_uploaded',
-        'entered_cnic_number', 'entered_father_name'
+        'entered_cnic_number', 'entered_father_name', 'active'
       ];
 
+      // If we need to include inactive records, modify the domain
+      let searchDomain = domain;
+      if (options.includeInactive) {
+        // Add explicit check for both active and inactive records using OR
+        searchDomain = ['|', ['active', '=', true], ['active', '=', false], ...domain];
+      }
+
       // Search for IDs with optional ordering and limit
-      let searchParams = [domain];
+      let searchParams = [searchDomain];
 
       if (options.limit) {
         searchParams.push(0); // offset

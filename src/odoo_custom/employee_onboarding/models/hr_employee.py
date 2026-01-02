@@ -195,6 +195,22 @@ class HrEmployeeCustom(models.Model):
     )
 
     # ============================================
+    # HR-ASSIGNED DEPARTMENT/POSITION TRACKING
+    # ============================================
+
+    hr_assigned_department_id = fields.Many2one(
+        "hr.department",
+        string="HR Assigned Department",
+        help="Department assigned by HR during onboarding initiation",
+    )
+
+    hr_assigned_job_id = fields.Many2one(
+        "hr.job",
+        string="HR Assigned Position",
+        help="Position assigned by HR during onboarding initiation",
+    )
+
+    # ============================================
     # PROVISIONING FLAGS
     # ============================================
 
