@@ -303,54 +303,54 @@ function HRVerificationDetails() {
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
 
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Typography variant="subtitle2" color="primary">
-                      Entered by Candidate
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="subtitle2" color="secondary">
-                      Extracted from CNIC
-                    </Typography>
-                  </Grid>
+                <TableContainer>
+                  <Table size="small">
+                    <TableBody>
+                      {/* Header Row */}
+                      <TableRow>
+                        <TableCell><strong>Field</strong></TableCell>
+                        <TableCell>
+                          <Typography variant="subtitle2" color="primary">
+                            Entered by Candidate
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="subtitle2" color="secondary">
+                            Extracted from CNIC
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
 
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>Name:</strong></Typography>
-                    <Typography variant="body2">{data.employee?.name || 'N/A'}</Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>Name:</strong></Typography>
-                    <Typography variant="body2">{data.aiVerification?.extractedData?.name || 'N/A'}</Typography>
-                  </Grid>
+                      {/* Name */}
+                      <TableRow>
+                        <TableCell><strong>Name:</strong></TableCell>
+                        <TableCell>{data.employee?.name || 'N/A'}</TableCell>
+                        <TableCell>{data.aiVerification?.extractedData?.name || 'N/A'}</TableCell>
+                      </TableRow>
 
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>CNIC:</strong></Typography>
-                    <Typography variant="body2">{data.employee?.cnic || 'N/A'}</Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>CNIC:</strong></Typography>
-                    <Typography variant="body2">{data.aiVerification?.extractedData?.cnicNumber || 'N/A'}</Typography>
-                  </Grid>
+                      {/* CNIC */}
+                      <TableRow>
+                        <TableCell><strong>CNIC:</strong></TableCell>
+                        <TableCell>{data.employee?.cnic || 'N/A'}</TableCell>
+                        <TableCell>{data.aiVerification?.extractedData?.cnicNumber || 'N/A'}</TableCell>
+                      </TableRow>
 
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>Father's Name:</strong></Typography>
-                    <Typography variant="body2">{data.employee?.fatherName || 'N/A'}</Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>Father's Name:</strong></Typography>
-                    <Typography variant="body2">{data.aiVerification?.extractedData?.fatherName || 'N/A'}</Typography>
-                  </Grid>
+                      {/* Father's Name */}
+                      <TableRow>
+                        <TableCell><strong>Father's Name:</strong></TableCell>
+                        <TableCell>{data.employee?.fatherName || 'N/A'}</TableCell>
+                        <TableCell>{data.aiVerification?.extractedData?.fatherName || 'N/A'}</TableCell>
+                      </TableRow>
 
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>Date of Birth:</strong></Typography>
-                    <Typography variant="body2">{data.employee?.dateOfBirth || 'N/A'}</Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2"><strong>Date of Birth:</strong></Typography>
-                    <Typography variant="body2">{data.aiVerification?.extractedData?.dob || 'N/A'}</Typography>
-                  </Grid>
-                </Grid>
+                      {/* Date of Birth */}
+                      <TableRow>
+                        <TableCell><strong>Date of Birth:</strong></TableCell>
+                        <TableCell>{data.employee?.dateOfBirth || 'N/A'}</TableCell>
+                        <TableCell>{data.aiVerification?.extractedData?.dob || 'N/A'}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </CardContent>
             </Card>
 

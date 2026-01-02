@@ -22,52 +22,70 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Cancel, Pending, Visibility } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { hrAPI } from '../services/api';
+import { Tabs, Tab} from '@mui/material';
 
 function HRDashboard() {
   const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState([]);
+  const [pendingList, setPendingList] = useState([]);
+  const [approvedList, setApprovedList] = useState([]);
+  const [rejectedList, setRejectedList] = useState([]);
+  const [currentTab, setCurrentTab] = useState(0); // 0=Pending, 1=Approved, 2=Rejected
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadPending();
+    loadAllData();
   }, []);
 
-  const loadPending = async () => {
+  const loadAllData = async () => {
     setLoading(true);
     try {
-      const response = await hrAPI.getPending();
-      setPending(response.data.data);
+      // Load all three lists
+      const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
+        hrAPI.getPending(),
+        hrAPI.getApproved(), // We'll create this
+        hrAPI.getRejected()  // We'll create this
+      ]);
+
+      setPendingList(pendingRes.data.data || []);
+      setApprovedList(approvedRes.data.data || []);
+      setRejectedList(rejectedRes.data.data || []);
     } catch (error) {
-      toast.error('Failed to load pending registrations');
-      console.error(error);
+      console.error('Error loading data:', error);
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      documents_submitted: 'info',
-      verification_pending: 'warning',
-      verified: 'success',
-      rejected: 'error'
-    };
-    return colors[status] || 'default';
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
   };
 
-  const getVerificationIcon = (status) => {
-    if (status === 'passed' || status === 'approved') {
-      return <CheckCircle fontSize="small" color="success" />;
-    }
-    if (status === 'failed' || status === 'rejected') {
-      return <Cancel fontSize="small" color="error" />;
-    }
-    return <Pending fontSize="small" color="warning" />;
+  const getStatusChip = (status) => {
+    const statusConfig = {
+      pending: { label: 'PENDING', color: 'warning' },
+      approved: { label: 'APPROVED', color: 'success' },
+      rejected: { label: 'REJECTED', color: 'error' }
+    };
+    const config = statusConfig[status] || statusConfig.pending;
+    return <Chip label={config.label} color={config.color} size="small" />;
   };
+
+  // Get current list based on tab
+  const getCurrentList = () => {
+    switch(currentTab) {
+      case 0: return pendingList;
+      case 1: return approvedList;
+      case 2: return rejectedList;
+      default: return pendingList;
+    }
+  };
+
+  const currentList = getCurrentList();
 
   if (loading) {
     return (
-      <Container maxWidth="lg">
+      <Container maxWidth="xl">
         <Box sx={{ mt: 8, display: 'flex', justifyContent: 'center' }}>
           <CircularProgress />
         </Box>
@@ -76,140 +94,131 @@ function HRDashboard() {
   }
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth="xl">
       <Box sx={{ mt: 8, mb: 4 }}>
-        <Typography variant="h3" component="h1" gutterBottom>
+        {/* Header */}
+        <Typography variant="h4" component="h1" gutterBottom>
           HR Verification Dashboard
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary" paragraph>
-          Review and approve pending employee registrations
         </Typography>
 
         {/* Summary Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h4" color="primary">
-                  {pending.length}
+                <Typography color="text.secondary" gutterBottom>
+                  Pending Verification
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Pending Registrations
+                <Typography variant="h3" color="warning.main">
+                  {pendingList.length}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h4" color="success.main">
-                  {pending.filter(p => p.aiVerification.status === 'passed').length}
+                <Typography color="text.secondary" gutterBottom>
+                  Recently Approved
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  AI Verified
+                <Typography variant="h3" color="success.main">
+                  {approvedList.length}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h4" color="warning.main">
-                  {pending.filter(p => p.aiVerification.status === 'pending').length}
+                <Typography color="text.secondary" gutterBottom>
+                  Recently Rejected
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Awaiting AI Verification
+                <Typography variant="h3" color="error.main">
+                  {rejectedList.length}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
 
-        {/* Pending Table */}
-        {pending.length === 0 ? (
-          <Alert severity="info">
-            No pending registrations at this time.
-          </Alert>
-        ) : (
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: 'primary.main' }}>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Name</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Email</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Department</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Position</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Status</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">AI</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">HR</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Submitted</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Actions</TableCell>
+        {/* Tabs */}
+        <Paper sx={{ mb: 2 }}>
+          <Tabs value={currentTab} onChange={handleTabChange}>
+            <Tab label={`Pending (${pendingList.length})`} />
+            <Tab label={`Approved (${approvedList.length})`} />
+            <Tab label={`Rejected (${rejectedList.length})`} />
+          </Tabs>
+        </Paper>
+
+        {/* Table */}
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead sx={{ bgcolor: 'primary.main' }}>
+              <TableRow>
+                <TableCell sx={{ color: 'white' }}>Name</TableCell>
+                <TableCell sx={{ color: 'white' }}>Email (Work)</TableCell>
+                <TableCell sx={{ color: 'white' }}>Email (Personal)</TableCell>
+                <TableCell sx={{ color: 'white' }}>Department</TableCell>
+                <TableCell sx={{ color: 'white' }}>Position</TableCell>
+                <TableCell sx={{ color: 'white' }}>Status</TableCell>
+                <TableCell sx={{ color: 'white' }}>AI Verification</TableCell>
+                <TableCell sx={{ color: 'white' }}>HR Status</TableCell>
+                <TableCell sx={{ color: 'white' }}>Submitted</TableCell>
+                <TableCell sx={{ color: 'white' }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {currentList.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} align="center">
+                    <Typography variant="body1" color="text.secondary" sx={{ py: 4 }}>
+                      {currentTab === 0 && 'No pending verifications'}
+                      {currentTab === 1 && 'No approved candidates yet'}
+                      {currentTab === 2 && 'No rejected candidates yet'}
+                    </Typography>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {pending.map((employee) => (
-                  <TableRow key={employee.id} hover>
+              ) : (
+                currentList.map((emp) => (
+                  <TableRow key={emp.id} hover>
+                    <TableCell>{emp.name}</TableCell>
+                    <TableCell>{emp.workEmail || 'N/A'}</TableCell>
+                    <TableCell>{emp.personalEmail}</TableCell>
+                    <TableCell>{emp.department || 'N/A'}</TableCell>
+                    <TableCell>{emp.position || 'N/A'}</TableCell>
+                    <TableCell>{getStatusChip(emp.onboardingStatus)}</TableCell>
                     <TableCell>
-                      <Typography variant="body2" fontWeight="medium">
-                        {employee.name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {employee.workEmail}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {employee.personalEmail}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {employee.department || 'N/A'}
-                      </Typography>
+                      {emp.aiVerificationStatus === 'passed' && (
+                        <Chip icon={<CheckCircle />} label="PASSED" color="success" size="small" />
+                      )}
+                      {emp.aiVerificationStatus === 'failed' && (
+                        <Chip icon={<Cancel />} label="FAILED" color="error" size="small" />
+                      )}
+                      {emp.aiVerificationStatus === 'pending' && (
+                        <Chip label="PENDING" color="warning" size="small" />
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
-                        {employee.position || 'N/A'}
-                      </Typography>
+                      {getStatusChip(emp.hrVerificationStatus)}
                     </TableCell>
-                    <TableCell align="center">
-                      <Chip
-                        label={employee.onboardingStatus.replace(/_/g, ' ').toUpperCase()}
-                        color={getStatusColor(employee.onboardingStatus)}
-                        size="small"
-                      />
+                    <TableCell>
+                      {emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString() : 'N/A'}
                     </TableCell>
-                    <TableCell align="center">
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {getVerificationIcon(employee.aiVerification.status)}
-                        <Typography variant="caption" sx={{ ml: 0.5 }}>
-                          {employee.aiVerification.score > 0 && `${employee.aiVerification.score}%`}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell align="center">
-                      {getVerificationIcon(employee.hrVerification.status)}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Typography variant="caption">
-                        {new Date(employee.submittedDate).toLocaleDateString()}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
+                    <TableCell>
                       <Button
                         variant="contained"
                         size="small"
-                        onClick={() => navigate(`/hr/verify/${employee.id}`)} // Should be emp.id
+                        onClick={() => navigate(`/hr/verify/${emp.id}`)}
                       >
-                        Review
+                        {currentTab === 0 ? 'Review' : 'View'}
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Box>
     </Container>
   );

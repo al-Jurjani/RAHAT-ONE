@@ -149,39 +149,27 @@ async function approveCandidate(req, res) {
   try {
     const { employeeId } = req.params;
     const { notes } = req.body;
-    const hrUserId = req.user?.id || 2; // Get from JWT token, default to admin
 
-    // Update HR verification status
-    await odooAdapter.updateEmployee(employeeId, {
+    const id = parseInt(employeeId);
+    console.log('✅ Approving employee:', id);
+
+    await odooAdapter.updateEmployee(id, {
       hr_verification_status: 'approved',
-      hr_verification_notes: notes || 'Approved by HR',
-      hr_verified_by: hrUserId,
-      hr_verified_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
+      hr_verification_notes: notes || '',
+      hr_verified_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      onboarding_status: 'verified'
     });
 
-    // Check if both AI and HR verifications passed
-    const employee = await odooAdapter.getEmployee(employeeId);
+    console.log('✅ Employee approved successfully');
 
-    if (employee.ai_verification_status === 'passed' &&
-        employee.hr_verification_status === 'approved') {
-
-      // Update status to verified
-      await odooAdapter.updateEmployee(employeeId, {
-        onboarding_status: 'verified'
-      });
-
-      // TODO: Trigger Power Automate - Email provisioning flow
-      console.log(`✉️ Email provisioning should be triggered for employee ${employeeId}`);
-    }
-
-    respondSuccess(res, {
-      message: 'Candidate approved successfully',
-      status: employee.onboarding_status
+    return respondSuccess(res, {
+      message: 'Employee approved successfully',
+      employeeId: id
     });
 
   } catch (error) {
-    console.error('❌ Approve candidate error:', error);
-    respondError(res, error.message, 500);
+    console.error('❌ Approve verification error:', error);
+    return respondError(res, error.message || 'Failed to approve verification', 500);
   }
 }
 
@@ -192,41 +180,115 @@ async function rejectCandidate(req, res) {
   try {
     const { employeeId } = req.params;
     const { reason, details } = req.body;
-    const hrUserId = req.user?.id || 2;
 
-    if (!reason) {
-      return respondError(res, 'Rejection reason is required', 400);
-    }
+    const id = parseInt(employeeId);
+    console.log('❌ Rejecting employee:', id, 'Reason:', reason);
 
-    // Update HR verification status
-    await odooAdapter.updateEmployee(employeeId, {
+    await odooAdapter.updateEmployee(id, {
       hr_verification_status: 'rejected',
-      hr_verification_notes: details || 'Rejected by HR',
-      hr_verified_by: hrUserId,
-      hr_verified_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      onboarding_status: 'rejected',
       rejection_reason: reason,
-      rejection_details: details,
-      rejection_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
+      rejection_details: details || '',
+      rejection_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      onboarding_status: 'rejected',
+      active: false
     });
 
-    // TODO: Trigger Power Automate - Send rejection email
-    console.log(`✉️ Rejection email should be sent for employee ${employeeId}`);
+    console.log('✅ Employee rejected successfully');
 
-    respondSuccess(res, {
-      message: 'Candidate rejected',
-      reason: reason
+    return respondSuccess(res, {
+      message: 'Employee rejected successfully',
+      employeeId: id
     });
 
   } catch (error) {
-    console.error('❌ Reject candidate error:', error);
-    respondError(res, error.message, 500);
+    console.error('❌ Reject verification error:', error);
+    return respondError(res, error.message || 'Failed to reject verification', 500);
   }
 }
 
+/**
+ * Get recently approved employees
+ */
+async function getApprovedEmployees(req, res) {
+  try {
+    console.log('📋 Fetching approved employees...');
+
+    const employees = await odooAdapter.searchAndReadEmployees([
+      ['hr_verification_status', '=', 'approved'],
+      ['hr_verified_date', '!=', false]
+    ], {
+      order: 'hr_verified_date desc',
+      limit: 50
+    });
+
+    console.log(`✅ Found ${employees.length} approved employees`);
+
+    const formattedList = employees.map(emp => ({
+      id: emp.id,
+      name: emp.name,
+      personalEmail: emp.private_email,
+      workEmail: emp.work_email,
+      department: emp.department_id ? emp.department_id[1] : 'N/A',
+      position: emp.job_id ? emp.job_id[1] : 'N/A',
+      onboardingStatus: emp.onboarding_status,
+      aiVerificationStatus: emp.ai_verification_status,
+      hrVerificationStatus: emp.hr_verification_status,
+      submittedAt: emp.onboarding_initiated_date,
+      approvedAt: emp.hr_verified_date
+    }));
+
+    return respondSuccess(res, formattedList);
+
+  } catch (error) {
+    console.error('❌ Get approved employees error:', error.message);
+    return respondError(res, error.message || 'Failed to get approved employees', 500);
+  }
+}
+
+/**
+ * Get recently rejected employees
+ */
+async function getRejectedEmployees(req, res) {
+  try {
+    const employees = await odooAdapter.searchAndReadEmployees([
+      ['hr_verification_status', '=', 'rejected'],
+      ['rejection_date', '!=', false]
+    ], {
+      order: 'rejection_date desc',
+      limit: 50
+    });
+
+    console.log(`✅ Found ${employees.length} rejected employees`);
+
+    const formattedList = employees.map(emp => ({
+      id: emp.id,
+      name: emp.name,
+      personalEmail: emp.private_email,
+      workEmail: emp.work_email,
+      department: emp.department_id ? emp.department_id[1] : 'N/A',
+      position: emp.job_id ? emp.job_id[1] : 'N/A',
+      onboardingStatus: emp.onboarding_status,
+      aiVerificationStatus: emp.ai_verification_status,
+      hrVerificationStatus: emp.hr_verification_status,
+      submittedAt: emp.onboarding_initiated_date,
+      rejectedAt: emp.rejection_date,
+      rejectionReason: emp.rejection_reason
+    }));
+
+    return respondSuccess(res, formattedList);
+
+  } catch (error) {
+    console.error('❌ Get rejected employees error:', error);
+    return respondError(res, 'Failed to get rejected employees', 500);
+  }
+}
+
+
 module.exports = {
-  getPendingRegistrations,
-  getVerificationDetails,
-  approveCandidate,
-  rejectCandidate
+  getPendingRegistrations,    // Your existing one
+  getApprovedEmployees,       // NEW
+  getRejectedEmployees,       // NEW
+  getVerificationDetails,     // Your existing one
+  approveCandidate,           // Your existing one
+  rejectCandidate            // Your existing one
 };

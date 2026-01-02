@@ -33,12 +33,14 @@ export const lookupAPI = {
   },
 };
 
-// HR endpoints
+// HR endpoints - CHANGED: Use 'api' instead of 'axios'
 export const hrAPI = {
   getPending: () => api.get('/hr/verification/pending'),
+  getApproved: () => api.get('/hr/verification/approved'),
+  getRejected: () => api.get('/hr/verification/rejected'),
   getDetails: (employeeId) => api.get(`/hr/verification/details/${employeeId}`),
   approve: (employeeId, notes) => api.post(`/hr/verification/approve/${employeeId}`, { notes }),
-  reject: (employeeId, reason, details) => api.post(`/hr/verification/reject/${employeeId}`, { reason, details }),
+  reject: (employeeId, reason, details) => api.post(`/hr/verification/reject/${employeeId}`, { reason, details })
 };
 
 export default api;

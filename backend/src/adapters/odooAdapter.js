@@ -169,11 +169,29 @@ class OdooAdapter {
   }
 
   /**
-   * Update employee record
-   */
-  async updateEmployee(employeeId, values) {
-    return await this.update('hr.employee', employeeId, values);
+ * Update employee record
+ */
+async updateEmployee(employeeId, data) {
+  try {
+    // CRITICAL: Ensure ID is integer, not string
+    const id = parseInt(employeeId);
+
+    console.log(`📝 Updating employee ${id} with data:`, Object.keys(data));
+
+    const result = await this.execute(
+      'hr.employee',
+      'write',
+      [[id], data]  // Must be [id] as integer inside array
+    );
+
+    console.log('✅ Employee updated successfully');
+    return result;
+
+  } catch (error) {
+    console.error('Odoo write Error:', error);
+    throw error;
   }
+}
 
   /**
    * Upload file to Odoo as attachment
@@ -254,6 +272,59 @@ async getEmployeeDocuments(employeeId) {
 
     return employeeIds;
   }
+
+  /**
+   * Search and read employees with filters and options
+   */
+  async searchAndReadEmployees(domain = [], options = {}) {
+    try {
+      const fields = [
+        'id', 'name', 'work_email', 'private_email', 'mobile_phone',
+        'department_id', 'job_id', 'onboarding_status',
+        'ai_verification_status', 'ai_verification_score',
+        'hr_verification_status', 'onboarding_initiated_date',
+        'hr_verified_date', 'rejection_date', 'rejection_reason',
+        'cnic_uploaded', 'degree_uploaded', 'medical_uploaded',
+        'entered_cnic_number', 'entered_father_name'
+      ];
+
+      // Search for IDs with optional ordering and limit
+      let searchParams = [domain];
+
+      if (options.limit) {
+        searchParams.push(0); // offset
+        searchParams.push(options.limit); // limit
+
+        if (options.order) {
+          searchParams.push(options.order); // order by
+        }
+      }
+
+      const employeeIds = await this.execute(
+        'hr.employee',
+        'search',
+        searchParams
+      );
+
+      if (!employeeIds || employeeIds.length === 0) {
+        return [];
+      }
+
+      // Read the records with specified fields
+      const employees = await this.execute(
+        'hr.employee',
+        'read',
+        [employeeIds, fields]
+      );
+
+      return employees || [];
+
+    } catch (error) {
+      console.error('Odoo searchAndReadEmployees Error:', error);
+      throw error;
+    }
+  }
+
 
   /**
    * Get all departments
