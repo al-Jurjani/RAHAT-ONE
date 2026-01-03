@@ -1,5 +1,6 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
+const powerAutomateService = require('../services/powerAutomateService');
 
 /**
  * Get all pending registrations for HR review
@@ -159,12 +160,25 @@ async function approveCandidate(req, res) {
     const id = parseInt(employeeId);
     console.log('✅ Approving employee:', id);
 
+    // Get employee data first
+    const employee = await odooAdapter.getEmployee(id);
+
+    // Update in Odoo
     await odooAdapter.updateEmployee(id, {
       hr_verification_status: 'approved',
       hr_verification_notes: notes || '',
       hr_verified_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
       onboarding_status: 'verified'
     });
+
+    // Trigger Power Automate approval email
+    await powerAutomateService.sendApprovalEmail({
+      id: employee.id,
+      name: employee.name,
+      personalEmail: employee.private_email,
+      department: employee.department_id?.[1] || 'N/A',
+      position: employee.job_id?.[1] || 'N/A'
+    }, notes);
 
     console.log('✅ Employee approved successfully');
 
@@ -188,8 +202,11 @@ async function rejectCandidate(req, res) {
     const { reason, details } = req.body;
 
     const id = parseInt(employeeId);
-    console.log('❌ Rejecting employee:', id, 'Reason:', reason);
 
+    // Get employee data first
+    const employee = await odooAdapter.getEmployee(id);
+
+    // Update in Odoo
     await odooAdapter.updateEmployee(id, {
       hr_verification_status: 'rejected',
       rejection_reason: reason,
@@ -198,6 +215,15 @@ async function rejectCandidate(req, res) {
       onboarding_status: 'rejected',
       active: false
     });
+
+    // Trigger Power Automate rejection email
+    await powerAutomateService.sendRejectionEmail({
+      id: employee.id,
+      name: employee.name,
+      personalEmail: employee.private_email,
+      department: employee.department_id?.[1] || 'N/A',
+      position: employee.job_id?.[1] || 'N/A'
+    }, reason, details);
 
     console.log('✅ Employee rejected successfully');
 

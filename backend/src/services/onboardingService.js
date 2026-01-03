@@ -8,42 +8,53 @@ class OnboardingService {
   /**
    * Initiate onboarding for a new employee
    */
-  async initiateOnboarding(employeeData) {
-    try {
-      // Create employee record in Odoo with correct status value
-      const employeeId = await odooAdapter.createEmployee({
-        name: employeeData.name,
-        private_email: employeeData.email,  // Personal email - used for lookup during registration
-        mobile_phone: employeeData.phone,
-        department_id: employeeData.departmentId || false,
-        job_id: employeeData.jobId || false,
-        hr_assigned_department_id: employeeData.departmentId || false,  // Track HR's assignment
-        hr_assigned_job_id: employeeData.jobId || false,  // Track HR's assignment
-        onboarding_status: 'initiated',  // ✅ This matches your Odoo field
-        onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
+  /**
+ * Initiate onboarding for a new employee
+ */
+async initiateOnboarding(employeeData) {
+  try {
+    // Create employee record in Odoo
+    const employeeId = await odooAdapter.createEmployee({
+      name: employeeData.name,
+      private_email: employeeData.email,
+      mobile_phone: employeeData.phone,
+      department_id: employeeData.departmentId || false,
+      job_id: employeeData.jobId || false,
+      onboarding_status: 'initiated',
+      onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
     });
 
-      console.log('✅ Employee created in Odoo. ID:', employeeId);
+    console.log('✅ Employee created in Odoo. ID:', employeeId);
 
-      const result = {
-        employeeId,
-        name: employeeData.name,
-        email: employeeData.email,
-        phone: employeeData.phone,
-        status: 'initiated',
-        progress: 0,
-        message: 'Onboarding process initiated successfully'
-      };
+    const result = {
+      employeeId,
+      name: employeeData.name,
+      email: employeeData.email,
+      phone: employeeData.phone,
+      status: 'initiated',
+      progress: 0,
+      message: 'Onboarding process initiated successfully'
+    };
 
-      // 🚀 TRIGGER POWER AUTOMATE FLOW
-      await powerAutomateService.triggerOnboardingFlow(result);
-      return result;
+    // 🚀 TRIGGER POWER AUTOMATE FLOW
+    powerAutomateService.sendRegistrationEmail({
+      id: employeeId,
+      name: employeeData.name,
+      personalEmail: employeeData.email,
+      phone: employeeData.phone,
+      department: 'N/A', // We'll fetch this from Odoo if needed
+      position: 'N/A'
+    }).catch(err => {
+      console.error('⚠️ Email notification failed, but onboarding succeeded:', err.message);
+    });
 
-    } catch (error) {
-      console.error('❌ Error initiating onboarding:', error);
-      throw error;
-    }
+    return result;
+
+  } catch (error) {
+    console.error('❌ Error initiating onboarding:', error);
+    throw error;
   }
+}
 
   /**
    * Update onboarding status based on document uploads
