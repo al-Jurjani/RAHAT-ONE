@@ -1,11 +1,16 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Pages (we'll create these next)
+// Auth
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Pages
+import Login from './pages/Login';
 import RegistrationPage from './pages/RegistrationPage';
 import StatusPage from './pages/StatusPage';
 import HRMainPage from './pages/HRMainPage';
@@ -32,19 +37,48 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<RegistrationPage />} />
-          <Route path="/register" element={<RegistrationPage />} />
-          <Route path="/status" element={<StatusPage />} />
+        <AuthProvider>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<RegistrationPage />} />
+            <Route path="/status" element={<StatusPage />} />
 
-          {/* HR Routes */}
-          <Route path="/hr" element={<HRMainPage />} />
-          <Route path="/hr/verification" element={<HRDashboard />} />
-          <Route path="/hr/verification/:employeeId" element={<HRVerificationDetails />} />
-        </Routes>
+            {/* Protected HR Routes */}
+            <Route
+              path="/hr"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRMainPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hr/verification"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hr/verification/:employeeId"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRVerificationDetails />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Redirect root to login */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+
+            {/* 404 - redirect to login */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+          <ToastContainer position="top-right" autoClose={3000} />
+        </AuthProvider>
       </Router>
-      <ToastContainer position="top-right" autoClose={3000} />
     </ThemeProvider>
   );
 }
