@@ -46,7 +46,7 @@ class AuthService {
         password
       ]);
 
-      if (!isValid || isValid.length === 0 || !isValid[0]) {
+      if (!isValid) {  // ✅ CORRECT - Odoo returns true/false directly, not an array
         console.log('❌ Invalid password for:', email);
 
         // Increment failed login counter

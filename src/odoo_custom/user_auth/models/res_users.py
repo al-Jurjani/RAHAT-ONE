@@ -80,6 +80,7 @@ class ResUsersCustom(models.Model):
         self.ensure_one()
         self.failed_login_attempts = 0
         self.last_login_date = fields.Datetime.now()
+        return True  # ✅ ADD THIS LINE
 
     def create_rahatone_user(
         self, name, email, password, role="employee", employee_id=None
@@ -106,4 +107,4 @@ class ResUsersCustom(models.Model):
         # Set password
         user.set_rahatone_password(password)
 
-        return user
+        return user.id  # ✅ Return ID only, not the object

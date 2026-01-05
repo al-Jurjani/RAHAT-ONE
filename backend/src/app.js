@@ -74,18 +74,22 @@ const onboardingRoutes = require('./routes/onboardingRoutes');
 const registrationRoutes = require('./routes/registrationRoutes');
 const hrVerificationRoutes = require('./routes/hrVerificationRoutes');
 const lookupRoutes = require('./routes/lookupRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 // DEBUG: Check what we imported
 console.log('onboardingRoutes:', typeof onboardingRoutes);
 console.log('registrationRoutes:', typeof registrationRoutes);
 console.log('hrVerificationRoutes:', typeof hrVerificationRoutes);
 console.log('lookupRoutes:', typeof lookupRoutes);
+console.log('authRoutes:', typeof authRoutes);
+
 
 // Register routes
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/registration', registrationRoutes);
 app.use('/api/hr/verification', hrVerificationRoutes);
 app.use('/api/lookup', lookupRoutes);
+app.use('/api/auth', authRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
