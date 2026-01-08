@@ -154,42 +154,106 @@ async function getVerificationDetails(req, res) {
  */
 async function approveCandidate(req, res) {
   try {
-    const { employeeId } = req.params;
-    const { notes } = req.body;
+    const employeeId = parseInt(req.params.employeeId);  // ✅ Get from URL
+    const { notes } = req.body;  // ✅ Get notes from body
 
-    const id = parseInt(employeeId);
-    console.log('✅ Approving employee:', id);
+    console.log('📥 Received approval request for employee:', employeeId);
+    console.log('📝 Notes:', notes);
 
-    // Get employee data first
-    const employee = await odooAdapter.getEmployee(id);
+    if (!employeeId) {
+      return respondError(res, 'Employee ID is required', 400);
+    }
 
-    // Update in Odoo
-    await odooAdapter.updateEmployee(id, {
+    console.log('✅ Approving candidate:', employeeId);
+
+    // Get employee details including password hash
+    const employee = await odooAdapter.execute('hr.employee', 'read', [
+      [employeeId],
+      [
+        'name',
+        'work_email',
+        'private_email',
+        'registration_password_hash'
+      ]
+    ]);
+
+    if (!employee || employee.length === 0) {
+      return respondError(res, 'Employee not found', 404);
+    }
+
+    const emp = employee[0];
+
+    // Update HR verification status to approved
+    await odooAdapter.updateEmployee(employeeId, {
       hr_verification_status: 'approved',
       hr_verification_notes: notes || '',
+      hr_verified_by: 2, // Admin user ID
       hr_verified_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
       onboarding_status: 'verified'
     });
 
-    // Trigger Power Automate approval email
-    await powerAutomateService.sendApprovalEmail({
-      id: employee.id,
-      name: employee.name,
-      personalEmail: employee.private_email,
-      department: employee.department_id?.[1] || 'N/A',
-      position: employee.job_id?.[1] || 'N/A'
-    }, notes);
+    console.log('✅ Employee verified in Odoo');
 
-    console.log('✅ Employee approved successfully');
+    // CREATE LOGIN ACCOUNT
+    try {
+      // Check if user already exists
+      const existingUsers = await odooAdapter.execute('res.users', 'search_read', [
+        [['employee_id', '=', employeeId]],
+        ['id']
+      ]);
+
+      if (existingUsers.length === 0 && emp.registration_password_hash && emp.work_email) {
+        console.log('🔐 Creating login account for:', emp.work_email);
+
+        // Create user with stored password hash
+        const userId = await odooAdapter.execute('res.users', 'create', [
+          {
+            name: emp.name,
+            login: emp.work_email,
+            email: emp.work_email,
+            rahatone_role: 'employee',
+            is_rahatone_user: true,
+            employee_id: employeeId,
+            account_status: 'active',
+            password_hash: emp.registration_password_hash
+          }
+        ]);
+
+        console.log('✅ Login account created! User ID:', userId);
+      } else {
+        console.log('ℹ️  User account already exists or missing data');
+      }
+    } catch (userError) {
+      console.error('⚠️  Failed to create user account:', userError.message);
+      // Don't fail the whole approval if user creation fails
+    }
+
+    // Trigger Power Automate approval email
+    console.log('🔔 Attempting to send approval email...');
+    powerAutomateService.sendApprovalEmail({
+      id: employeeId,
+      name: emp.name,
+      personalEmail: emp.private_email,
+      workEmail: emp.work_email,
+      department: 'N/A',
+      position: 'N/A'
+    }, notes || '')
+      .then(() => console.log('✅ Approval email sent'))
+      .catch(err => {
+        console.error('❌ Approval email error:');
+        console.error('   Message:', err.message);
+        console.error('   Response:', err.response?.data);
+      });
 
     return respondSuccess(res, {
-      message: 'Employee approved successfully',
-      employeeId: id
-    });
+      employeeId,
+      status: 'approved',
+      userAccountCreated: true
+    }, 'Candidate approved successfully');
 
   } catch (error) {
-    console.error('❌ Approve verification error:', error);
-    return respondError(res, error.message || 'Failed to approve verification', 500);
+    console.error('❌ Approval error:', error);
+    return respondError(res, 'Failed to approve candidate', 500, error);
   }
 }
 

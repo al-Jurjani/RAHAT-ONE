@@ -229,6 +229,12 @@ class HrEmployeeCustom(models.Model):
         default=False,
     )
 
+    # Add to the class HrEmployeeCustom
+    registration_password_hash = fields.Char(
+        string="Registration Password Hash",
+        help="Temporary storage of registration password until account activation",
+    )
+
     # ============================================
     # COMPUTED FIELDS
     # ============================================

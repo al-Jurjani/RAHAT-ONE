@@ -1,6 +1,7 @@
 const onboardingService = require('../services/onboardingService');
 const odooAdapter = require('../adapters/odooAdapter');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 
 /**
@@ -79,6 +80,9 @@ async function completeRegistration(req, res) {
     const deptId = parseInt(departmentId || department_id || 0);
     const jobId = parseInt(jobPositionId || job_position_id || 0);
 
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(password, 10);
+
     console.log('📋 Registration data received:');
     console.log('  departmentId:', deptId, typeof deptId);
     console.log('  jobPositionId:', jobId, typeof jobId);
@@ -110,8 +114,8 @@ async function completeRegistration(req, res) {
     const employeeId = employeeIds[0];
 
     // Generate work email
-    const workEmail = generateWorkEmail(name);
-
+    const workEmail = await generateWorkEmail(name);
+    console.log('✅ Generated work email:', workEmail);
     // Upload documents to Odoo
     const cnicAttachmentId = await odooAdapter.uploadDocument(
       cnicFile.data,
@@ -156,10 +160,10 @@ async function completeRegistration(req, res) {
       onboarding_status: 'documents_submitted',
       cnic_uploaded: true,
       degree_uploaded: degreeFile ? true : false,
-      medical_uploaded: medicalFile ? true : false
+      medical_uploaded: medicalFile ? true : false,
+      registration_password_hash: passwordHash,
     });
 
-    // Create user account (TODO: implement password hashing)
     console.log('👤 User account should be created:', workEmail);
 
     // Save CNIC file temporarily for AI verification
@@ -234,12 +238,48 @@ async function runAIVerificationAsync(employeeId, cnicFilePath, enteredData) {
 /**
  * Generate work email from name
  */
-function generateWorkEmail(name) {
-  const nameParts = name.toLowerCase().trim().split(' ');
-  const firstName = nameParts[0];
-  const lastName = nameParts[nameParts.length - 1];
+async function generateWorkEmail(name, departmentId) {
+  try {
+    // Generate base email from name
+    const nameParts = name.trim().toLowerCase().split(' ');
+    let firstName = nameParts[0] || '';
+    let lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
 
-  return `${firstName}.${lastName}@outfitters.com`;
+    // Remove special characters
+    firstName = firstName.replace(/[^a-z]/g, '');
+    lastName = lastName.replace(/[^a-z]/g, '');
+
+    let baseEmail = `${firstName}.${lastName}`;
+    let workEmail = `${baseEmail}@outfitters.com`;
+    let counter = 1;
+
+    // Check if email already exists in Odoo
+    while (true) {
+      const existing = await odooAdapter.execute('hr.employee', 'search_count', [
+        [['work_email', '=', workEmail]]
+      ]);
+
+      if (existing === 0) {
+        break; // Email is unique
+      }
+
+      // Try with counter
+      workEmail = `${baseEmail}${counter}@outfitters.com`;
+      counter++;
+
+      if (counter > 100) {
+        // Safety limit
+        throw new Error('Unable to generate unique email');
+      }
+    }
+
+    console.log('✅ Generated unique work email:', workEmail);
+    return workEmail;
+
+  } catch (error) {
+    console.error('❌ Email generation error:', error);
+    throw error;
+  }
 }
 
 /**

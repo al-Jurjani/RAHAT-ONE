@@ -84,6 +84,8 @@ function HRVerificationDetails() {
   const handleApprove = async () => {
     setSubmitting(true);
     try {
+      console.log("approve employee ID:", employeeId);
+      console.log('👉 Approving candidate with notes:', approveNotes);
       await hrAPI.approve(employeeId, approveNotes);
       toast.success('Candidate approved successfully!');
       setApproveDialogOpen(false);
