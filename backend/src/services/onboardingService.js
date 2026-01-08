@@ -26,6 +26,29 @@ async initiateOnboarding(employeeData) {
 
     console.log('✅ Employee created in Odoo. ID:', employeeId);
 
+    // Fetch department name
+    let departmentName = 'N/A';
+    if (employeeData.departmentId) {
+      const dept = await odooAdapter.execute('hr.department', 'read', [
+        [employeeData.departmentId],
+        ['name']
+      ]);
+      departmentName = dept?.[0]?.name || 'N/A';
+    }
+
+    // Fetch position name
+    let positionName = 'N/A';
+    if (employeeData.jobId) {
+      const job = await odooAdapter.execute('hr.job', 'read', [
+        [employeeData.jobId],
+        ['name']
+      ]);
+      positionName = job?.[0]?.name || 'N/A';
+    }
+
+    console.log('📋 Department:', departmentName);
+    console.log('📋 Position:', positionName);
+
     const result = {
       employeeId,
       name: employeeData.name,
@@ -42,8 +65,8 @@ async initiateOnboarding(employeeData) {
       name: employeeData.name,
       personalEmail: employeeData.email,
       phone: employeeData.phone,
-      department: 'N/A', // We'll fetch this from Odoo if needed
-      position: 'N/A'
+      department: departmentName,
+      position: positionName
     }).catch(err => {
       console.error('⚠️ Email notification failed, but onboarding succeeded:', err.message);
     });

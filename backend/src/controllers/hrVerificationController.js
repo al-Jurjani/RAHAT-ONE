@@ -9,7 +9,7 @@ async function getPendingRegistrations(req, res) {
   try {
     // Search for employees with documents submitted or verification pending
     const employeeIds = await odooAdapter.searchEmployees([
-      ['onboarding_status', 'in', ['documents_submitted', 'verification_pending']]
+      ['onboarding_status', 'in', ['documents_submitted', 'verification_pending', 'registered']]  // ✅ Add 'registered'
     ]);
 
     const employees = [];
@@ -23,20 +23,16 @@ async function getPendingRegistrations(req, res) {
         department: emp.department_id?.[1] || 'N/A',
         position: emp.job_id?.[1] || 'N/A',
         onboardingStatus: emp.onboarding_status,
-        aiVerification: {
-          status: emp.ai_verification_status,
-          score: emp.ai_verification_score,
-          date: emp.ai_verification_date
-        },
-        hrVerification: {
-          status: emp.hr_verification_status
-        },
+        aiVerificationStatus: emp.ai_verification_status || 'pending',  // ✅ Flat field
+        aiVerificationScore: emp.ai_verification_score || 0,            // ✅ Flat field
+        aiVerificationDate: emp.ai_verification_date,
+        hrVerificationStatus: emp.hr_verification_status || 'pending',  // ✅ Flat field
         documentsUploaded: {
           cnic: emp.cnic_uploaded,
           degree: emp.degree_uploaded,
           medical: emp.medical_uploaded
         },
-        submittedDate: emp.create_date
+        submittedAt: emp.create_date  // ✅ Match frontend field name
       });
     }
 
@@ -173,7 +169,9 @@ async function approveCandidate(req, res) {
         'name',
         'work_email',
         'private_email',
-        'registration_password_hash'
+        'registration_password_hash',
+        'department_id',      // ✅ Add this
+        'job_id'              // ✅ Add this
       ]
     ]);
 
@@ -228,6 +226,10 @@ async function approveCandidate(req, res) {
       // Don't fail the whole approval if user creation fails
     }
 
+    // Extract department and position names
+    const departmentName = emp.department_id ? emp.department_id[1] : 'N/A';
+    const positionName = emp.job_id ? emp.job_id[1] : 'N/A';
+
     // Trigger Power Automate approval email
     console.log('🔔 Attempting to send approval email...');
     powerAutomateService.sendApprovalEmail({
@@ -235,8 +237,8 @@ async function approveCandidate(req, res) {
       name: emp.name,
       personalEmail: emp.private_email,
       workEmail: emp.work_email,
-      department: 'N/A',
-      position: 'N/A'
+      department: departmentName || 'N/A',
+      position: positionName || 'N/A'
     }, notes || '')
       .then(() => console.log('✅ Approval email sent'))
       .catch(err => {
