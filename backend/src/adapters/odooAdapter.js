@@ -408,6 +408,90 @@ async getEmployeeDocuments(employeeId) {
       departmentName: job.department_id?.[1]
     }));
   }
+
+  // Get leave balance for an employee
+  async getLeaveBalance(employeeId, leaveTypeId) {
+    const domain = [
+      ['employee_id', '=', employeeId],
+      ['state', '=', 'validate'],
+      ['holiday_status_id', '=', leaveTypeId]
+    ];
+
+    const leaves = await this.searchRead('hr.leave', domain, [
+      'number_of_days'
+    ]);
+
+    const usedDays = leaves.reduce((sum, leave) => sum + leave.number_of_days, 0);
+
+    // Get total allocation (typically 20-30 days annually)
+    const allocationDomain = [
+      ['employee_id', '=', employeeId],
+      ['holiday_status_id', '=', leaveTypeId],
+      ['state', '=', 'validate']
+    ];
+
+    const allocations = await this.searchRead('hr.leave.allocation', allocationDomain, [
+      'number_of_days'
+    ]);
+
+    const totalDays = allocations.reduce((sum, alloc) => sum + alloc.number_of_days, 0);
+
+    return {
+      total: totalDays,
+      used: usedDays,
+      remaining: totalDays - usedDays
+    };
+  }
+
+  // Create leave request
+  async createLeaveRequest(leaveData) {
+    return await this.create('hr.leave', {
+      employee_id: leaveData.employee_id,
+      holiday_status_id: leaveData.leave_type_id,
+      request_date_from: leaveData.date_from,
+      request_date_to: leaveData.date_to,
+      number_of_days: leaveData.number_of_days,
+      notes: leaveData.notes || '',
+      state: 'confirm' // Pending approval
+    });
+  }
+
+  // Get all leave requests (for HR dashboard)
+  async getLeaveRequests(filters = {}) {
+    let domain = [];
+
+    if (filters.state) {
+      domain.push(['state', '=', filters.state]);
+    }
+
+    if (filters.employee_id) {
+      domain.push(['employee_id', '=', filters.employee_id]);
+    }
+
+    return await this.searchRead('hr.leave', domain, [
+      'employee_id',
+      'holiday_status_id',
+      'request_date_from',
+      'request_date_to',
+      'number_of_days',
+      'state',
+      'notes',
+      'create_date'
+    ]);
+  }
+
+  // Update leave status (approve/reject)
+  async updateLeaveStatus(leaveId, status, remarks = '') {
+    const updateData = {
+      state: status === 'approved' ? 'validate' : 'refuse'
+    };
+
+    if (remarks) {
+      updateData.notes = remarks;
+    }
+
+    return await this.write('hr.leave', leaveId, updateData);
+  }
 }
 
 const adapterInstance = new OdooAdapter();
