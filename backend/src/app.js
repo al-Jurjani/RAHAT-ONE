@@ -75,7 +75,7 @@ const registrationRoutes = require('./routes/registrationRoutes');
 const hrVerificationRoutes = require('./routes/hrVerificationRoutes');
 const lookupRoutes = require('./routes/lookupRoutes');
 const authRoutes = require('./routes/authRoutes');
-const leaveRoutes = require('./routes/leaves');
+const leaveRoutes = require('./routes/leavesRoutes');
 
 // DEBUG: Check what we imported
 console.log('onboardingRoutes:', typeof onboardingRoutes);

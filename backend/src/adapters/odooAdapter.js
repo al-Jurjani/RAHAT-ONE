@@ -409,88 +409,214 @@ async getEmployeeDocuments(employeeId) {
     }));
   }
 
-  // Get leave balance for an employee
-  async getLeaveBalance(employeeId, leaveTypeId) {
-    const domain = [
-      ['employee_id', '=', employeeId],
-      ['state', '=', 'validate'],
-      ['holiday_status_id', '=', leaveTypeId]
-    ];
+  // ==========================================
+  // LEAVE MANAGEMENT METHODS
+  // ==========================================
 
-    const leaves = await this.searchRead('hr.leave', domain, [
-      'number_of_days'
-    ]);
+  /**
+   * Get leave balance for an employee
+   * @param {number} employeeId - Odoo employee ID
+   * @param {number} leaveTypeId - Leave type ID (optional, defaults to Annual Leave)
+   * @returns {Object} { total, used, remaining }
+   */
+  async getLeaveBalance(employeeId, leaveTypeId = null) {
+    try {
+      // If no leave type specified, get Annual Leave
+      if (!leaveTypeId) {
+        const leaveTypes = await this.search('hr.leave.type',
+          [['name', '=', 'Annual Leave']],
+          ['id']
+        );
 
-    const usedDays = leaves.reduce((sum, leave) => sum + leave.number_of_days, 0);
+        if (leaveTypes.length === 0) {
+          throw new Error('Annual Leave type not found');
+        }
+        leaveTypeId = leaveTypes[0].id;
+      }
 
-    // Get total allocation (typically 20-30 days annually)
-    const allocationDomain = [
-      ['employee_id', '=', employeeId],
-      ['holiday_status_id', '=', leaveTypeId],
-      ['state', '=', 'validate']
-    ];
+      // Get total allocated days (validated allocations)
+      const allocations = await this.search('hr.leave.allocation',
+        [
+          ['employee_id', '=', employeeId],
+          ['holiday_status_id', '=', leaveTypeId],
+          ['state', '=', 'validate']
+        ],
+        ['number_of_days']
+      );
 
-    const allocations = await this.searchRead('hr.leave.allocation', allocationDomain, [
-      'number_of_days'
-    ]);
+      const totalDays = allocations.reduce((sum, alloc) => sum + alloc.number_of_days, 0);
 
-    const totalDays = allocations.reduce((sum, alloc) => sum + alloc.number_of_days, 0);
+      // Get used days (approved leaves)
+      const leaves = await this.search('hr.leave',
+        [
+          ['employee_id', '=', employeeId],
+          ['holiday_status_id', '=', leaveTypeId],
+          ['state', '=', 'validate']
+        ],
+        ['number_of_days']
+      );
 
-    return {
-      total: totalDays,
-      used: usedDays,
-      remaining: totalDays - usedDays
-    };
+      const usedDays = leaves.reduce((sum, leave) => sum + leave.number_of_days, 0);
+
+      return {
+        total: totalDays,
+        used: usedDays,
+        remaining: totalDays - usedDays
+      };
+    } catch (error) {
+      console.error('Error getting leave balance:', error);
+      throw error;
+    }
   }
 
-  // Create leave request
+  /**
+   * Get all leave types
+   * @returns {Array} List of leave types
+   */
+  async getLeaveTypes() {
+    try {
+      return await this.search('hr.leave.type',
+        [['active', '=', true]],
+        ['name', 'requires_allocation', 'color']
+      );
+    } catch (error) {
+      console.error('Error getting leave types:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new leave request
+   * @param {Object} leaveData - Leave request data
+   * @returns {number} Created leave ID
+   */
   async createLeaveRequest(leaveData) {
-    return await this.create('hr.leave', {
-      employee_id: leaveData.employee_id,
-      holiday_status_id: leaveData.leave_type_id,
-      request_date_from: leaveData.date_from,
-      request_date_to: leaveData.date_to,
-      number_of_days: leaveData.number_of_days,
-      notes: leaveData.notes || '',
-      state: 'confirm' // Pending approval
-    });
+    try {
+      const leaveRecord = {
+        employee_id: leaveData.employee_id,
+        holiday_status_id: leaveData.leave_type_id,
+        request_date_from: leaveData.date_from,
+        request_date_to: leaveData.date_to,
+        number_of_days: leaveData.number_of_days,
+        name: leaveData.notes || 'Leave Request',
+        state: 'confirm', // Pending approval
+      };
+
+      return await this.create('hr.leave', leaveRecord);
+    } catch (error) {
+      console.error('Error creating leave request:', error);
+      throw error;
+    }
   }
 
-  // Get all leave requests (for HR dashboard)
+  /**
+   * Get leave requests with optional filters
+   * @param {Object} filters - Filter criteria
+   * @returns {Array} List of leave requests
+   */
   async getLeaveRequests(filters = {}) {
-    let domain = [];
+    try {
+      let domain = [];
 
-    if (filters.state) {
-      domain.push(['state', '=', filters.state]);
+      if (filters.state) {
+        domain.push(['state', '=', filters.state]);
+      }
+
+      if (filters.employee_id) {
+        domain.push(['employee_id', '=', filters.employee_id]);
+      }
+
+      return await this.search('hr.leave', domain, [
+        'employee_id',
+        'holiday_status_id',
+        'request_date_from',
+        'request_date_to',
+        'number_of_days',
+        'state',
+        'name',
+        'create_date'
+      ]);
+    } catch (error) {
+      console.error('Error getting leave requests:', error);
+      throw error;
     }
-
-    if (filters.employee_id) {
-      domain.push(['employee_id', '=', filters.employee_id]);
-    }
-
-    return await this.searchRead('hr.leave', domain, [
-      'employee_id',
-      'holiday_status_id',
-      'request_date_from',
-      'request_date_to',
-      'number_of_days',
-      'state',
-      'notes',
-      'create_date'
-    ]);
   }
 
-  // Update leave status (approve/reject)
-  async updateLeaveStatus(leaveId, status, remarks = '') {
-    const updateData = {
-      state: status === 'approved' ? 'validate' : 'refuse'
-    };
+  /**
+   * Update leave status (approve/reject)
+   * @param {number} leaveId - Leave request ID
+   * @param {string} action - 'approve' or 'reject'
+   * @param {string} remarks - Optional remarks
+   * @returns {boolean} Success status
+   */
+  async updateLeaveStatus(leaveId, action, remarks = '') {
+    try {
+      const newState = action === 'approve' ? 'validate' : 'refuse';
 
-    if (remarks) {
-      updateData.notes = remarks;
+      // Update the state using the update method (which calls 'write')
+      await this.update('hr.leave', leaveId, { state: newState });
+
+      // If there are remarks, update the name field
+      if (remarks) {
+        await this.update('hr.leave', leaveId, {
+          name: remarks
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error updating leave status:', error);
+      throw error;
     }
+  }
 
-    return await this.write('hr.leave', leaveId, updateData);
+  /**
+   * Get leave request by ID
+   * @param {number} leaveId - Leave request ID
+   * @returns {Object} Leave request details
+   */
+  async getLeaveById(leaveId) {
+    try {
+      const leaves = await this.search('hr.leave',
+        [['id', '=', leaveId]],
+        [
+          'employee_id',
+          'holiday_status_id',
+          'request_date_from',
+          'request_date_to',
+          'number_of_days',
+          'state',
+          'name',
+          'create_date'
+        ]
+      );
+
+      return leaves.length > 0 ? leaves[0] : null;
+    } catch (error) {
+      console.error('Error getting leave by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if employee has sufficient leave balance
+   * @param {number} employeeId - Employee ID
+   * @param {number} leaveTypeId - Leave type ID
+   * @param {number} requestedDays - Number of days requested
+   * @returns {Object} { sufficient, balance }
+   */
+  async checkLeaveBalance(employeeId, leaveTypeId, requestedDays) {
+    try {
+      const balance = await this.getLeaveBalance(employeeId, leaveTypeId);
+
+      return {
+        sufficient: balance.remaining >= requestedDays,
+        balance: balance
+      };
+    } catch (error) {
+      console.error('Error checking leave balance:', error);
+      throw error;
+    }
   }
 }
 
