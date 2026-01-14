@@ -25,6 +25,7 @@ services:
       - HOST=db
       - USER=odoo
       - PASSWORD=odoo
+    command: odoo --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons
     volumes:
       - odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo

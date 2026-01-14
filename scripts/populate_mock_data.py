@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 ODOO_URL = "http://localhost:8069"
 ODOO_DB = "rahatone_db"
 load_dotenv()
-ODOO_USERNAME = os.environ.get("ODOO_USERNAME", "")
-ODOO_PASSWORD = os.environ.get("ODOO_PASSWORD", "")
+ODOO_USERNAME = "s.kumar.27149@khi.iba.edu.pk"
+ODOO_PASSWORD = "Tbijm@321"
 
 
 # Authenticate and return Odoo API objects
