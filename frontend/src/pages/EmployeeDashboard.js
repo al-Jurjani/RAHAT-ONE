@@ -20,9 +20,13 @@ import {
   Schedule
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+
 
 function EmployeeDashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
 
   return (
     <>
@@ -89,7 +93,10 @@ function EmployeeDashboard() {
             </Grid>
 
             <Grid item xs={12} md={4}>
-              <Card>
+              <Card
+                sx={{ cursor: 'pointer' }}
+                onClick={() => navigate('/employee/leaves')}
+              >
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Schedule sx={{ fontSize: 48, color: 'warning.main', mb: 1 }} />
                   <Typography variant="h6" gutterBottom>

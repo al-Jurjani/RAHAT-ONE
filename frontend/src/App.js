@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+
 // Auth
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -17,6 +18,7 @@ import HRMainPage from './pages/HRMainPage';
 import HRDashboard from './pages/HRDashboard';
 import HRVerificationDetails from './pages/HRVerificationDetails';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import EmployeeLeavePage from './pages/EmployeeLeavePage';
 
 // Outfitters theme colors
 const theme = createTheme({
@@ -44,6 +46,8 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<RegistrationPage />} />
             <Route path="/status" element={<StatusPage />} />
+            {/* <Route path="/leaves" element={<EmployeeLeavePage />} /> */}
+
 
             {/* Protected HR Routes */}
             <Route
@@ -80,6 +84,15 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/employee/leaves"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <EmployeeLeavePage />
+                </ProtectedRoute>
+              }
+            />
+
 
             {/* Redirect root to login */}
             <Route path="/" element={<Navigate to="/login" replace />} />
