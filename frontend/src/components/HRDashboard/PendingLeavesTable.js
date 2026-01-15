@@ -110,6 +110,7 @@ const PendingLeavesTable = ({ onActionComplete }) => {
           <TableHead>
             <TableRow>
               <TableCell><strong>Employee</strong></TableCell>
+              <TableCell><strong>Email</strong></TableCell>
               <TableCell><strong>Leave Type</strong></TableCell>
               <TableCell><strong>From</strong></TableCell>
               <TableCell><strong>To</strong></TableCell>
@@ -121,7 +122,7 @@ const PendingLeavesTable = ({ onActionComplete }) => {
           <TableBody>
             {leaves.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   <Typography color="textSecondary">No pending leaves</Typography>
                 </TableCell>
               </TableRow>
@@ -129,6 +130,11 @@ const PendingLeavesTable = ({ onActionComplete }) => {
               leaves.map((leave) => (
                 <TableRow key={leave.id}>
                   <TableCell>{leave.employee_id[1]}</TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="textSecondary">
+                      {leave.employee_email || 'N/A'}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={leave.holiday_status_id[1]}

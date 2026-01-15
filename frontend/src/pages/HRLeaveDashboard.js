@@ -12,6 +12,7 @@ import { ArrowBack } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PendingLeavesTable from '../components/HRDashboard/PendingLeavesTable';
 import AllLeavesTable from '../components/HRDashboard/AllLeavesTable';
+import AllocationManagement from '../components/HRDashboard/AllocationManagement';
 
 const HRLeaveDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -26,7 +27,7 @@ const HRLeaveDashboard = () => {
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => navigate('/hr/main')}
+          onClick={() => navigate('/hr')}
           sx={{ mr: 2 }}
         >
           Back to HR Portal
@@ -40,6 +41,7 @@ const HRLeaveDashboard = () => {
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab label="Pending Approvals" />
           <Tab label="All Leaves" />
+          <Tab label="Allocate Leaves" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -51,6 +53,7 @@ const HRLeaveDashboard = () => {
             />
           )}
           {activeTab === 1 && <AllLeavesTable />}
+          {activeTab === 2 && <AllocationManagement />}
         </Box>
       </Paper>
     </Container>

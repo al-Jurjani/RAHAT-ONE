@@ -1,5 +1,6 @@
 const leaveService = require('../services/leaveService');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
+const odooAdapter = require('../adapters/odooAdapter');
 
 class LeaveController {
   /**
@@ -187,6 +188,144 @@ class LeaveController {
       });
     }
   }
+
+  /**
+   * Get all employees (for allocation management)
+   * GET /api/hr/employees
+   */
+  getAllEmployees = async (req, res) => {
+    try {
+      const employees = await odooAdapter.searchAndReadEmployees(
+        [['active', '=', true]],
+        { limit: 1000 }
+      );
+
+      return respondSuccess(res, employees);
+    } catch (error) {
+      console.error('Get employees error:', error);
+      return respondError(res, error.message, 500);
+    }
+  };
+
+  /**
+   * Allocate leave to an employee
+   * POST /api/leaves/allocate
+   */
+  allocateLeave = async (req, res) => {
+    try {
+      const { employee_id, leave_type_id, days, start_date, end_date } = req.body;
+
+      if (!employee_id || !leave_type_id || !days) {
+        return respondError(res, 'Missing required fields', 400);
+      }
+
+      const allocationId = await odooAdapter.create('hr.leave.allocation', {
+        name: `Leave Allocation ${new Date().toISOString().split('T')[0]}`,
+        holiday_status_id: leave_type_id,
+        employee_id: employee_id,
+        number_of_days: days,
+        date_from: start_date,
+        date_to: end_date,
+        state: 'confirm'
+      });
+
+      // Validate the allocation
+      await odooAdapter.execute('hr.leave.allocation', 'action_validate', [[allocationId]]);
+
+      return respondSuccess(res, { allocationId, message: 'Leave allocated successfully' });
+    } catch (error) {
+      console.error('Allocate leave error:', error);
+      return respondError(res, error.message, 500);
+    }
+  };
+
+  /**
+   * Get all employees (for allocation management)
+   * GET /api/leaves/employees
+   */
+  getAllEmployees = async (req, res) => {
+    try {
+      console.log('🔍 getAllEmployees called');
+
+      const employees = await odooAdapter.searchAndReadEmployees(
+        [['active', '=', true]],
+        { limit: 1000 }
+      );
+
+      console.log('✅ Found employees:', employees.length);
+      return respondSuccess(res, employees);
+    } catch (error) {
+      console.error('❌ Get employees error:', error);
+      return respondError(res, error.message, 500);
+    }
+  };
+
+  /**
+   * Allocate leave to an employee
+   * POST /api/leaves/allocate
+   */
+  allocateLeave = async (req, res) => {
+    try {
+      console.log('🔍 allocateLeave called with body:', req.body);
+
+      const { employee_id, leave_type_id, days, start_date, end_date } = req.body;
+
+      if (!employee_id || !leave_type_id || !days) {
+        console.log('❌ Missing required fields');
+        return respondError(res, 'Missing required fields', 400);
+      }
+
+      console.log('📝 Creating allocation in Odoo...');
+      const allocationId = await odooAdapter.create('hr.leave.allocation', {
+        name: `Leave Allocation ${new Date().toISOString().split('T')[0]}`,
+        holiday_status_id: leave_type_id,
+        employee_id: employee_id,
+        number_of_days: days,
+        date_from: start_date,
+        date_to: end_date,
+        state: 'confirm'
+      });
+
+      console.log('✅ Allocation created, ID:', allocationId);
+      console.log('📝 Validating allocation...');
+
+      // Validate the allocation
+      await odooAdapter.execute('hr.leave.allocation', 'action_validate', [[allocationId]]);
+
+      console.log('✅ Allocation validated successfully');
+      return respondSuccess(res, { allocationId, message: 'Leave allocated successfully' });
+    } catch (error) {
+      console.error('❌ Allocate leave error:', error);
+      return respondError(res, error.message, 500);
+    }
+  };
+
+  /**
+   * Get leave balance for specific employee (HR view)
+   * GET /api/leaves/employee/:employeeId/balance
+   */
+  getEmployeeBalance = async (req, res) => {
+    try {
+      const { employeeId } = req.params;
+      const leaveTypeId = req.query.leave_type_id ? parseInt(req.query.leave_type_id) : null;
+
+      console.log(`🔍 Getting balance for employee ${employeeId}, leave type ${leaveTypeId}`);
+
+      if (!leaveTypeId) {
+        return respondError(res, 'leave_type_id is required', 400);
+      }
+
+      const balance = await odooAdapter.getLeaveBalance(employeeId, leaveTypeId);
+
+      console.log('✅ Balance:', balance);
+      return respondSuccess(res, balance);
+    } catch (error) {
+      console.error('❌ Get employee balance error:', error);
+      return respondError(res, error.message, 500);
+    }
+  };
+
+
 }
 
 module.exports = new LeaveController();

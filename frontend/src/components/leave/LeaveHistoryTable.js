@@ -41,21 +41,20 @@ const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
   }, [refreshTrigger, filterStatus]);
 
   const fetchLeaves = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  try {
+    setLoading(true);
+    const token = localStorage.getItem('accessToken');
 
-      const token = localStorage.getItem('accessToken');
-      const params = filterStatus !== 'all' ? `?status=${filterStatus}` : '';
+    console.log('🔍 Fetching employee leave history...');
 
-      const response = await axios.get(
-        `http://localhost:5000/api/leaves/my-leaves${params}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+    // Use /my-leaves endpoint for employee's own leaves
+    const response = await axios.get('http://localhost:5000/api/leaves/my-leaves', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-      setLeaves(response.data);
+    console.log('✅ Employee leaves fetched:', response.data.length);
+    setLeaves(response.data);
+    setError('');
     } catch (err) {
       console.error('Error fetching leave history:', err);
       setError(err.response?.data?.message || 'Failed to load leave history');

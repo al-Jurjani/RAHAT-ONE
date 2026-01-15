@@ -112,6 +112,7 @@ const AllLeavesTable = () => {
           <TableHead>
             <TableRow>
               <TableCell><strong>Employee</strong></TableCell>
+              <TableCell><strong>Email</strong></TableCell>
               <TableCell><strong>Leave Type</strong></TableCell>
               <TableCell><strong>From</strong></TableCell>
               <TableCell><strong>To</strong></TableCell>
@@ -124,22 +125,26 @@ const AllLeavesTable = () => {
           <TableBody>
             {leaves.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   <Typography color="textSecondary">No leaves found</Typography>
                 </TableCell>
               </TableRow>
             ) : (
               leaves.map((leave) => (
-                <TableRow key={leave.id}>
-                  <TableCell>{leave.employee_id[1]}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={leave.holiday_status_id[1]}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
-                  </TableCell>
+                              <TableRow key={leave.id}>
+                                <TableCell>{leave.employee_id[1]}</TableCell>
+                                <TableCell>
+                                  <Typography variant="body2" color="textSecondary">
+                                    {leave.employee_email || 'N/A'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={leave.holiday_status_id[1]}
+                                    size="small"
+                                    color="primary"
+                                  />
+                                </TableCell>
                   <TableCell>{leave.request_date_from}</TableCell>
                   <TableCell>{leave.request_date_to}</TableCell>
                   <TableCell>{leave.number_of_days}</TableCell>

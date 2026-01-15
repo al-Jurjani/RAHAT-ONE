@@ -414,60 +414,79 @@ async getEmployeeDocuments(employeeId) {
   // ==========================================
 
   /**
-   * Get leave balance for an employee
-   * @param {number} employeeId - Odoo employee ID
-   * @param {number} leaveTypeId - Leave type ID (optional, defaults to Annual Leave)
-   * @returns {Object} { total, used, remaining }
-   */
-  async getLeaveBalance(employeeId, leaveTypeId = null) {
-    try {
-      // If no leave type specified, get Annual Leave
-      if (!leaveTypeId) {
-        const leaveTypes = await this.search('hr.leave.type',
+ * Get leave balance for an employee
+ */
+async getLeaveBalance(employeeId, leaveTypeId = null) {
+  try {
+    console.log(`🔍 [getLeaveBalance] employeeId=${employeeId}, leaveTypeId=${leaveTypeId}`);
+
+    // 1️⃣ Resolve leave type
+    if (!leaveTypeId) {
+      const leaveTypes = await this.execute(
+        'hr.leave.type',
+        'search_read',
+        [
           [['name', '=', 'Annual Leave']],
           ['id']
-        );
+        ]
+      );
 
-        if (leaveTypes.length === 0) {
-          throw new Error('Annual Leave type not found');
-        }
-        leaveTypeId = leaveTypes[0].id;
+      if (!leaveTypes.length) {
+        throw new Error('Annual Leave type not found');
       }
 
-      // Get total allocated days (validated allocations)
-      const allocations = await this.search('hr.leave.allocation',
-        [
-          ['employee_id', '=', employeeId],
-          ['holiday_status_id', '=', leaveTypeId],
-          ['state', '=', 'validate']
-        ],
-        ['number_of_days']
-      );
-
-      const totalDays = allocations.reduce((sum, alloc) => sum + alloc.number_of_days, 0);
-
-      // Get used days (approved leaves)
-      const leaves = await this.search('hr.leave',
-        [
-          ['employee_id', '=', employeeId],
-          ['holiday_status_id', '=', leaveTypeId],
-          ['state', '=', 'validate']
-        ],
-        ['number_of_days']
-      );
-
-      const usedDays = leaves.reduce((sum, leave) => sum + leave.number_of_days, 0);
-
-      return {
-        total: totalDays,
-        used: usedDays,
-        remaining: totalDays - usedDays
-      };
-    } catch (error) {
-      console.error('Error getting leave balance:', error);
-      throw error;
+      leaveTypeId = leaveTypes[0].id;
     }
+
+    // 2️⃣ Fetch validated allocations
+    const allocations = await this.execute(
+      'hr.leave.allocation',
+      'search_read',
+      [
+        [
+          ['employee_id', '=', employeeId],
+          ['holiday_status_id', '=', leaveTypeId],
+          ['state', '=', 'validate']
+        ],
+        ['number_of_days_display']
+      ]
+    );
+
+    const totalDays = allocations.reduce(
+      (sum, a) => sum + (a.number_of_days_display || 0),
+      0
+    );
+
+    // 3️⃣ Fetch approved leaves
+    const leaves = await this.execute(
+      'hr.leave',
+      'search_read',
+      [
+        [
+          ['employee_id', '=', employeeId],
+          ['holiday_status_id', '=', leaveTypeId],
+          ['state', '=', 'validate']
+        ],
+        ['number_of_days_display']
+      ]
+    );
+
+    const usedDays = leaves.reduce(
+      (sum, l) => sum + (l.number_of_days_display || 0),
+      0
+    );
+
+    return {
+      total: totalDays,
+      used: usedDays,
+      remaining: totalDays - usedDays
+    };
+  } catch (error) {
+    console.error('❌ getLeaveBalance failed:', error);
+    throw error;
   }
+}
+
 
   /**
    * Get all leave types
@@ -526,16 +545,37 @@ async getEmployeeDocuments(employeeId) {
         domain.push(['employee_id', '=', filters.employee_id]);
       }
 
-      return await this.search('hr.leave', domain, [
-        'employee_id',
-        'holiday_status_id',
-        'request_date_from',
-        'request_date_to',
-        'number_of_days',
-        'state',
-        'name',
-        'create_date'
-      ]);
+      const leaves = await this.search('hr.leave', domain, [
+      'employee_id',
+      'holiday_status_id',
+      'request_date_from',
+      'request_date_to',
+      'number_of_days',
+      'state',
+      'name',
+      'create_date'
+    ], 1000);
+
+    // Fetch employee emails
+    for (let leave of leaves) {
+      if (leave.employee_id && leave.employee_id[0]) {
+        try {
+          const employee = await this.execute('hr.employee', 'read', [
+            [leave.employee_id[0]],
+            ['work_email']
+          ]);
+          leave.employee_email = employee[0]?.work_email || 'N/A';
+        } catch (err) {
+          leave.employee_email = 'N/A';
+        }
+      }
+    }
+
+    // Sort by create_date descending (latest first)
+    leaves.sort((a, b) => new Date(b.create_date) - new Date(a.create_date));
+
+    console.log(`✅ Fetched ${leaves.length} leaves (sorted by latest first)`);
+    return leaves;
     } catch (error) {
       console.error('Error getting leave requests:', error);
       throw error;
@@ -618,6 +658,7 @@ async getEmployeeDocuments(employeeId) {
       throw error;
     }
   }
+
 }
 
 const adapterInstance = new OdooAdapter();

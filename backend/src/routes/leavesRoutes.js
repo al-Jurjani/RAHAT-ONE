@@ -58,4 +58,26 @@ router.get('/', leaveController.getLeaves);
  */
 router.put('/:id/status', leaveController.updateStatus);
 
+/**
+ * GET /api/leaves/employee/:employeeId/balance
+ * Get balance for specific employee (HR view)
+ */
+router.get('/employee/:employeeId/balance', authenticateToken, leaveController.getEmployeeBalance);
+
+// ==========================================
+// HR ALLOCATION ROUTES
+// ==========================================
+
+/**
+ * GET /api/leaves/employees
+ * Get all employees for allocation management
+ */
+router.get('/employees', authenticateToken, leaveController.getAllEmployees);
+
+/**
+ * POST /api/leaves/allocate
+ * Allocate leave to an employee
+ */
+router.post('/allocate', authenticateToken, leaveController.allocateLeave);
+
 module.exports = router;

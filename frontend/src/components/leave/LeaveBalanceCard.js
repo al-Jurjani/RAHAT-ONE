@@ -1,54 +1,89 @@
-/**
- * LeaveBalanceCard Component
- * Path: frontend/src/components/leave/LeaveBalanceCard.jsx
- *
- * Displays employee's leave balance with visual progress bar
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
   Typography,
   Box,
-  LinearProgress,
   CircularProgress,
   Alert,
-  Stack
+  Grid,
+  LinearProgress,
+  Chip
 } from '@mui/material';
-import {
-  EventAvailable as EventAvailableIcon,
-  Event as EventIcon,
-  EventBusy as EventBusyIcon
-} from '@mui/icons-material';
 import axios from 'axios';
 
-const LeaveBalanceCard = ({ refreshTrigger = 0 }) => {
-  const [balance, setBalance] = useState(null);
+const LeaveBalanceCard = () => {
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchBalance();
-  }, [refreshTrigger]); // Refetch when refreshTrigger changes
+    fetchBalances();
+  }, []);
 
-  const fetchBalance = async () => {
+  const fetchBalances = async () => {
     try {
       setLoading(true);
-      setError(null);
-
       const token = localStorage.getItem('accessToken');
-      const response = await axios.get('http://localhost:5000/api/leaves/balance', {
+
+      console.log('🔍 Fetching leave types...');
+
+      // First get all leave types
+      const typesResponse = await axios.get('http://localhost:5000/api/leaves/types', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      setBalance(response.data.data);
+      const types = typesResponse.data;
+      console.log('✅ Leave types:', types);
+
+      // Then get balance for each type
+      const balancePromises = types.map(async (type) => {
+        try {
+          const balanceResponse = await axios.get(
+            `http://localhost:5000/api/leaves/balance?leave_type_id=${type.id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          return {
+            ...type,
+            balance: balanceResponse.data.data || balanceResponse.data
+          };
+        } catch (err) {
+          console.error(`Error fetching balance for ${type.name}:`, err);
+          return {
+            ...type,
+            balance: { total: 0, used: 0, remaining: 0 }
+          };
+        }
+      });
+
+      const balancesWithTypes = await Promise.all(balancePromises);
+      console.log('✅ Balances fetched:', balancesWithTypes);
+
+      setBalances(balancesWithTypes);
+      setError(null);
     } catch (err) {
-      console.error('Error fetching leave balance:', err);
-      setError(err.response?.data?.message || 'Failed to load leave balance');
+      console.error('❌ Error fetching balances:', err);
+      setError('Failed to load leave balances');
     } finally {
       setLoading(false);
     }
+  };
+
+  const getColorForType = (name) => {
+    const colors = {
+      'Annual Leave': 'primary',
+      'Sick Leave': 'warning',
+      'Emergency Leave': 'error',
+      'Unpaid Leave': 'default'
+    };
+    return colors[name] || 'info';
+  };
+
+  const calculatePercentage = (used, total) => {
+    if (total === 0) return 0;
+    return (used / total) * 100;
   };
 
   if (loading) {
@@ -71,94 +106,80 @@ const LeaveBalanceCard = ({ refreshTrigger = 0 }) => {
     );
   }
 
-  if (!balance) {
-    return null;
-  }
-
-  const { total, used, remaining } = balance;
-  const usagePercentage = total > 0 ? (used / total) * 100 : 0;
-
-  // Color based on remaining percentage
-  const getProgressColor = () => {
-    const remainingPercentage = (remaining / total) * 100;
-    if (remainingPercentage > 50) return 'success';
-    if (remainingPercentage > 20) return 'warning';
-    return 'error';
-  };
-
   return (
-    <Card sx={{ height: '100%' }}>
+    <Card>
       <CardContent>
         <Typography variant="h6" gutterBottom>
-          Annual Leave Balance
+          Leave Balances
         </Typography>
 
-        {/* Progress Bar */}
-        <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              {used} of {total} days used
-            </Typography>
-            <Typography variant="body2" fontWeight="bold">
-              {remaining} days remaining
-            </Typography>
-          </Box>
-          <LinearProgress
-            variant="determinate"
-            value={usagePercentage}
-            color={getProgressColor()}
-            sx={{ height: 8, borderRadius: 1 }}
-          />
-        </Box>
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          {balances.map((item) => {
+            const { balance } = item;
+            const percentage = calculatePercentage(balance.used, balance.total);
 
-        {/* Stats Grid */}
-        <Stack spacing={2}>
-          {/* Total Allocated */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EventIcon color="primary" />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                Total Allocated
-              </Typography>
-              <Typography variant="h6">{total} days</Typography>
-            </Box>
-          </Box>
+            return (
+              <Grid item xs={12} sm={6} key={item.id}>
+                <Box
+                  sx={{
+                    p: 2,
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 1,
+                    backgroundColor: balance.remaining === 0 ? '#fff3e0' : '#fff'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {item.name}
+                    </Typography>
+                    <Chip
+                      label={`${balance.remaining} days left`}
+                      color={balance.remaining > 5 ? 'success' : balance.remaining > 0 ? 'warning' : 'error'}
+                      size="small"
+                    />
+                  </Box>
 
-          {/* Used */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EventBusyIcon color="error" />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                Used
-              </Typography>
-              <Typography variant="h6">{used} days</Typography>
-            </Box>
-          </Box>
+                  <Box sx={{ mb: 1 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={percentage}
+                      sx={{
+                        height: 8,
+                        borderRadius: 1,
+                        backgroundColor: '#e0e0e0',
+                        '& .MuiLinearProgress-bar': {
+                          backgroundColor: balance.remaining > 5 ? '#4caf50' : balance.remaining > 0 ? '#ff9800' : '#f44336'
+                        }
+                      }}
+                    />
+                  </Box>
 
-          {/* Remaining */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EventAvailableIcon color="success" />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                Remaining
-              </Typography>
-              <Typography variant="h6" color={getProgressColor()}>
-                {remaining} days
-              </Typography>
-            </Box>
-          </Box>
-        </Stack>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                    <Typography variant="body2" color="textSecondary">
+                      Total: <strong>{balance.total}</strong>
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Used: <strong>{balance.used}</strong>
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Available: <strong>{balance.remaining}</strong>
+                    </Typography>
+                  </Box>
 
-        {/* Warning if low balance */}
-        {remaining <= 3 && remaining > 0 && (
+                  {balance.total === 0 && (
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      No allocation for this leave type. Contact HR.
+                    </Alert>
+                  )}
+                </Box>
+              </Grid>
+            );
+          })}
+        </Grid>
+
+        {balances.length === 0 && (
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Low leave balance! Only {remaining} day{remaining !== 1 ? 's' : ''} remaining.
-          </Alert>
-        )}
-
-        {remaining === 0 && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            No leave days remaining. Contact HR for assistance.
+            No leave types available. Contact HR for leave allocations.
           </Alert>
         )}
       </CardContent>
