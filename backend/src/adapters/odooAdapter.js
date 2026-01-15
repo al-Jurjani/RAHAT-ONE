@@ -420,69 +420,115 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
   try {
     console.log(`🔍 [getLeaveBalance] employeeId=${employeeId}, leaveTypeId=${leaveTypeId}`);
 
-    // 1️⃣ Resolve leave type
+    if (!this.uid) {
+      await this.authenticate();
+    }
+
+    // Resolve leave type if not provided
     if (!leaveTypeId) {
-      const leaveTypes = await this.execute(
-        'hr.leave.type',
-        'search_read',
-        [
-          [['name', '=', 'Annual Leave']],
-          ['id']
-        ]
-      );
+      const objectClient = xmlrpc.createClient({
+        host: new URL(this.url).hostname,
+        port: new URL(this.url).port || 8069,
+        path: '/xmlrpc/2/object'
+      });
+
+      const leaveTypes = await new Promise((resolve, reject) => {
+        objectClient.methodCall('execute_kw', [
+          this.db,
+          this.uid,
+          this.password,
+          'hr.leave.type',
+          'search_read',
+          [[['name', '=', 'Annual Leave']], ['id']]
+        ], (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+      });
 
       if (!leaveTypes.length) {
         throw new Error('Annual Leave type not found');
       }
-
       leaveTypeId = leaveTypes[0].id;
     }
 
-    // 2️⃣ Fetch validated allocations
-    const allocations = await this.execute(
-      'hr.leave.allocation',
-      'search_read',
-      [
+    console.log(`   → Direct XML-RPC call for allocations: employee=${employeeId}, type=${leaveTypeId}`);
+
+    // DIRECT XML-RPC CALL - No wrapper
+    const objectClient = xmlrpc.createClient({
+      host: new URL(this.url).hostname,
+      port: new URL(this.url).port || 8069,
+      path: '/xmlrpc/2/object'
+    });
+
+    const allocations = await new Promise((resolve, reject) => {
+      objectClient.methodCall('execute_kw', [
+        this.db,
+        this.uid,
+        this.password,
+        'hr.leave.allocation',
+        'search_read',
         [
-          ['employee_id', '=', employeeId],
-          ['holiday_status_id', '=', leaveTypeId],
-          ['state', '=', 'validate']
-        ],
-        ['number_of_days_display']
-      ]
-    );
+          [
+            ['employee_id', '=', parseInt(employeeId)],
+            ['holiday_status_id', '=', parseInt(leaveTypeId)],
+            ['state', '=', 'validate']
+          ],
+          ['id', 'employee_id', 'holiday_status_id', 'number_of_days', 'state']
+        ]
+      ], (error, result) => {
+        if (error) {
+          console.error('   ❌ Allocation search failed:', error);
+          reject(error);
+        } else {
+          console.log('   ✅ Allocations:', JSON.stringify(result, null, 2));
+          resolve(result);
+        }
+      });
+    });
 
-    const totalDays = allocations.reduce(
-      (sum, a) => sum + (a.number_of_days_display || 0),
-      0
-    );
+    const totalDays = allocations.reduce((sum, a) => sum + (a.number_of_days || 0), 0);
 
-    // 3️⃣ Fetch approved leaves
-    const leaves = await this.execute(
-      'hr.leave',
-      'search_read',
-      [
+    // Get leaves
+    const leaves = await new Promise((resolve, reject) => {
+      objectClient.methodCall('execute_kw', [
+        this.db,
+        this.uid,
+        this.password,
+        'hr.leave',
+        'search_read',
         [
-          ['employee_id', '=', employeeId],
-          ['holiday_status_id', '=', leaveTypeId],
-          ['state', '=', 'validate']
-        ],
-        ['number_of_days_display']
-      ]
-    );
+          [
+            ['employee_id', '=', parseInt(employeeId)],
+            ['holiday_status_id', '=', parseInt(leaveTypeId)],
+            ['state', '=', 'validate']
+          ],
+          ['id', 'number_of_days']
+        ]
+      ], (error, result) => {
+        if (error) {
+          console.error('   ❌ Leaves search failed:', error);
+          reject(error);
+        } else {
+          console.log('   ✅ Leaves:', JSON.stringify(result, null, 2));
+          resolve(result);
+        }
+      });
+    });
 
-    const usedDays = leaves.reduce(
-      (sum, l) => sum + (l.number_of_days_display || 0),
-      0
-    );
+    const usedDays = leaves.reduce((sum, l) => sum + (l.number_of_days || 0), 0);
 
-    return {
+    const result = {
       total: totalDays,
       used: usedDays,
       remaining: totalDays - usedDays
     };
+
+    console.log(`   ✅ FINAL: ${JSON.stringify(result)}`);
+    return result;
+
   } catch (error) {
-    console.error('❌ getLeaveBalance failed:', error);
+    console.error('❌ getLeaveBalance error:', error);
     throw error;
   }
 }

@@ -80,4 +80,5 @@ router.get('/employees', authenticateToken, leaveController.getAllEmployees);
  */
 router.post('/allocate', authenticateToken, leaveController.allocateLeave);
 
+
 module.exports = router;
