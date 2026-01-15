@@ -42,7 +42,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       console.warn('Unauthorized or expired token. Redirecting to login.');
 
-      localStorage.removeItem('token');
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
 
       window.location.href = '/login';
@@ -119,14 +119,46 @@ export const onboardingAPI = {
 };
 
 /* =========================
-   Leave APIs (optional but recommended)
+   Leave Management APIs
 ========================= */
 
 export const leaveAPI = {
-  getBalance: () => api.get('/leaves/balance'),
+  // Get all leave types
   getTypes: () => api.get('/leaves/types'),
-  getMyLeaves: () => api.get('/leaves/my-leaves'),
-  submit: (data) => api.post('/leaves/request', data),
+
+  // Get leave balance (optionally for specific leave type)
+  getBalance: (leaveTypeId = null) => {
+    const url = leaveTypeId
+      ? `/leaves/balance?leave_type_id=${leaveTypeId}`
+      : '/leaves/balance';
+    return api.get(url);
+  },
+
+  // Submit leave request (employee)
+  submit: (data) => api.post('/leaves', data),
+
+  // Get my leaves (employee view)
+  getMyLeaves: (status = null) => {
+    const url = status
+      ? `/leaves/my-leaves?status=${status}`
+      : '/leaves/my-leaves';
+    return api.get(url);
+  },
+
+  // Get all leaves (HR/Manager view)
+  getAllLeaves: (status = null) => {
+    const url = status
+      ? `/leaves?status=${status}`
+      : '/leaves';
+    return api.get(url);
+  },
+
+  // Approve or reject leave (HR/Manager)
+  updateStatus: (leaveId, action, remarks = '') =>
+    api.put(`/leaves/${leaveId}/status`, { action, remarks }),
+
+  // Get leave statistics
+  getStatistics: () => api.get('/leaves/statistics'),
 };
 
 export default api;

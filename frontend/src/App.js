@@ -19,6 +19,7 @@ import HRDashboard from './pages/HRDashboard';
 import HRVerificationDetails from './pages/HRVerificationDetails';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeLeavePage from './pages/EmployeeLeavePage';
+import HRLeaveDashboard from './pages/HRLeaveDashboard';
 
 // Outfitters theme colors
 const theme = createTheme({
@@ -71,6 +72,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['hr']}>
                   <HRVerificationDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hr/leave-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRLeaveDashboard />
                 </ProtectedRoute>
               }
             />

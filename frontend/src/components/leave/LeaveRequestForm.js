@@ -78,6 +78,14 @@ const LeaveRequestForm = ({ onSubmitSuccess }) => {
     setError(null);
     setSuccess(false);
 
+    // DEBUG: Check token
+    const token = localStorage.getItem('accessToken');
+    console.log('🔍 Token exists?', !!token);
+    console.log('🔍 Token value (first 50 chars):', token?.substring(0, 50));
+
+    const decoded = JSON.parse(atob(token.split('.')[1]));
+    console.log('🔍 Logged in as employee_id:', decoded.employee_id);
+
     // Validation
     if (!formData.leave_type_id) {
       setError('Please select a leave type');
@@ -104,7 +112,7 @@ const LeaveRequestForm = ({ onSubmitSuccess }) => {
     try {
       setLoading(true);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       // Format dates as YYYY-MM-DD
       const dateFrom = formData.date_from.toISOString().split('T')[0];

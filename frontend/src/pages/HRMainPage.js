@@ -11,7 +11,7 @@ import {
   AppBar,
   Toolbar
 } from '@mui/material';
-import { VerifiedUser, PersonAdd, Logout } from '@mui/icons-material';
+import { VerifiedUser, PersonAdd, Logout, EventNote } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import InitiateOnboardingModal from '../components/InitiateOnboardingModal';
@@ -59,7 +59,7 @@ function HRMainPage() {
 
           <Grid container spacing={4} justifyContent="center">
             {/* Employee Verification Card */}
-            <Grid item xs={12} sm={6} md={5}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card
                 sx={{
                   height: '100%',
@@ -96,7 +96,7 @@ function HRMainPage() {
             </Grid>
 
             {/* Initiate Onboarding Card */}
-            <Grid item xs={12} sm={6} md={5}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card
                 sx={{
                   height: '100%',
@@ -128,6 +128,44 @@ function HRMainPage() {
                     onClick={() => setInitiateDialogOpen(true)}
                   >
                     Initiate Onboarding
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+
+            {/* Leave Management Card */}
+            <Grid item xs={12} sm={6} md={4}>
+              <Card
+                sx={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4
+                  }
+                }}
+              >
+                <CardContent sx={{ flexGrow: 1, textAlign: 'center' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <EventNote sx={{ fontSize: 60, color: 'info.main' }} />
+                  </Box>
+                  <Typography variant="h5" component="h2" gutterBottom>
+                    Leave Management
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    Review and approve employee leave requests, view leave history and statistics
+                  </Typography>
+                </CardContent>
+                <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                  <Button
+                    variant="contained"
+                    color="info"
+                    size="large"
+                    onClick={() => navigate('/hr/leave-dashboard')}
+                  >
+                    Manage Leaves
                   </Button>
                 </CardActions>
               </Card>
