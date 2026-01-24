@@ -126,6 +126,7 @@ class OdooAdapter {
           'private_email',
           'department_id',
           'job_id',
+          'parent_id',
           'onboarding_status',
           'onboarding_progress_percentage',
           'mobile_phone',
@@ -635,26 +636,23 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
    * @param {string} remarks - Optional remarks
    * @returns {boolean} Success status
    */
-  async updateLeaveStatus(leaveId, action, remarks = '') {
-    try {
-      const newState = action === 'approve' ? 'validate' : 'refuse';
+  async updateLeaveStatus(leaveId, action, remarks) {
+  const stateMap = {
+    'approve': 'validate',    // Final approval
+    'validate': 'validate',   // Final approval (alternate)
+    'validate1': 'validate1', // Manager approved, pending HR
+    'refuse': 'refuse',       // Rejected
+    'reject': 'refuse'        // Rejected (alternate)
+  };
 
-      // Update the state using the update method (which calls 'write')
-      await this.update('hr.leave', leaveId, { state: newState });
+  const newState = stateMap[action] || action;
 
-      // If there are remarks, update the name field
-      if (remarks) {
-        await this.update('hr.leave', leaveId, {
-          name: remarks
-        });
-      }
+  await this.update('hr.leave', leaveId, {
+    state: newState
+  });
 
-      return true;
-    } catch (error) {
-      console.error('Error updating leave status:', error);
-      throw error;
-    }
-  }
+  console.log(`✅ Leave ${leaveId} status updated to: ${newState}`);
+}
 
   /**
    * Get leave request by ID
@@ -701,6 +699,58 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
       };
     } catch (error) {
       console.error('Error checking leave balance:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Post a message/note to a record (using Odoo's chatter system)
+   * @param {string} model - Model name (e.g., 'hr.leave')
+   * @param {number} recordId - Record ID
+   * @param {string} body - Message body (can include HTML)
+   * @param {string} messageType - 'comment' or 'notification' (default: 'comment')
+   */
+  async postMessage(model, recordId, message) {
+  try {
+    console.log(`📧 Posting message to ${model} #${recordId}`);
+
+    const messageData = {
+      model: model,
+      res_id: parseInt(recordId),
+      body: message,
+      message_type: 'comment',
+    };
+
+    const messageId = await this.create('mail.message', messageData);
+
+    console.log(`✅ Message posted successfully (ID: ${messageId})`);
+    return messageId;
+  } catch (error) {
+    console.error('❌ Error posting message:', error.message);
+    console.warn('⚠️  Continuing without posting message to Odoo chatter');
+    return null;
+  }
+}
+
+  /**
+   * Get messages for a record
+   * @param {string} model - Model name
+   * @param {number} recordId - Record ID
+   * @returns {Array} List of messages
+   */
+  async getMessages(model, recordId) {
+    try {
+      const messages = await this.search('mail.message',
+        [
+          ['model', '=', model],
+          ['res_id', '=', recordId]
+        ],
+        ['body', 'date', 'author_id', 'message_type'],
+        100
+      );
+      return messages;
+    } catch (error) {
+      console.error('❌ Error getting messages:', error);
       throw error;
     }
   }

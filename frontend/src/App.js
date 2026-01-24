@@ -4,7 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
+import ApproveLeave from './pages/ApproveLeave';
 
 // Auth
 import { AuthProvider } from './contexts/AuthContext';
@@ -47,6 +47,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<RegistrationPage />} />
             <Route path="/status" element={<StatusPage />} />
+            <Route path="/approve-leave/:leaveId" element={<ApproveLeave />} />
             {/* <Route path="/leaves" element={<EmployeeLeavePage />} /> */}
 
 

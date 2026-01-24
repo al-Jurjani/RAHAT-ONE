@@ -3,6 +3,8 @@ const axios = require('axios');
 class PowerAutomateService {
   constructor() {
     this.flowUrl = process.env.PA_ONBOARDING_WEBHOOK;
+    this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
+    this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
   }
 
   async triggerOnboardingFlow(action, employeeData, metadata = {}) {
@@ -49,6 +51,47 @@ class PowerAutomateService {
       rejectionDetails
     });
   }
+
+  // ==========================================
+  // LEAVE FLOWS (new)
+  // ==========================================
+
+  async triggerLeaveFlow(leaveData) {
+    try {
+      console.log('🔍 DEBUG - Leave Flow URL:', this.leaveFlowUrl); // ADD THIS
+      console.log(`🔄 Triggering Leave Flow for ${leaveData.employeeName}`);
+
+      const response = await axios.post(this.leaveFlowUrl, leaveData, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      console.log(`✅ Leave flow triggered successfully`);
+      return response.data;
+
+    } catch (error) {
+      console.error(`❌ Leave flow error:`, error.message);
+      return null;
+    }
+  }
+
+  async triggerManagerDecisionFlow(decisionData) {
+  try {
+    console.log(`🔄 Triggering Manager Decision Flow`);
+
+    const response = await axios.post(this.managerDecisionFlowUrl, decisionData, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000
+    });
+
+    console.log(`✅ Manager decision flow triggered successfully`);
+    return response.data;
+
+  } catch (error) {
+    console.error(`❌ Manager decision flow error:`, error.message);
+    return null;
+  }
+}
 }
 
 module.exports = new PowerAutomateService();
