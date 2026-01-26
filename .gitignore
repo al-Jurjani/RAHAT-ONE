@@ -48,3 +48,7 @@ htmlcov/
 # Database
 *.db
 *.sqlite3
+
+backend/temp/*
+
+.claude/

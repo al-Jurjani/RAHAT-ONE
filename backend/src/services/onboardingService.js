@@ -1,3 +1,5 @@
+const documentIntelligenceService = require('./documentIntelligenceService');
+const verificationService = require('./verificationService');
 const odooAdapter = require('../adapters/odooAdapter');
 const powerAutomateService = require('./powerAutomateService');
 const fs = require('fs').promises;
@@ -6,40 +8,76 @@ class OnboardingService {
   /**
    * Initiate onboarding for a new employee
    */
-  async initiateOnboarding(employeeData) {
-    try {
-      // Create employee record in Odoo with correct status value
-      const employeeId = await odooAdapter.createEmployee({
-        name: employeeData.name,
-        work_email: employeeData.email,
-        mobile_phone: employeeData.phone,
-        department_id: employeeData.departmentId || false,
-        job_id: employeeData.jobId || false,
-        onboarding_status: 'initiated',  // ✅ This matches your Odoo field
-        onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
+  /**
+ * Initiate onboarding for a new employee
+ */
+async initiateOnboarding(employeeData) {
+  try {
+    // Create employee record in Odoo
+    const employeeId = await odooAdapter.createEmployee({
+      name: employeeData.name,
+      private_email: employeeData.email,
+      mobile_phone: employeeData.phone,
+      department_id: employeeData.departmentId || false,
+      job_id: employeeData.jobId || false,
+      onboarding_status: 'initiated',
+      onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
     });
 
-      console.log('✅ Employee created in Odoo. ID:', employeeId);
+    console.log('✅ Employee created in Odoo. ID:', employeeId);
 
-      const result = {
-        employeeId,
-        name: employeeData.name,
-        email: employeeData.email,
-        phone: employeeData.phone,
-        status: 'initiated',
-        progress: 0,
-        message: 'Onboarding process initiated successfully'
-      };
-
-      // 🚀 TRIGGER POWER AUTOMATE FLOW
-      await powerAutomateService.triggerOnboardingFlow(result);
-      return result;
-
-    } catch (error) {
-      console.error('❌ Error initiating onboarding:', error);
-      throw error;
+    // Fetch department name
+    let departmentName = 'N/A';
+    if (employeeData.departmentId) {
+      const dept = await odooAdapter.execute('hr.department', 'read', [
+        [employeeData.departmentId],
+        ['name']
+      ]);
+      departmentName = dept?.[0]?.name || 'N/A';
     }
+
+    // Fetch position name
+    let positionName = 'N/A';
+    if (employeeData.jobId) {
+      const job = await odooAdapter.execute('hr.job', 'read', [
+        [employeeData.jobId],
+        ['name']
+      ]);
+      positionName = job?.[0]?.name || 'N/A';
+    }
+
+    console.log('📋 Department:', departmentName);
+    console.log('📋 Position:', positionName);
+
+    const result = {
+      employeeId,
+      name: employeeData.name,
+      email: employeeData.email,
+      phone: employeeData.phone,
+      status: 'initiated',
+      progress: 0,
+      message: 'Onboarding process initiated successfully'
+    };
+
+    // 🚀 TRIGGER POWER AUTOMATE FLOW
+    powerAutomateService.sendRegistrationEmail({
+      id: employeeId,
+      name: employeeData.name,
+      personalEmail: employeeData.email,
+      phone: employeeData.phone,
+      department: departmentName,
+      position: positionName
+    }).catch(err => {
+      console.error('⚠️ Email notification failed, but onboarding succeeded:', err.message);
+    });
+
+    return result;
+
+  } catch (error) {
+    console.error('❌ Error initiating onboarding:', error);
+    throw error;
   }
+}
 
   /**
    * Update onboarding status based on document uploads
@@ -263,6 +301,161 @@ class OnboardingService {
       throw error;
     }
   }
+
+  /**
+   * Run AI verification on uploaded CNIC
+   * Called after candidate submits registration
+   */
+  /**
+ * Run AI verification on employee documents
+ */
+async runAIVerification(employeeId, cnicFilePath, enteredData, extractedData) {
+  try {
+    console.log('🔍 Running verification algorithm...');
+
+    // Run verification algorithm
+    const verificationResult = verificationService.verifyCNICData(
+      extractedData,
+      enteredData
+    );
+
+    console.log('📊 Verification results:', {
+      passed: verificationResult.passed,
+      score: verificationResult.overallScore
+    });
+
+    // Convert extracted DOB to Odoo format (YYYY-MM-DD)
+    const extractedDobFormatted = this._convertToOdooDateFormat(extractedData.dob);
+
+    // Update employee record in Odoo
+    await odooAdapter.updateEmployee(employeeId, {
+      // Extracted data
+      extracted_name: extractedData.name || '',
+      extracted_cnic_number: extractedData.cnicNumber || '',
+      extracted_father_name: extractedData.fatherName || '',
+      extracted_dob: extractedDobFormatted, // Use converted date
+      ocr_confidence: extractedData.confidence || 0,
+
+      // AI verification results
+      ai_verification_status: verificationResult.passed ? 'passed' : 'failed',
+      ai_verification_score: verificationResult.overallScore,
+      ai_verification_details: JSON.stringify(verificationResult.details),
+      ai_verification_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+
+      // Update onboarding status
+      onboarding_status: 'verification_pending'
+    });
+
+    console.log('✅ AI verification results saved to Odoo');
+
+    return verificationResult;
+
+  } catch (error) {
+    console.error('❌ AI verification failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Convert date from dd.mm.yyyy to YYYY-MM-DD format for Odoo
+ */
+_convertToOdooDateFormat(dateStr) {
+  if (!dateStr) return null;
+
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  // Convert dd.mm.yyyy to YYYY-MM-DD
+  const match = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try dd-mm-yyyy or dd/mm/yyyy
+  const match2 = dateStr.match(/(\d{2})[\-\/](\d{2})[\-\/](\d{4})/);
+  if (match2) {
+    const [, day, month, year] = match2;
+    return `${year}-${month}-${day}`;
+  }
+
+  // If can't convert, return null (Odoo will handle)
+  console.warn('⚠️ Could not convert date to Odoo format:', dateStr);
+  return null;
+}
+
+
+/**
+ * Allocate initial leave balances for newly approved employee
+ */
+async allocateInitialLeaves(employeeId) {
+  try {
+    console.log('🎯 Allocating initial leaves for employee:', employeeId);
+
+    // Get all leave types from Odoo
+    const leaveTypes = await odooAdapter.getLeaveTypes();
+    console.log('📋 Available leave types:', leaveTypes);
+
+    // Default allocation: 20 days for each type
+    const DEFAULT_DAYS = 20;
+    const currentYear = new Date().getFullYear();
+    const startDate = `${currentYear}-01-01`;
+    const endDate = `${currentYear}-12-31`;
+
+    const allocations = [];
+
+    // Allocate for each leave type
+    for (const leaveType of leaveTypes) {
+      try {
+        console.log(`   Allocating ${DEFAULT_DAYS} days for ${leaveType.name}...`);
+
+        // Create allocation record
+        const allocationId = await odooAdapter.create('hr.leave.allocation', {
+          name: `Initial Allocation - ${leaveType.name}`,
+          holiday_status_id: leaveType.id,
+          employee_id: employeeId,
+          number_of_days: DEFAULT_DAYS,
+          date_from: startDate,
+          date_to: endDate,
+          state: 'confirm',
+          notes: 'Automatic allocation on employee onboarding'
+        });
+
+        console.log(`   ✅ Allocation created with ID: ${allocationId}`);
+
+        // Validate the allocation (makes it active)
+        await odooAdapter.execute('hr.leave.allocation', 'action_validate', [[allocationId]]);
+        console.log(`   ✅ Allocation validated`);
+
+        allocations.push({
+          leaveType: leaveType.name,
+          leaveTypeId: leaveType.id,
+          days: DEFAULT_DAYS,
+          allocationId: allocationId
+        });
+
+      } catch (typeError) {
+        console.error(`   ❌ Failed to allocate ${leaveType.name}:`, typeError.message);
+        // Continue with other types even if one fails
+      }
+    }
+
+    console.log('✅ Leave allocation completed:', allocations);
+
+    return {
+      success: true,
+      employeeId: employeeId,
+      allocations: allocations,
+      message: `Successfully allocated ${allocations.length} leave types`
+    };
+
+  } catch (error) {
+    console.error('❌ Leave allocation failed:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = new OnboardingService();

@@ -1,5 +1,5 @@
 const onboardingService = require('../services/onboardingService');
-const { successResponse, errorResponse } = require('../utils/responseHandler');
+const { respondSuccess, respondError } = require('../utils/responseHandler');
 
 class OnboardingController {
   /**
@@ -12,7 +12,7 @@ class OnboardingController {
 
       // Basic validation
       if (!name || !email) {
-        return errorResponse(res, 'Name and email are required', 400);
+        return respondError(res, 'Name and email are required', 400);
       }
 
       const result = await onboardingService.initiateOnboarding({
@@ -23,10 +23,10 @@ class OnboardingController {
         jobId
       });
 
-      return successResponse(res, result, 'Onboarding initiated successfully', 201);
+      return respondSuccess(res, result, 'Onboarding initiated successfully', 201);
     } catch (error) {
       console.error('Controller Error:', error);
-      return errorResponse(res, 'Failed to initiate onboarding', 500, error);
+      return respondError(res, 'Failed to initiate onboarding', 500, error);
     }
   }
 
@@ -40,7 +40,7 @@ class OnboardingController {
       const file = req.file;
 
       if (!employeeId || !documentType || !file) {
-        return errorResponse(res, 'Employee ID, document type, and file are required', 400);
+        return respondError(res, 'Employee ID, document type, and file are required', 400);
       }
 
       const result = await onboardingService.uploadDocument(
@@ -50,10 +50,10 @@ class OnboardingController {
         file.originalname
       );
 
-      return successResponse(res, result, 'Document uploaded successfully', 201);
+      return respondSuccess(res, result, 'Document uploaded successfully', 201);
     } catch (error) {
       console.error('Controller Error:', error);
-      return errorResponse(res, 'Failed to upload document', 500, error);
+      return respondError(res, 'Failed to upload document', 500, error);
     }
   }
 
@@ -66,15 +66,15 @@ class OnboardingController {
       const { employeeId } = req.params;
 
       if (!employeeId) {
-        return errorResponse(res, 'Employee ID is required', 400);
+        return respondError(res, 'Employee ID is required', 400);
       }
 
       const result = await onboardingService.getOnboardingStatus(parseInt(employeeId));
 
-      return successResponse(res, result, 'Onboarding status retrieved successfully');
+      return respondSuccess(res, result, 'Onboarding status retrieved successfully');
     } catch (error) {
       console.error('Controller Error:', error);
-      return errorResponse(res, 'Failed to get onboarding status', 500, error);
+      return respondError(res, 'Failed to get onboarding status', 500, error);
     }
   }
 
@@ -87,7 +87,7 @@ class OnboardingController {
       const { attachmentId, verificationStatus } = req.body;
 
       if (!attachmentId || !verificationStatus) {
-        return errorResponse(res, 'Attachment ID and verification status are required', 400);
+        return respondError(res, 'Attachment ID and verification status are required', 400);
       }
 
       const result = await onboardingService.verifyDocument(
@@ -95,10 +95,10 @@ class OnboardingController {
         verificationStatus
       );
 
-      return successResponse(res, result, 'Document verified successfully');
+      return respondSuccess(res, result, 'Document verified successfully');
     } catch (error) {
       console.error('Controller Error:', error);
-      return errorResponse(res, 'Failed to verify document', 500, error);
+      return respondError(res, 'Failed to verify document', 500, error);
     }
   }
 }
