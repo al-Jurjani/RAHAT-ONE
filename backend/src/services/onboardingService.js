@@ -385,6 +385,77 @@ _convertToOdooDateFormat(dateStr) {
   console.warn('⚠️ Could not convert date to Odoo format:', dateStr);
   return null;
 }
+
+
+/**
+ * Allocate initial leave balances for newly approved employee
+ */
+async allocateInitialLeaves(employeeId) {
+  try {
+    console.log('🎯 Allocating initial leaves for employee:', employeeId);
+
+    // Get all leave types from Odoo
+    const leaveTypes = await odooAdapter.getLeaveTypes();
+    console.log('📋 Available leave types:', leaveTypes);
+
+    // Default allocation: 20 days for each type
+    const DEFAULT_DAYS = 20;
+    const currentYear = new Date().getFullYear();
+    const startDate = `${currentYear}-01-01`;
+    const endDate = `${currentYear}-12-31`;
+
+    const allocations = [];
+
+    // Allocate for each leave type
+    for (const leaveType of leaveTypes) {
+      try {
+        console.log(`   Allocating ${DEFAULT_DAYS} days for ${leaveType.name}...`);
+
+        // Create allocation record
+        const allocationId = await odooAdapter.create('hr.leave.allocation', {
+          name: `Initial Allocation - ${leaveType.name}`,
+          holiday_status_id: leaveType.id,
+          employee_id: employeeId,
+          number_of_days: DEFAULT_DAYS,
+          date_from: startDate,
+          date_to: endDate,
+          state: 'confirm',
+          notes: 'Automatic allocation on employee onboarding'
+        });
+
+        console.log(`   ✅ Allocation created with ID: ${allocationId}`);
+
+        // Validate the allocation (makes it active)
+        await odooAdapter.execute('hr.leave.allocation', 'action_validate', [[allocationId]]);
+        console.log(`   ✅ Allocation validated`);
+
+        allocations.push({
+          leaveType: leaveType.name,
+          leaveTypeId: leaveType.id,
+          days: DEFAULT_DAYS,
+          allocationId: allocationId
+        });
+
+      } catch (typeError) {
+        console.error(`   ❌ Failed to allocate ${leaveType.name}:`, typeError.message);
+        // Continue with other types even if one fails
+      }
+    }
+
+    console.log('✅ Leave allocation completed:', allocations);
+
+    return {
+      success: true,
+      employeeId: employeeId,
+      allocations: allocations,
+      message: `Successfully allocated ${allocations.length} leave types`
+    };
+
+  } catch (error) {
+    console.error('❌ Leave allocation failed:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = new OnboardingService();

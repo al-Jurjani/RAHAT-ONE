@@ -150,8 +150,8 @@ async function getVerificationDetails(req, res) {
  */
 async function approveCandidate(req, res) {
   try {
-    const employeeId = parseInt(req.params.employeeId);  // ✅ Get from URL
-    const { notes } = req.body;  // ✅ Get notes from body
+    const employeeId = parseInt(req.params.employeeId);
+    const { notes } = req.body;
 
     console.log('📥 Received approval request for employee:', employeeId);
     console.log('📝 Notes:', notes);
@@ -170,8 +170,8 @@ async function approveCandidate(req, res) {
         'work_email',
         'private_email',
         'registration_password_hash',
-        'department_id',      // ✅ Add this
-        'job_id'              // ✅ Add this
+        'department_id',
+        'job_id'
       ]
     ]);
 
@@ -194,7 +194,6 @@ async function approveCandidate(req, res) {
 
     // CREATE LOGIN ACCOUNT
     try {
-      // Check if user already exists
       const existingUsers = await odooAdapter.execute('res.users', 'search_read', [
         [['employee_id', '=', employeeId]],
         ['id']
@@ -203,7 +202,6 @@ async function approveCandidate(req, res) {
       if (existingUsers.length === 0 && emp.registration_password_hash && emp.work_email) {
         console.log('🔐 Creating login account for:', emp.work_email);
 
-        // Create user with stored password hash
         const userId = await odooAdapter.execute('res.users', 'create', [
           {
             name: emp.name,
@@ -223,12 +221,31 @@ async function approveCandidate(req, res) {
       }
     } catch (userError) {
       console.error('⚠️  Failed to create user account:', userError.message);
-      // Don't fail the whole approval if user creation fails
+    }
+
+    // 🆕 ALLOCATE INITIAL LEAVES
+    let leaveAllocations = [];
+    try {
+      console.log('🎯 Starting leave allocation...');
+      const onboardingService = require('../services/onboardingService');
+      const allocationResult = await onboardingService.allocateInitialLeaves(employeeId);
+      leaveAllocations = allocationResult.allocations;
+      console.log('✅ Leave allocation successful:', leaveAllocations);
+    } catch (leaveError) {
+      console.error('⚠️  Leave allocation failed:', leaveError.message);
+      // Don't fail the approval if leave allocation fails
+      // HR can manually allocate later
     }
 
     // Extract department and position names
     const departmentName = emp.department_id ? emp.department_id[1] : 'N/A';
     const positionName = emp.job_id ? emp.job_id[1] : 'N/A';
+
+    // Prepare leave balances for email
+    const leaveBalances = {};
+    leaveAllocations.forEach(allocation => {
+      leaveBalances[allocation.leaveType] = allocation.days;
+    });
 
     // Trigger Power Automate approval email
     console.log('🔔 Attempting to send approval email...');
@@ -238,7 +255,8 @@ async function approveCandidate(req, res) {
       personalEmail: emp.private_email,
       workEmail: emp.work_email,
       department: departmentName || 'N/A',
-      position: positionName || 'N/A'
+      position: positionName || 'N/A',
+      leaveBalances: leaveBalances // 🆕 Add leave balances to payload
     }, notes || '')
       .then(() => console.log('✅ Approval email sent'))
       .catch(err => {
@@ -250,7 +268,8 @@ async function approveCandidate(req, res) {
     return respondSuccess(res, {
       employeeId,
       status: 'approved',
-      userAccountCreated: true
+      userAccountCreated: true,
+      leaveAllocations: leaveAllocations // 🆕 Return allocation info
     }, 'Candidate approved successfully');
 
   } catch (error) {
