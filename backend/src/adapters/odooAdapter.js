@@ -126,6 +126,8 @@ class OdooAdapter {
           'private_email',
           'department_id',
           'job_id',
+          'hr_assigned_department_id',
+          'hr_assigned_job_id',
           'parent_id',
           'onboarding_status',
           'onboarding_progress_percentage',

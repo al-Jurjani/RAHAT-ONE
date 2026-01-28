@@ -106,6 +106,9 @@ export const hrAPI = {
       reason,
       details,
     }),
+
+    overrideAssignment: (employeeId, data) =>
+    api.put(`/hr/verification/${employeeId}/override-assignment`, data)
 };
 
 /* =========================

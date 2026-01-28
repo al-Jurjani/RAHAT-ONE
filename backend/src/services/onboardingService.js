@@ -6,9 +6,6 @@ const fs = require('fs').promises;
 
 class OnboardingService {
   /**
-   * Initiate onboarding for a new employee
-   */
-  /**
  * Initiate onboarding for a new employee
  */
 async initiateOnboarding(employeeData) {
@@ -20,6 +17,11 @@ async initiateOnboarding(employeeData) {
       mobile_phone: employeeData.phone,
       department_id: employeeData.departmentId || false,
       job_id: employeeData.jobId || false,
+
+      // 🆕 ALSO SET HR ASSIGNED FIELDS (for tracking original assignment)
+      hr_assigned_department_id: employeeData.departmentId || false,
+      hr_assigned_job_id: employeeData.jobId || false,
+
       onboarding_status: 'initiated',
       onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
     });
