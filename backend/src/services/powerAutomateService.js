@@ -5,6 +5,8 @@ class PowerAutomateService {
     this.flowUrl = process.env.PA_ONBOARDING_WEBHOOK;
     this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
+    this.expenseSubmissionFlowUrl = process.env.PA_EXPENSE_SUBMISSION_WEBHOOK;
+    this.expenseApprovalResponseFlowUrl = process.env.PA_EXPENSE_APPROVAL_RESPONSE_WEBHOOK;
   }
 
   async triggerOnboardingFlow(action, employeeData, metadata = {}) {
@@ -92,6 +94,54 @@ class PowerAutomateService {
     return null;
   }
 }
+
+  // ==========================================
+  // EXPENSE FLOWS (new)
+  // ==========================================
+
+  /**
+   * Trigger expense submission flow
+   * Handles initial submission, policy validation notification to manager
+   */
+  async triggerExpenseSubmissionFlow(expenseData) {
+    try {
+      console.log(`🔄 Triggering Expense Submission Flow for ${expenseData.employeeName}`);
+
+      const response = await axios.post(this.expenseSubmissionFlowUrl, expenseData, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      console.log(`✅ Expense submission flow triggered successfully`);
+      return response.data;
+
+    } catch (error) {
+      console.error(`❌ Expense submission flow error:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Trigger expense approval response flow
+   * Handles manager/HR decision notifications
+   */
+  async triggerApprovalResponseFlow(decisionData) {
+    try {
+      console.log(`🔄 Triggering Expense Approval Response Flow for expense ${decisionData.expenseId}`);
+
+      const response = await axios.post(this.expenseApprovalResponseFlowUrl, decisionData, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      console.log(`✅ Approval response flow triggered successfully`);
+      return response.data;
+
+    } catch (error) {
+      console.error(`❌ Approval response flow error:`, error.message);
+      return null;
+    }
+  }
 }
 
 module.exports = new PowerAutomateService();

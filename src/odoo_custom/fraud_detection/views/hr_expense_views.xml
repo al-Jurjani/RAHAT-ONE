@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Inherit and extend the hr.expense form view -->
+    <record id="view_hr_expense_form_rahatone" model="ir.ui.view">
+        <field name="name">hr.expense.form.rahatone</field>
+        <field name="model">hr.expense</field>
+        <field name="inherit_id" ref="hr_expense.hr_expense_view_form"/>
+        <field name="arch" type="xml">
+            <!-- Add expense category and vendor after product_id -->
+            <xpath expr="//field[@name='product_id']" position="after">
+                <field name="expense_category" required="1"/>
+                <field name="vendor_name" placeholder="Vendor/Merchant Name"/>
+                <field name="expense_date"/>
+            </xpath>
+
+            <!-- Add workflow status section at the bottom of the sheet -->
+            <xpath expr="//sheet" position="inside">
+                <separator string="RAHAT-ONE Workflow"/>
+                <group>
+                    <group string="Current Status">
+                        <field name="workflow_status" readonly="1"/>
+                        <field name="submitted_date" readonly="1"/>
+                        <field name="days_pending" readonly="1"/>
+                        <field name="is_high_value" readonly="1"/>
+                    </group>
+                    <group string="Policy Check">
+                        <field name="policy_check_passed" readonly="1"/>
+                        <field name="policy_check_date" readonly="1"/>
+                    </group>
+                </group>
+
+                <group>
+                    <group string="Manager Approval">
+                        <field name="manager_decision" readonly="1"/>
+                        <field name="manager_approved_by" readonly="1"/>
+                        <field name="manager_approved_date" readonly="1"/>
+                        <field name="manager_remarks" readonly="1"/>
+                    </group>
+                    <group string="HR Approval" invisible="not hr_escalated">
+                        <field name="hr_escalated" readonly="1"/>
+                        <field name="hr_escalation_reason" readonly="1"/>
+                        <field name="hr_decision" readonly="1"/>
+                        <field name="hr_approved_by" readonly="1"/>
+                        <field name="hr_approved_date" readonly="1"/>
+                        <field name="hr_remarks" readonly="1"/>
+                    </group>
+                </group>
+
+                <group string="Rejection Details" invisible="workflow_status != 'rejected'">
+                    <field name="rejection_reason" readonly="1"/>
+                    <field name="rejection_details" readonly="1"/>
+                    <field name="completed_date" readonly="1"/>
+                </group>
+
+                <separator string="Fraud Detection"/>
+                <group>
+                    <group string="Verification Status">
+                        <field name="fraud_detection_status" readonly="1"/>
+                        <field name="fraud_score" readonly="1" widget="progressbar"/>
+                        <field name="anomaly_confidence" readonly="1"/>
+                        <field name="ai_verification_date" readonly="1"/>
+                    </group>
+                    <group string="Document Hashes">
+                        <field name="document_hash" readonly="1"/>
+                        <field name="perceptual_hash" readonly="1"/>
+                        <field name="duplicate_of_expense_id" readonly="1"/>
+                    </group>
+                </group>
+                <group>
+                    <field name="fraud_detection_details" readonly="1" string="Detection Details"/>
+                    <field name="policy_check_details" readonly="1" string="Policy Details"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit and extend the hr.expense tree view -->
+    <record id="view_hr_expense_tree_rahatone" model="ir.ui.view">
+        <field name="name">hr.expense.tree.rahatone</field>
+        <field name="model">hr.expense</field>
+        <field name="inherit_id" ref="hr_expense.view_expenses_tree"/>
+        <field name="arch" type="xml">
+            <!-- Add custom columns after the name field -->
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="expense_category"/>
+                <field name="vendor_name" optional="show"/>
+            </xpath>
+
+            <!-- Add workflow status before the state field -->
+            <xpath expr="//field[@name='state']" position="before">
+                <field name="workflow_status"
+                       decoration-info="workflow_status == 'pending_manager'"
+                       decoration-warning="workflow_status == 'pending_hr'"
+                       decoration-success="workflow_status == 'approved'"
+                       decoration-danger="workflow_status == 'rejected'"
+                       widget="badge"/>
+                <field name="fraud_score" widget="progressbar" optional="hide"/>
+                <field name="hr_escalated" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Search view extensions -->
+    <record id="view_hr_expense_search_rahatone" model="ir.ui.view">
+        <field name="name">hr.expense.search.rahatone</field>
+        <field name="model">hr.expense</field>
+        <field name="inherit_id" ref="hr_expense.hr_expense_view_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <separator/>
+                <filter string="Pending Manager" name="pending_manager"
+                        domain="[('workflow_status', '=', 'pending_manager')]"/>
+                <filter string="Pending HR" name="pending_hr"
+                        domain="[('workflow_status', '=', 'pending_hr')]"/>
+                <filter string="Escalated" name="hr_escalated"
+                        domain="[('hr_escalated', '=', True)]"/>
+                <filter string="Suspicious" name="suspicious"
+                        domain="[('fraud_detection_status', '=', 'suspicious')]"/>
+                <separator/>
+                <filter string="Medical" name="medical"
+                        domain="[('expense_category', '=', 'medical')]"/>
+                <filter string="Petrol" name="petrol"
+                        domain="[('expense_category', '=', 'petrol')]"/>
+                <filter string="Travel" name="travel"
+                        domain="[('expense_category', '=', 'travel')]"/>
+
+                <group expand="0" string="Group By">
+                    <filter string="Category" name="groupby_category"
+                            context="{'group_by': 'expense_category'}"/>
+                    <filter string="Workflow Status" name="groupby_workflow"
+                            context="{'group_by': 'workflow_status'}"/>
+                    <filter string="Fraud Status" name="groupby_fraud"
+                            context="{'group_by': 'fraud_detection_status'}"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

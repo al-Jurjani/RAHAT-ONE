@@ -164,4 +164,16 @@ export const leaveAPI = {
   getStatistics: () => api.get('/leaves/statistics'),
 };
 
+/* =========================
+   Expense Management APIs
+========================= */
+
+export const expenseAPI = {
+  // Submit expense (multipart/form-data)
+  submit: (formData) =>
+    api.post('/expenses/submit', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
 export default api;

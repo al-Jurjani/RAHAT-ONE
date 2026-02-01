@@ -108,6 +108,23 @@ function EmployeeDashboard() {
                 </CardContent>
               </Card>
             </Grid>
+
+            <Grid item xs={12} md={4}>
+              <Card
+                sx={{ cursor: 'pointer' }}
+                onClick={() => navigate('/expenses/submit')}
+              >
+                <CardContent sx={{ textAlign: 'center' }}>
+                  <Description sx={{ fontSize: 48, color: 'secondary.main', mb: 1 }} />
+                  <Typography variant="h6" gutterBottom>
+                    Reimbursement
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Submit an expense claim
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
 
           {/* User Info Card */}
