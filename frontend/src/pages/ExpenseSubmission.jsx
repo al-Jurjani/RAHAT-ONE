@@ -15,6 +15,7 @@ import {
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { expenseAPI } from '../services/api';
+import ExpenseHistoryTable from '../components/expense/ExpenseHistoryTable';
 
 const categoryOptions = [
   { value: 'Medical', label: 'Medical' },
@@ -121,7 +122,7 @@ const ExpenseSubmission = () => {
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
       <Button
         variant="text"
         onClick={() => navigate('/employee/dashboard')}
@@ -130,7 +131,7 @@ const ExpenseSubmission = () => {
         ← Back to Dashboard
       </Button>
 
-      <Paper sx={{ p: 4 }}>
+      <Paper sx={{ p: 4, mb: 4 }}>
         <Typography variant="h4" gutterBottom>
           Submit Expense
         </Typography>
@@ -276,6 +277,8 @@ const ExpenseSubmission = () => {
           </Grid>
         </Box>
       </Paper>
+
+      <ExpenseHistoryTable />
     </Container>
   );
 };

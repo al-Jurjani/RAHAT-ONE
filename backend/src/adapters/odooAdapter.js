@@ -264,6 +264,42 @@ async getEmployeeDocuments(employeeId) {
 }
 
   /**
+   * Get latest expense attachment
+   */
+  async getExpenseAttachment(expenseId) {
+    try {
+      const parsedExpenseId = Number.parseInt(expenseId, 10);
+      if (Number.isNaN(parsedExpenseId)) {
+        return null;
+      }
+
+      const attachmentIds = await this.execute(
+        'ir.attachment',
+        'search',
+        [[
+          ['res_model', '=', 'hr.expense'],
+          ['res_id', '=', parsedExpenseId]
+        ], 0, 1, 'create_date desc']
+      );
+
+      if (attachmentIds.length === 0) {
+        return null;
+      }
+
+      const attachments = await this.execute(
+        'ir.attachment',
+        'read',
+        [attachmentIds, ['id', 'name', 'mimetype', 'datas']]
+      );
+
+      return attachments[0] || null;
+    } catch (error) {
+      console.error('Odoo getExpenseAttachment Error:', error.message);
+      return null;
+    }
+  }
+
+  /**
    * Search employees with domain filters
    */
   async searchEmployees(domain) {
@@ -859,8 +895,13 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
    */
   async getExpense(expenseId) {
     try {
+      const parsedExpenseId = Number.parseInt(expenseId, 10);
+      if (Number.isNaN(parsedExpenseId)) {
+        return null;
+      }
+
       const expenses = await this.execute('hr.expense', 'read', [
-        [expenseId],
+        [parsedExpenseId],
         [
           'id',
           'employee_id',

@@ -174,6 +174,11 @@ export const expenseAPI = {
     api.post('/expenses/submit', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // List expenses (filters: status, category, dateFrom, dateTo, vendor)
+  list: (filters = {}) => api.get('/expenses', { params: filters }),
+  // Get invoice attachment (blob response)
+  getAttachment: (expenseId) =>
+    api.get(`/expenses/${expenseId}/attachment`, { responseType: 'blob' }),
 };
 
 export default api;

@@ -23,12 +23,6 @@ router.post('/submit', authenticateToken, expenseController.submitExpense);
 router.get('/', authenticateToken, expenseController.listExpenses);
 
 /**
- * GET /api/expenses/:id
- * Get expense details (authorized access)
- */
-router.get('/:id', authenticateToken, expenseController.getExpenseDetails);
-
-/**
  * GET /api/expenses/pending-approval
  * Get expenses pending approval (HR dashboard)
  * Query params: type ('manager' or 'hr')
@@ -40,6 +34,18 @@ router.get('/pending-approval', authenticateToken, expenseController.getPendingA
  * Get expense statistics for dashboard
  */
 router.get('/statistics', authenticateToken, expenseController.getStatistics);
+
+/**
+ * GET /api/expenses/:id/attachment
+ * Get expense attachment
+ */
+router.get('/:id/attachment', authenticateToken, expenseController.getExpenseAttachment);
+
+/**
+ * GET /api/expenses/:id
+ * Get expense details (authorized access)
+ */
+router.get('/:id', authenticateToken, expenseController.getExpenseDetails);
 
 // ==========================================
 // PUBLIC ROUTES (token-based, no auth required)

@@ -21,6 +21,7 @@ import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeLeavePage from './pages/EmployeeLeavePage';
 import HRLeaveDashboard from './pages/HRLeaveDashboard';
 import ExpenseSubmission from './pages/ExpenseSubmission';
+import ExpenseHistory from './pages/ExpenseHistory';
 
 // Outfitters theme colors
 const theme = createTheme({
@@ -100,6 +101,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['employee']}>
                   <ExpenseSubmission />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/expenses/history"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <ExpenseHistory />
                 </ProtectedRoute>
               }
             />

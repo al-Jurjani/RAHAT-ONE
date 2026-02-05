@@ -168,6 +168,10 @@ class ExpenseController {
 
       const expense = await expenseService.getExpense(id);
 
+      if (!expense) {
+        return respondError(res, 'Expense not found', 404);
+      }
+
       // Authorization check: employee can only see their own, HR/manager can see all
       if (userRole !== 'hr' && userRole !== 'manager' && expense.employee_id[0] !== employeeId) {
         return respondError(res, 'You do not have permission to view this expense', 403);
@@ -177,6 +181,45 @@ class ExpenseController {
 
     } catch (error) {
       console.error('Get expense details error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
+
+  /**
+   * GET /api/expenses/:id/attachment
+   * Get expense attachment (authenticated)
+   */
+  async getExpenseAttachment(req, res) {
+    try {
+      const { id } = req.params;
+      const employeeId = req.user.employee_id;
+      const userRole = req.user.role;
+
+      const expense = await expenseService.getExpense(id);
+
+      if (!expense) {
+        return respondError(res, 'Expense not found', 404);
+      }
+
+      if (userRole !== 'hr' && userRole !== 'manager' && expense.employee_id[0] !== employeeId) {
+        return respondError(res, 'You do not have permission to view this attachment', 403);
+      }
+
+      const attachment = await odooAdapter.getExpenseAttachment(id);
+
+      if (!attachment || !attachment.datas) {
+        return respondError(res, 'Attachment not found', 404);
+      }
+
+      const fileBuffer = Buffer.from(attachment.datas, 'base64');
+      const fileName = (attachment.name || `expense-${id}`).replace(/"/g, '');
+
+      res.setHeader('Content-Type', attachment.mimetype || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      return res.status(200).send(fileBuffer);
+
+    } catch (error) {
+      console.error('Get expense attachment error:', error);
       return respondError(res, error.message, 500);
     }
   }
