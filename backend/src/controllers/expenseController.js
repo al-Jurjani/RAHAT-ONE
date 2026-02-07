@@ -328,17 +328,21 @@ class ExpenseController {
       // Trigger Power Automate for decision notification
       const employee = await odooAdapter.getEmployee(result.expense.employee_id[0]);
       const payloadForPA = {
-        expenseId,
+        expenseId: parseInt(expenseId, 10),  // Parse to integer
         decision,
         approverType: 'manager',
-        employeeId: result.expense.employee_id[0],
+        employeeId: parseInt(result.expense.employee_id[0], 10),  // Parse to integer
         employeeName: employee.name,
         employeeEmail: employee.work_email,
-        amount: result.expense.total_amount,
+        amount: parseFloat(result.expense.total_amount),  // Parse to number
         category: result.expense.expense_category,
         remarks: remarks || '',
         nextStage: result.nextAction === 'hr_approval' ? 'Pending HR Approval' : 'Completed',
-        processedAt: new Date().toISOString()
+        hrEscalated: result.expense.hr_escalated || false,
+        approvalToken: result.expense.approval_token || null,
+        workflowStatus: result.expense.workflow_status,
+        processedAt: new Date().toISOString(),
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
       };
 
       powerAutomateService.triggerApprovalResponseFlow(payloadForPA).catch(err => {
@@ -408,16 +412,18 @@ class ExpenseController {
       // Trigger Power Automate for final notification
       const employee = await odooAdapter.getEmployee(result.expense.employee_id[0]);
       const payloadForPA = {
-        expenseId,
+        expenseId: parseInt(expenseId, 10),  // Parse to integer
         decision,
         approverType: 'hr',
-        employeeId: result.expense.employee_id[0],
+        employeeId: parseInt(result.expense.employee_id[0], 10),  // Parse to integer
         employeeName: employee.name,
         employeeEmail: employee.work_email,
-        amount: result.expense.total_amount,
+        amount: parseFloat(result.expense.total_amount),  // Parse to number
         category: result.expense.expense_category,
         remarks: remarks || '',
-        processedAt: new Date().toISOString()
+        workflowStatus: result.expense.workflow_status,
+        processedAt: new Date().toISOString(),
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
       };
 
       powerAutomateService.triggerApprovalResponseFlow(payloadForPA).catch(err => {

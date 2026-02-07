@@ -1018,6 +1018,7 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'hr_approved',
           'hr_approved_date',
           'policy_check_passed',
+          'approval_token',  // Added for HR decision validation
           'create_date'
         ]
       ]);

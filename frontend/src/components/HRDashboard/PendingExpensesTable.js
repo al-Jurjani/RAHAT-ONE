@@ -142,16 +142,17 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
   const confirmAction = async () => {
     try {
       setActionLoading(true);
-      const token = localStorage.getItem('accessToken');
+      const authToken = localStorage.getItem('accessToken');
 
       await axios.post(
         `${API_BASE_URL}/expenses/${selectedExpense.id}/hr-decision`,
         {
+          token: selectedExpense.approval_token,  // Approval token from expense
           decision: action,
           remarks: remarks || `${action === 'approve' ? 'Approved' : 'Rejected'} by HR`
         },
         {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${authToken}` }
         }
       );
 

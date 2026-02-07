@@ -158,7 +158,15 @@ class PowerAutomateService {
    */
   async triggerApprovalResponseFlow(decisionData) {
     try {
+      if (!this.expenseApprovalResponseFlowUrl) {
+        console.warn('⚠️  Expense approval response flow URL not configured');
+        return null;
+      }
+
       console.log(`🔄 Triggering Expense Approval Response Flow for expense ${decisionData.expenseId}`);
+      console.log('   Decision:', decisionData.decision);
+      console.log('   Approver Type:', decisionData.approverType);
+      console.log('   Next Stage:', decisionData.nextStage);
 
       const response = await axios.post(this.expenseApprovalResponseFlowUrl, decisionData, {
         headers: { 'Content-Type': 'application/json' },
@@ -170,6 +178,10 @@ class PowerAutomateService {
 
     } catch (error) {
       console.error(`❌ Approval response flow error:`, error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
       return null;
     }
   }

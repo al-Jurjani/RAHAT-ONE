@@ -147,6 +147,7 @@ class ExpenseService {
       // Check if escalation needed (> 10k PKR)
       if (policyCheck.passed && expenseData.amount > 10000) {
         odooExpenseData.hr_decision = 'pending';
+        odooExpenseData.hr_escalated = true;  // Flag for HR escalation
       }
 
       console.log('📝 Creating expense in Odoo:', odooExpenseData);
@@ -276,9 +277,9 @@ class ExpenseService {
     try {
       const filters = {};
       if (approvalType === 'manager') {
-        filters.workflow_status = ['=', 'pending_manager'];
+        filters.workflow_status = 'pending_manager';  // Just the value, not array
       } else if (approvalType === 'hr') {
-        filters.workflow_status = ['=', 'pending_hr'];
+        filters.workflow_status = 'pending_hr';  // Just the value, not array
       }
 
       return await odooAdapter.searchExpenses(filters);
