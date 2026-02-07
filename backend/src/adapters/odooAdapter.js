@@ -1034,8 +1034,14 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
    */
   async updateExpense(expenseId, updateData) {
     try {
-      await this.update('hr.expense', expenseId, updateData);
-      console.log('✅ Expense updated:', expenseId);
+      // Parse ID to integer (critical for Odoo)
+      const id = parseInt(expenseId, 10);
+      if (isNaN(id)) {
+        throw new Error(`Invalid expense ID: ${expenseId}`);
+      }
+
+      await this.update('hr.expense', id, updateData);
+      console.log('✅ Expense updated:', id);
       return true;
     } catch (error) {
       console.error('Error updating expense:', error);

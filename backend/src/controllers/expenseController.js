@@ -58,34 +58,8 @@ class ExpenseController {
         }
       }
 
-      // Only trigger Power Automate if policy passed
-      if (result.policyCheckPassed) {
-        const powerAutomatePayload = {
-          expenseId: result.expenseId,
-          approvalToken: result.expense.approval_token,
-          employeeId: employeeId,
-          employeeName: employee.name,
-          employeeEmail: employee.work_email,
-          departmentId: employee.department_id ? employee.department_id[0] : null,
-          departmentName: employee.department_id ? employee.department_id[1] : 'Unknown',
-          managerId: employee.parent_id ? employee.parent_id[0] : null,
-          managerName: managerName,
-          managerEmail: managerEmail,
-          category: expenseData.category,
-          amount: expenseData.amount,
-          vendorName: expenseData.vendor_name,
-          expenseDate: expenseData.expense_date,
-          description: expenseData.description,
-          escalatedForHR: result.escalatedForHR,
-          submittedAt: new Date().toISOString()
-        };
-
-        console.log('📤 Triggering Power Automate for expense submission');
-        // Fire and forget - don't wait for response
-        powerAutomateService.triggerExpenseSubmissionFlow(powerAutomatePayload).catch(err => {
-          console.error('⚠️  Power Automate trigger failed (non-blocking):', err.message);
-        });
-      }
+      // Power Automate flow is now triggered directly from expenseService.submitExpense()
+      // No need to trigger it here anymore
 
       return respondSuccess(res, {
         expenseId: result.expenseId,
@@ -262,6 +236,48 @@ class ExpenseController {
 
     } catch (error) {
       console.error('Get expense for approval error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
+
+  /**
+   * GET /api/expenses/public/:expenseId/invoice
+   * Public endpoint for viewing invoice (token-based, no auth required)
+   */
+  async getPublicInvoicePreview(req, res) {
+    try {
+      const { expenseId } = req.params;
+      const { token } = req.query;
+
+      console.log('🔓 Public invoice preview request:', expenseId);
+
+      if (!token) {
+        return respondError(res, 'Approval token required', 400);
+      }
+
+      // Validate token
+      const tokenValidation = await expenseService.validateApprovalToken(expenseId, token);
+
+      if (!tokenValidation.valid) {
+        return respondError(res, tokenValidation.reason, 401);
+      }
+
+      // Get attachment
+      const attachment = await odooAdapter.getExpenseAttachment(expenseId);
+
+      if (!attachment || !attachment.datas) {
+        return respondError(res, 'Invoice not found or not yet uploaded', 404);
+      }
+
+      const fileBuffer = Buffer.from(attachment.datas, 'base64');
+      const fileName = (attachment.name || `expense-${expenseId}-invoice`).replace(/"/g, '');
+
+      res.setHeader('Content-Type', attachment.mimetype || 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      return res.status(200).send(fileBuffer);
+
+    } catch (error) {
+      console.error('Get public invoice preview error:', error);
       return respondError(res, error.message, 500);
     }
   }

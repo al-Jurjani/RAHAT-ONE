@@ -59,6 +59,13 @@ router.get('/:id', authenticateToken, expenseController.getExpenseDetails);
 router.get('/public/:expenseId', expenseController.getExpenseForApproval);
 
 /**
+ * GET /api/expenses/public/:expenseId/invoice
+ * Public endpoint for viewing invoice attachment
+ * Query params: token
+ */
+router.get('/public/:expenseId/invoice', expenseController.getPublicInvoicePreview);
+
+/**
  * POST /api/expenses/:expenseId/manager-decision
  * Public endpoint for manager to approve/reject
  * Body: { token, decision ('approve'|'reject'), remarks (optional) }

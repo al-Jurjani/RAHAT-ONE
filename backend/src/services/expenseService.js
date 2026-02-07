@@ -1,5 +1,6 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const crypto = require('crypto');
+const powerAutomateService = require('./powerAutomateService');
 
 class ExpenseService {
   /**
@@ -177,6 +178,35 @@ class ExpenseService {
 
       // 6. Get created expense details
       const createdExpense = await odooAdapter.getExpense(expenseId);
+
+      // 7. Trigger Power Automate flow for policy check and email notifications
+      try {
+        // Get employee details
+        const employee = await odooAdapter.getEmployee(employeeId);
+
+        // Get manager details if available
+        let manager = null;
+        if (employee?.parent_id?.[0]) {
+          manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+        }
+
+        // Trigger flow (fire and forget)
+        powerAutomateService.triggerExpensePolicyFlow(
+          {
+            expenseId,
+            employeeId,
+            ...expenseData,
+            approval_token: odooExpenseData.approval_token
+          },
+          policyCheck,
+          employee,
+          manager
+        ).catch(err => {
+          console.error('⚠️  Non-blocking Power Automate error:', err.message);
+        });
+      } catch (err) {
+        console.error('⚠️  Could not trigger Power Automate flow:', err.message);
+      }
 
       return {
         success: true,

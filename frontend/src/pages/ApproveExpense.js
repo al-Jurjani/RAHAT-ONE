@@ -71,7 +71,17 @@ const ApproveExpense = () => {
   const loadInvoicePreview = async () => {
     try {
       setInvoiceLoading(true);
-      const blob = await expenseAPI.getAttachment(expenseId);
+
+      // Use public endpoint with token
+      const response = await axios.get(
+        `${API_BASE_URL}/api/expenses/public/${expenseId}/invoice`,
+        {
+          params: { token },
+          responseType: 'blob'
+        }
+      );
+
+      const blob = response.data;
 
       // Detect file type
       const mimeType = blob.type || 'application/octet-stream';
@@ -96,7 +106,7 @@ const ApproveExpense = () => {
       }
     } catch (err) {
       console.error('Invoice preview error:', err);
-      setError('Failed to load invoice preview');
+      setError('Failed to load invoice preview. This link may have expired or is invalid.');
     } finally {
       setInvoiceLoading(false);
     }

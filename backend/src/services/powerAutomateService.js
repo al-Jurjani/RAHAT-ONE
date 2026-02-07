@@ -5,6 +5,7 @@ class PowerAutomateService {
     this.flowUrl = process.env.PA_ONBOARDING_WEBHOOK;
     this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
+    this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
     this.expenseSubmissionFlowUrl = process.env.PA_EXPENSE_SUBMISSION_WEBHOOK;
     this.expenseApprovalResponseFlowUrl = process.env.PA_EXPENSE_APPROVAL_RESPONSE_WEBHOOK;
   }
@@ -100,23 +101,53 @@ class PowerAutomateService {
   // ==========================================
 
   /**
-   * Trigger expense submission flow
-   * Handles initial submission, policy validation notification to manager
+   * Trigger expense policy flow
+   * Handles policy validation and sends appropriate notifications (approval to manager or rejection to employee)
    */
-  async triggerExpenseSubmissionFlow(expenseData) {
+  async triggerExpensePolicyFlow(expenseData, policyCheck, employee, manager) {
     try {
-      console.log(`🔄 Triggering Expense Submission Flow for ${expenseData.employeeName}`);
+      if (!this.expensePolicyFlowUrl) {
+        console.warn('⚠️  Power Automate expense policy flow URL not configured');
+        return null;
+      }
 
-      const response = await axios.post(this.expenseSubmissionFlowUrl, expenseData, {
+      const payload = {
+        expenseId: expenseData.expenseId,
+        employeeId: expenseData.employeeId,
+        employeeName: employee.name,
+        employeeEmail: employee.work_email || employee.private_email,
+        managerName: manager?.name || null,
+        managerEmail: manager?.work_email || manager?.private_email || null,
+        category: expenseData.category,
+        amount: parseFloat(expenseData.amount),  // Convert to number
+        vendor: expenseData.vendor_name,
+        expenseDate: expenseData.expense_date,
+        description: expenseData.description,
+        policyCheckPassed: policyCheck.passed,
+        policyViolations: policyCheck.violations || [],
+        submittedDate: new Date().toISOString(),
+        approvalToken: expenseData.approval_token || null,
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
+      };
+
+      console.log('📤 Triggering Power Automate expense policy flow...');
+      console.log('   Flow URL:', this.expensePolicyFlowUrl);
+      console.log('   Payload:', JSON.stringify(payload, null, 2));
+
+      const response = await axios.post(this.expensePolicyFlowUrl, payload, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000
       });
 
-      console.log(`✅ Expense submission flow triggered successfully`);
+      console.log('✅ Power Automate expense policy flow triggered successfully');
       return response.data;
 
     } catch (error) {
-      console.error(`❌ Expense submission flow error:`, error.message);
+      console.error('⚠️  Power Automate flow trigger failed:', error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
       return null;
     }
   }
