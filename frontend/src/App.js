@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ApproveLeave from './pages/ApproveLeave';
+import ApproveExpense from './pages/ApproveExpense';
 
 // Auth
 import { AuthProvider } from './contexts/AuthContext';
@@ -20,6 +21,9 @@ import HRVerificationDetails from './pages/HRVerificationDetails';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeLeavePage from './pages/EmployeeLeavePage';
 import HRLeaveDashboard from './pages/HRLeaveDashboard';
+import HRExpenseDashboard from './pages/HRExpenseDashboard';
+import ExpenseSubmission from './pages/ExpenseSubmission';
+import ExpenseHistory from './pages/ExpenseHistory';
 
 // Outfitters theme colors
 const theme = createTheme({
@@ -48,6 +52,7 @@ function App() {
             <Route path="/register" element={<RegistrationPage />} />
             <Route path="/status" element={<StatusPage />} />
             <Route path="/approve-leave/:leaveId" element={<ApproveLeave />} />
+            <Route path="/approve-expense/:expenseId" element={<ApproveExpense />} />
             {/* <Route path="/leaves" element={<EmployeeLeavePage />} /> */}
 
 
@@ -84,6 +89,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/hr/expense-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRExpenseDashboard />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Protected Employee Routes */}
             <Route
@@ -91,6 +104,22 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['employee']}>
                   <EmployeeDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/expenses/submit"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <ExpenseSubmission />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/expenses/history"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <ExpenseHistory />
                 </ProtectedRoute>
               }
             />

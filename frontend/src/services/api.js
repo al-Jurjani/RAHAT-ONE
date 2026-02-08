@@ -164,4 +164,21 @@ export const leaveAPI = {
   getStatistics: () => api.get('/leaves/statistics'),
 };
 
+/* =========================
+   Expense Management APIs
+========================= */
+
+export const expenseAPI = {
+  // Submit expense (multipart/form-data)
+  submit: (formData) =>
+    api.post('/expenses/submit', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  // List expenses (filters: status, category, dateFrom, dateTo, vendor)
+  list: (filters = {}) => api.get('/expenses', { params: filters }),
+  // Get invoice attachment (blob response)
+  getAttachment: (expenseId) =>
+    api.get(`/expenses/${expenseId}/attachment`, { responseType: 'blob' }),
+};
+
 export default api;

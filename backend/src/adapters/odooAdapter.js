@@ -264,6 +264,42 @@ async getEmployeeDocuments(employeeId) {
 }
 
   /**
+   * Get latest expense attachment
+   */
+  async getExpenseAttachment(expenseId) {
+    try {
+      const parsedExpenseId = Number.parseInt(expenseId, 10);
+      if (Number.isNaN(parsedExpenseId)) {
+        return null;
+      }
+
+      const attachmentIds = await this.execute(
+        'ir.attachment',
+        'search',
+        [[
+          ['res_model', '=', 'hr.expense'],
+          ['res_id', '=', parsedExpenseId]
+        ], 0, 1, 'create_date desc']
+      );
+
+      if (attachmentIds.length === 0) {
+        return null;
+      }
+
+      const attachments = await this.execute(
+        'ir.attachment',
+        'read',
+        [attachmentIds, ['id', 'name', 'mimetype', 'datas']]
+      );
+
+      return attachments[0] || null;
+    } catch (error) {
+      console.error('Odoo getExpenseAttachment Error:', error.message);
+      return null;
+    }
+  }
+
+  /**
    * Search employees with domain filters
    */
   async searchEmployees(domain) {
@@ -757,6 +793,322 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
     }
   }
 
+  // ==========================================
+  // EXPENSE MANAGEMENT METHODS
+  // ==========================================
+
+  /**
+   * Create an expense record
+   */
+  async createExpense(expenseData) {
+    try {
+      const nullIfEmpty = (value) => {
+        if (value === undefined || value === null || value === '') {
+          return null;
+        }
+        return value;
+      };
+
+      const expenseRecord = {
+        employee_id: expenseData.employee_id,
+        expense_category: expenseData.expense_category,
+        total_amount: expenseData.total_amount,
+        vendor_name: expenseData.vendor_name,
+        date: expenseData.date,
+        description: expenseData.description,
+        name: expenseData.name || expenseData.description,
+        workflow_status: expenseData.workflow_status || 'draft',
+        manager_decision: expenseData.manager_decision || 'pending',
+        hr_decision: expenseData.hr_decision || 'not_required',
+        manager_remarks: expenseData.manager_remarks || '',
+        hr_remarks: expenseData.hr_remarks || '',
+        approval_token: expenseData.approval_token || null,
+        approval_token_expiry: nullIfEmpty(expenseData.approval_token_expiry),
+        approval_token_type: expenseData.approval_token_type || 'manager',
+        rejection_reason: expenseData.rejection_reason || null,
+        rejection_details: expenseData.rejection_details || null,
+        submitted_date: nullIfEmpty(expenseData.submitted_date),
+        completed_date: nullIfEmpty(expenseData.completed_date)
+      };
+
+      // Only include optional fields when explicitly provided
+      if (expenseData.policy_check_passed !== undefined) {
+        expenseRecord.policy_check_passed = expenseData.policy_check_passed;
+      }
+      if (expenseData.policy_check_details !== undefined) {
+        expenseRecord.policy_check_details = expenseData.policy_check_details;
+      }
+      if (expenseData.policy_check_date !== undefined) {
+        expenseRecord.policy_check_date = nullIfEmpty(expenseData.policy_check_date);
+      }
+      if (expenseData.document_hash !== undefined) {
+        expenseRecord.document_hash = expenseData.document_hash;
+      }
+      if (expenseData.perceptual_hash !== undefined) {
+        expenseRecord.perceptual_hash = expenseData.perceptual_hash;
+      }
+      if (expenseData.fraud_score !== undefined) {
+        expenseRecord.fraud_score = expenseData.fraud_score;
+      }
+      if (expenseData.fraud_detection_details !== undefined) {
+        expenseRecord.fraud_detection_details = expenseData.fraud_detection_details;
+      }
+      if (expenseData.fraud_detection_status !== undefined) {
+        expenseRecord.fraud_detection_status = expenseData.fraud_detection_status;
+      }
+      if (expenseData.anomaly_confidence !== undefined) {
+        expenseRecord.anomaly_confidence = expenseData.anomaly_confidence;
+      }
+      if (expenseData.manager_approved !== undefined) {
+        expenseRecord.manager_approved = expenseData.manager_approved;
+      }
+      if (expenseData.manager_approved_by !== undefined) {
+        expenseRecord.manager_approved_by = expenseData.manager_approved_by;
+      }
+      if (expenseData.manager_approved_date !== undefined) {
+        expenseRecord.manager_approved_date = nullIfEmpty(expenseData.manager_approved_date);
+      }
+      if (expenseData.hr_escalated !== undefined) {
+        expenseRecord.hr_escalated = expenseData.hr_escalated;
+      }
+      if (expenseData.hr_approved !== undefined) {
+        expenseRecord.hr_approved = expenseData.hr_approved;
+      }
+      if (expenseData.hr_approved_by !== undefined) {
+        expenseRecord.hr_approved_by = expenseData.hr_approved_by;
+      }
+      if (expenseData.hr_approved_date !== undefined) {
+        expenseRecord.hr_approved_date = nullIfEmpty(expenseData.hr_approved_date);
+      }
+
+      const expenseId = await this.create('hr.expense', expenseRecord);
+      console.log('✅ Expense created in Odoo with ID:', expenseId);
+      return expenseId;
+    } catch (error) {
+      console.error('Error creating expense:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get expense by ID
+   */
+  async getExpense(expenseId) {
+    try {
+      const parsedExpenseId = Number.parseInt(expenseId, 10);
+      if (Number.isNaN(parsedExpenseId)) {
+        return null;
+      }
+
+      const expenses = await this.execute('hr.expense', 'read', [
+        [parsedExpenseId],
+        [
+          'id',
+          'employee_id',
+          'expense_category',
+          'total_amount',
+          'vendor_name',
+          'date',
+          'description',
+          'name',
+          'workflow_status',
+          'document_hash',
+          'perceptual_hash',
+          'fraud_score',
+          'fraud_detection_details',
+          'fraud_detection_status',
+          'anomaly_confidence',
+          'manager_approved',
+          'manager_approved_by',
+          'manager_approved_date',
+          'manager_remarks',
+          'manager_decision',
+          'hr_escalated',
+          'hr_approved',
+          'hr_approved_by',
+          'hr_approved_date',
+          'hr_remarks',
+          'hr_decision',
+          'policy_check_passed',
+          'policy_check_details',
+          'policy_check_date',
+          'approval_token',
+          'approval_token_expiry',
+          'approval_token_type',
+          'submitted_date',
+          'completed_date',
+          'create_date',
+          'write_date'
+        ]
+      ]);
+
+      return expenses[0] || null;
+    } catch (error) {
+      console.error('Error getting expense:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search expenses with filters
+   */
+  async searchExpenses(filters = {}) {
+    try {
+      let domain = [];
+
+      // Helper to extract value (handles both arrays and direct values)
+      const getValue = (val) => {
+        return Array.isArray(val) ? val[0] : val;
+      };
+
+      if (filters.employee_id) {
+        domain.push(['employee_id', '=', getValue(filters.employee_id)]);
+      }
+
+      if (filters.workflow_status) {
+        domain.push(['workflow_status', '=', getValue(filters.workflow_status)]);
+      }
+
+      if (filters.expense_category) {
+        domain.push(['expense_category', '=', getValue(filters.expense_category)]);
+      }
+
+      if (filters.vendor_name) {
+        domain.push(['vendor_name', 'ilike', getValue(filters.vendor_name)]);
+      }
+
+      if (filters.expense_date_from) {
+        domain.push(['date', '>=', getValue(filters.expense_date_from)]);
+      }
+
+      if (filters.expense_date_to) {
+        domain.push(['date', '<=', getValue(filters.expense_date_to)]);
+      }
+
+      if (filters.create_date_from) {
+        domain.push(['create_date', '>=', getValue(filters.create_date_from)]);
+      }
+
+      if (filters.create_date_to) {
+        domain.push(['create_date', '<=', getValue(filters.create_date_to)]);
+      }
+
+      const expenseIds = await this.execute('hr.expense', 'search', [domain]);
+
+      if (expenseIds.length === 0) {
+        return [];
+      }
+
+      const expenses = await this.execute('hr.expense', 'read', [
+        expenseIds,
+        [
+          'id',
+          'employee_id',
+          'expense_category',
+          'total_amount',
+          'vendor_name',
+          'date',
+          'description',
+          'workflow_status',
+          'fraud_score',
+          'fraud_detection_status',
+          'manager_approved',
+          'manager_approved_date',
+          'hr_escalated',
+          'hr_approved',
+          'hr_approved_date',
+          'policy_check_passed',
+          'approval_token',  // Added for HR decision validation
+          'create_date'
+        ]
+      ]);
+
+      return expenses;
+    } catch (error) {
+      console.error('Error searching expenses:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update expense record
+   */
+  async updateExpense(expenseId, updateData) {
+    try {
+      // Parse ID to integer (critical for Odoo)
+      const id = parseInt(expenseId, 10);
+      if (isNaN(id)) {
+        throw new Error(`Invalid expense ID: ${expenseId}`);
+      }
+
+      await this.update('hr.expense', id, updateData);
+      console.log('✅ Expense updated:', id);
+      return true;
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create attachment for expense
+   */
+  async createAttachment(resModel, resId, fileName, fileData) {
+    try {
+      const base64Data = fileData.toString('base64');
+
+      const attachmentId = await this.create('ir.attachment', {
+        name: fileName,
+        datas: base64Data,
+        res_model: resModel,
+        res_id: resId,
+        type: 'binary',
+        mimetype: this.getMimeType(fileName)
+      });
+
+      console.log('✅ Attachment created:', attachmentId);
+      return attachmentId;
+    } catch (error) {
+      console.error('Error creating attachment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Attach file to expense
+   */
+  async attachFileToExpense(expenseId, attachmentId) {
+    try {
+      // Link attachment to expense via many2one or computed field
+      await this.update('hr.expense', expenseId, {
+        attachment_ids: [[4, attachmentId]] // Add to many2many
+      });
+
+      console.log('✅ File attached to expense');
+      return true;
+    } catch (error) {
+      console.error('Error attaching file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get MIME type from filename
+   */
+  getMimeType(fileName) {
+    const ext = fileName.split('.').pop().toLowerCase();
+    const mimeTypes = {
+      'pdf': 'application/pdf',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    };
+
+    return mimeTypes[ext] || 'application/octet-stream';
+  }
 }
 
 const adapterInstance = new OdooAdapter();
