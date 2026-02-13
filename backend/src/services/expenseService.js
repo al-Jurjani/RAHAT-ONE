@@ -1,6 +1,7 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const crypto = require('crypto');
 const powerAutomateService = require('./powerAutomateService');
+const fraudDetectionService = require('./fraudDetectionService');
 
 class ExpenseService {
   /**
@@ -177,10 +178,68 @@ class ExpenseService {
         }
       }
 
-      // 6. Get created expense details
+      // 6. Run fraud detection if invoice file is provided
+      let fraudResult = null;
+      if (invoiceFile && policyCheck.passed) {
+        try {
+          console.log('🔍 Running fraud detection...');
+
+          // Run fraud detection pipeline
+          fraudResult = await fraudDetectionService.runFraudDetection(
+            invoiceFile.data, // Buffer
+            employeeId,
+            parseFloat(expenseData.amount)
+          );
+
+          console.log(`🔍 Fraud detection complete: ${fraudResult.status} (score: ${fraudResult.overallScore.toFixed(3)})`);
+
+          // Update expense with fraud detection results
+          await odooAdapter.updateExpenseWithFraudResult(expenseId, fraudResult);
+
+          // Adjust workflow based on fraud status
+          const workflowUpdates = {};
+
+          if (fraudResult.status === 'fraudulent') {
+            // Fraudulent: Auto-escalate to HR for review (Option A)
+            console.log('⚠️  FRAUDULENT expense detected - escalating to HR');
+            workflowUpdates.hr_escalated = true;
+            workflowUpdates.hr_decision = 'pending';
+            workflowUpdates.workflow_status = 'pending_hr'; // Skip manager, go straight to HR
+            workflowUpdates.manager_decision = 'auto_escalated'; // Mark as auto-escalated
+            workflowUpdates.approval_token_type = 'hr'; // Token for HR approval
+
+          } else if (fraudResult.status === 'suspicious') {
+            // Suspicious: Flag for HR review but follow normal flow
+            console.log('⚠️  SUSPICIOUS expense detected - flagging for HR review');
+            workflowUpdates.hr_escalated = true;
+            workflowUpdates.hr_decision = 'pending';
+            // Keep workflow_status as 'pending_manager' - manager reviews first, then HR
+          }
+
+          // Apply workflow updates if needed
+          if (Object.keys(workflowUpdates).length > 0) {
+            await odooAdapter.updateExpense(expenseId, workflowUpdates);
+          }
+
+        } catch (fraudError) {
+          console.error('⚠️  Fraud detection failed (non-blocking):', fraudError.message);
+          // Don't fail expense submission if fraud detection fails
+          // Continue with normal workflow
+          fraudResult = {
+            status: 'error',
+            overallScore: 0,
+            recommendation: `Fraud detection unavailable: ${fraudError.message}`,
+            error: true
+          };
+        }
+      } else if (!invoiceFile && policyCheck.passed) {
+        console.log('⚠️  No invoice file provided - skipping fraud detection');
+      }
+
+      // 7. Get created expense details (after fraud detection updates)
       const createdExpense = await odooAdapter.getExpense(expenseId);
 
-      // 7. Trigger Power Automate flow for policy check and email notifications
+      // 8. Trigger Power Automate flow with fraud detection results
       try {
         // Get employee details
         const employee = await odooAdapter.getEmployee(employeeId);
@@ -191,13 +250,38 @@ class ExpenseService {
           manager = await odooAdapter.getEmployee(employee.parent_id[0]);
         }
 
+        // Prepare fraud detection payload
+        const fraudPayload = fraudResult ? {
+          fraudDetected: fraudResult.status !== 'clean',
+          fraudStatus: fraudResult.status, // 'clean', 'suspicious', 'fraudulent', 'error'
+          fraudScore: fraudResult.overallScore,
+          fraudConfidence: fraudResult.confidence || 0,
+          fraudRecommendation: fraudResult.recommendation,
+          fraudLayers: fraudResult.layers ? {
+            md5Match: fraudResult.layers.md5?.matched || false,
+            pHashSimilarity: fraudResult.layers.pHash?.similarity || 0,
+            clipSimilarity: fraudResult.layers.clip?.similarity || 0,
+            florenceFraudScore: fraudResult.layers.florence?.score || 0,
+            anomalyZScore: fraudResult.layers.anomaly?.zScore || null
+          } : null,
+          fraudProcessingTime: fraudResult.processingTime || 0
+        } : {
+          fraudDetected: false,
+          fraudStatus: invoiceFile ? 'not_run' : 'no_invoice',
+          fraudScore: 0,
+          fraudRecommendation: invoiceFile ? 'Fraud detection not run' : 'No invoice file provided'
+        };
+
         // Trigger flow (fire and forget)
         powerAutomateService.triggerExpensePolicyFlow(
           {
             expenseId,
             employeeId,
             ...expenseData,
-            approval_token: odooExpenseData.approval_token
+            approval_token: createdExpense.approval_token,
+            workflow_status: createdExpense.workflow_status,
+            hr_escalated: createdExpense.hr_escalated || false,
+            fraud: fraudPayload
           },
           policyCheck,
           employee,
@@ -215,9 +299,20 @@ class ExpenseService {
         expense: createdExpense,
         policyCheckPassed: policyCheck.passed,
         policyViolations: policyCheck.violations,
-        escalatedForHR: odooExpenseData.hr_decision === 'pending',
+        escalatedForHR: createdExpense.hr_escalated || false,
+        fraudDetection: fraudResult ? {
+          status: fraudResult.status,
+          score: fraudResult.overallScore,
+          confidence: fraudResult.confidence || 0,
+          recommendation: fraudResult.recommendation,
+          processingTime: fraudResult.processingTime
+        } : null,
         message: policyCheck.passed
-          ? 'Expense submitted successfully'
+          ? (fraudResult?.status === 'fraudulent'
+              ? 'Expense submitted but flagged as fraudulent - escalated to HR'
+              : fraudResult?.status === 'suspicious'
+                ? 'Expense submitted but flagged as suspicious - will require HR review'
+                : 'Expense submitted successfully')
           : 'Expense rejected due to policy violations'
       };
     } catch (error) {

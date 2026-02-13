@@ -63,10 +63,11 @@ class ExpenseController {
 
       return respondSuccess(res, {
         expenseId: result.expenseId,
-        status: result.policyCheckPassed ? 'pending_manager' : 'rejected',
+        status: result.expense.workflow_status,
         message: result.message,
         policyViolations: result.policyViolations,
-        escalatedForHR: result.escalatedForHR
+        escalatedForHR: result.escalatedForHR,
+        fraudDetection: result.fraudDetection
       }, 'Expense submitted successfully');
 
     } catch (error) {
