@@ -1,18 +1,36 @@
 import os
-import random
 import xmlrpc.client
-from datetime import datetime, timedelta
-
 from dotenv import load_dotenv
 
+
+# -----------------------------
 # Odoo Connection Settings
+# -----------------------------
 ODOO_URL = "http://localhost:8069"
 ODOO_DB = "rahatone_db"
-load_dotenv()
+
+load_dotenv(dotenv_path="../backend/.env")
 ODOO_USERNAME = os.getenv("ODOO_USERNAME")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD")
 
 
+# -----------------------------
+# Connect to Odoo
+# -----------------------------
+def connect_odoo():
+    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+    uid = common.authenticate(ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD, {})
+    if not uid:
+        raise Exception("Odoo authentication failed")
+
+    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    print(f"Connected to Odoo (UID={uid})")
+    return uid, models
+
+
+# -----------------------------
+# Departments
+# -----------------------------
 def create_departments(uid, models):
     departments = [
         "Human Resources",
@@ -31,6 +49,7 @@ def create_departments(uid, models):
             "hr.department", "search",
             [[["name", "=", name]]]
         )
+
         if existing:
             dept_ids[name] = existing[0]
             print(f" ↳ {name} (exists)")
@@ -45,7 +64,53 @@ def create_departments(uid, models):
     return dept_ids
 
 
-def create_employees_and_users(uid, models, dept_ids, job_ids):
+# -----------------------------
+# Job Positions
+# -----------------------------
+def create_job_positions(uid, models, dept_ids):
+    positions = {
+        "Human Resources": ["HR Manager", "HR Officer"],
+        "Finance & Accounting": ["Finance Manager", "Accountant"],
+        "IT & Systems": ["IT Manager", "ERP / RPA Analyst"],
+        "Store Operations": ["Store Manager", "Sales Associate", "Cashier"],
+        "Supply Chain & Logistics": ["Supply Chain Manager", "Warehouse Coordinator"],
+    }
+
+    job_ids = {}
+    print("\nCreating job positions...")
+
+    for dept, roles in positions.items():
+        dept_id = dept_ids[dept]
+        print(f"\n {dept}:")
+        for role in roles:
+            existing = models.execute_kw(
+                ODOO_DB, uid, ODOO_PASSWORD,
+                "hr.job", "search",
+                [[["name", "=", role], ["department_id", "=", dept_id]]]
+            )
+
+            if existing:
+                job_ids[role] = existing[0]
+                print(f"   ↳ {role} (exists)")
+            else:
+                job_ids[role] = models.execute_kw(
+                    ODOO_DB, uid, ODOO_PASSWORD,
+                    "hr.job", "create",
+                    [{
+                        "name": role,
+                        "department_id": dept_id,
+                        "no_of_recruitment": 1,
+                    }]
+                )
+                print(f"   ✓ {role}")
+
+    return job_ids
+
+
+# -----------------------------
+# Employees + Users (1 per role)
+# -----------------------------
+def create_employees_and_users(uid, models, job_ids):
     print("\nCreating employees and users...")
 
     employees = [
@@ -65,17 +130,16 @@ def create_employees_and_users(uid, models, dept_ids, job_ids):
     for name, job in employees:
         email = f"{name.lower().replace(' ', '.')}@outfitters.com.pk"
 
-	# 🔒 Check if user already exists
-    existing_user = models.execute_kw(
-        ODOO_DB, uid, ODOO_PASSWORD,
-        "res.users", "search",
-        [[["login", "=", email]]]
-    )
-    if existing_user:
-        print(f" ↳ User already exists: {email}, skipping")
-        continue
+        existing_user = models.execute_kw(
+            ODOO_DB, uid, ODOO_PASSWORD,
+            "res.users", "search",
+            [[["login", "=", email]]]
+        )
 
-        # Create user
+        if existing_user:
+            print(f" ↳ User already exists: {email}, skipping")
+            continue
+
         user_id = models.execute_kw(
             ODOO_DB, uid, ODOO_PASSWORD,
             "res.users", "create",
@@ -86,7 +150,6 @@ def create_employees_and_users(uid, models, dept_ids, job_ids):
             }]
         )
 
-        # Create employee
         models.execute_kw(
             ODOO_DB, uid, ODOO_PASSWORD,
             "hr.employee", "create",
@@ -102,81 +165,19 @@ def create_employees_and_users(uid, models, dept_ids, job_ids):
 
     print(f"\nTotal employees/users created: {len(employees)}")
 
-def create_job_positions(uid, models, dept_ids):
-    positions = {
-        "Human Resources": [
-            "HR Manager",
-            "HR Officer",
-        ],
-        "Finance & Accounting": [
-            "Finance Manager",
-            "Accountant",
-        ],
-        "IT & Systems": [
-            "IT Manager",
-            "ERP / RPA Analyst",
-        ],
-        "Store Operations": [
-            "Store Manager",
-            "Sales Associate",
-            "Cashier",
-        ],
-        "Supply Chain & Logistics": [
-            "Supply Chain Manager",
-            "Warehouse Coordinator",
-        ],
-    }
 
-    job_ids = {}
-    print("\nCreating job positions...")
-
-    for dept, roles in positions.items():
-        dept_id = dept_ids[dept]
-        print(f"\n {dept}:")
-        for role in roles:
-            existing = models.execute_kw(
-                ODOO_DB, uid, ODOO_PASSWORD,
-                "hr.job", "search",
-                [[["name", "=", role], ["department_id", "=", dept_id]]]
-            )
-            if existing:
-                job_ids[role] = existing[0]
-                print(f"   ↳ {role}")
-            else:
-                job_ids[role] = models.execute_kw(
-                    ODOO_DB, uid, ODOO_PASSWORD,
-                    "hr.job", "create",
-                    [{
-                        "name": role,
-                        "department_id": dept_id,
-                        "no_of_recruitment": 1
-                    }]
-                )
-                print(f"   ✓ {role}")
-
-    return job_ids
-
-
-def connect_odoo():
-    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
-    uid = common.authenticate(ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD, {})
-    if not uid:
-        raise Exception("Odoo authentication failed")
-    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
-    print(f"Connected to Odoo (UID={uid})")
-    return uid, models
-
-
+# -----------------------------
+# Main
+# -----------------------------
 if __name__ == "__main__":
     print("=" * 60)
     print("RAHAT-ONE | Outfitters-Aligned Mock Data")
     print("=" * 60)
 
     uid, models = connect_odoo()
-
     dept_ids = create_departments(uid, models)
     job_ids = create_job_positions(uid, models, dept_ids)
-    create_employees_and_users(uid, models, dept_ids, job_ids)
+    create_employees_and_users(uid, models, job_ids)
 
-    print("\n✅ Mock data population completed (clean + realistic)")
+    print("\n✅ Mock data population completed successfully")
     print("=" * 60)
