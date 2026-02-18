@@ -127,7 +127,11 @@ class PowerAutomateService {
         policyViolations: policyCheck.violations || [],
         submittedDate: new Date().toISOString(),
         approvalToken: expenseData.approval_token || null,
-        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000',
+        // Workflow and fraud detection results (match Power Automate schema)
+        workflow_status: expenseData.workflow_status || 'pending_manager',
+        hr_escalated: expenseData.hr_escalated || false,
+        fraud: expenseData.fraud || null
       };
 
       console.log('📤 Triggering Power Automate expense policy flow...');
@@ -136,7 +140,7 @@ class PowerAutomateService {
 
       const response = await axios.post(this.expensePolicyFlowUrl, payload, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+        timeout: 60000  // 60s — PA flows can take time to send emails and respond
       });
 
       console.log('✅ Power Automate expense policy flow triggered successfully');

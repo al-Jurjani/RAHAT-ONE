@@ -205,8 +205,8 @@ class ExpenseService {
             workflowUpdates.hr_escalated = true;
             workflowUpdates.hr_decision = 'pending';
             workflowUpdates.workflow_status = 'pending_hr'; // Skip manager, go straight to HR
-            workflowUpdates.manager_decision = 'auto_escalated'; // Mark as auto-escalated
             workflowUpdates.approval_token_type = 'hr'; // Token for HR approval
+            // Note: manager_decision stays 'pending' since manager is bypassed
 
           } else if (fraudResult.status === 'suspicious') {
             // Suspicious: Flag for HR review but follow normal flow
@@ -262,8 +262,15 @@ class ExpenseService {
             pHashSimilarity: fraudResult.layers.pHash?.similarity || 0,
             clipSimilarity: fraudResult.layers.clip?.similarity || 0,
             florenceFraudScore: fraudResult.layers.florence?.score || 0,
-            anomalyZScore: fraudResult.layers.anomaly?.zScore || null
-          } : null,
+            anomalyZScore: fraudResult.layers.anomaly?.zScore ?? 0  // Use 0 instead of null to match Power Automate schema
+          } : {
+            // Default values when fraud detection fails (Power Automate expects object, not null)
+            md5Match: false,
+            pHashSimilarity: 0,
+            clipSimilarity: 0,
+            florenceFraudScore: 0,
+            anomalyZScore: 0
+          },
           fraudProcessingTime: fraudResult.processingTime || 0
         } : {
           fraudDetected: false,
@@ -496,6 +503,80 @@ class ExpenseService {
       };
     } catch (error) {
       console.error('HR decision error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Escalate fraudulent expense to manager after HR approval
+   * (2-step approval: HR approves first, then manager must approve)
+   */
+  async escalateToManagerAfterHRApproval(expenseId, hrApprovalToken) {
+    try {
+      const expense = await odooAdapter.getExpense(expenseId);
+
+      if (!expense) {
+        throw new Error('Expense not found');
+      }
+
+      // Verify this was a fraudulent expense
+      if (expense.fraud_detection_status !== 'fraudulent') {
+        throw new Error('This endpoint is only for fraudulent expenses');
+      }
+
+      // Verify HR approval token matches
+      if (expense.approval_token !== hrApprovalToken) {
+        throw new Error('Invalid HR approval token');
+      }
+
+      // Verify expense is in pending_hr state
+      if (expense.workflow_status !== 'pending_hr') {
+        throw new Error(`Expense is in ${expense.workflow_status} state, cannot escalate to manager`);
+      }
+
+      console.log(`📝 Escalating fraudulent expense ${expenseId} to manager after HR approval`);
+
+      // Get employee and manager details
+      const employee = await odooAdapter.getEmployee(expense.employee_id[0]);
+
+      if (!employee.parent_id || !employee.parent_id[0]) {
+        throw new Error('Employee has no manager assigned');
+      }
+
+      const manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+
+      // Generate new approval token for manager
+      const newApprovalToken = this.generateApprovalToken();
+      const tokenExpiry = this.getTokenExpiry();
+
+      // Update expense: change workflow to pending_manager, update token
+      const updateData = {
+        workflow_status: 'pending_manager',
+        approval_token: newApprovalToken,
+        approval_token_expiry: tokenExpiry,
+        approval_token_type: 'manager',
+        hr_approved: true, // Mark HR as approved
+        hr_approved_date: this.formatOdooDateTime(),
+        hr_decision: 'approved',
+        manager_decision: 'pending' // Reset manager decision
+      };
+
+      await odooAdapter.updateExpense(expenseId, updateData);
+
+      console.log('✅ Expense escalated to manager successfully');
+
+      return {
+        success: true,
+        newApprovalToken,
+        managerEmail: manager.work_email || manager.private_email,
+        managerName: manager.name,
+        employeeName: employee.name,
+        fraudScore: expense.fraud_score,
+        fraudStatus: expense.fraud_detection_status
+      };
+
+    } catch (error) {
+      console.error('Escalate to manager error:', error);
       throw error;
     }
   }

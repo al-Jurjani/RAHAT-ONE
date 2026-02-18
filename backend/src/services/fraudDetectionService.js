@@ -110,7 +110,7 @@ async function runFraudDetection(imageBuffer, employeeId, amount) {
         // Early exit if exact MD5 match found
         if (md5Result.matched) {
             console.log('[FraudDetection] ⚠️ EXACT DUPLICATE detected via MD5! Early exit.');
-            return buildEarlyExitResult(md5Result, startTime);
+            return buildEarlyExitResult(md5Result, pHashResult, anomalyResult, startTime);
         }
 
         // ===== PHASE 2: ML LAYERS (PARALLEL) =====
@@ -167,6 +167,15 @@ async function runFraudDetection(imageBuffer, employeeId, amount) {
 
         // Calculate weighted overall score
         const overallScore = calculateWeightedScore(layers);
+
+        // Log detailed layer scores
+        console.log('[FraudDetection] Layer Scores:');
+        console.log(`  MD5:      ${layers.md5.score.toFixed(3)} (weight: 0.35) - ${layers.md5.details}`);
+        console.log(`  pHash:    ${layers.pHash.score.toFixed(3)} (weight: 0.20) - ${layers.pHash.details}`);
+        console.log(`  CLIP:     ${layers.clip.score.toFixed(3)} (weight: 0.25) - ${layers.clip.details}`);
+        console.log(`  Florence: ${layers.florence.score.toFixed(3)} (weight: 0.10) - ${layers.florence.details}`);
+        console.log(`  Anomaly:  ${layers.anomaly.score.toFixed(3)} (weight: 0.10) - ${layers.anomaly.details}`);
+        console.log(`  Overall:  ${overallScore.toFixed(3)}`);
 
         // Determine status
         const status = determineStatus(overallScore, layers);
@@ -507,18 +516,19 @@ function generateRecommendation(status, layers) {
 
 /**
  * Build early exit result when MD5 match found
+ * Includes pHash and anomaly results that were already calculated in Phase 1
  */
-function buildEarlyExitResult(md5Result, startTime) {
+function buildEarlyExitResult(md5Result, pHashResult, anomalyResult, startTime) {
     return {
         status: 'fraudulent',
         overallScore: 1.0,
         confidence: 1.0,
         layers: {
             md5: md5Result,
-            pHash: { score: 0, details: 'Skipped - early exit on MD5 match' },
-            clip: { score: 0, details: 'Skipped - early exit on MD5 match' },
-            florence: { score: 0, details: 'Skipped - early exit on MD5 match' },
-            anomaly: { score: 0, details: 'Skipped - early exit on MD5 match' }
+            pHash: pHashResult, // Include actual pHash result
+            clip: { score: 0, details: 'Skipped - early exit on MD5 match', embedding: null },
+            florence: { score: 0, details: 'Skipped - early exit on MD5 match', analysis: null },
+            anomaly: anomalyResult // Include actual anomaly result
         },
         recommendation: 'REJECT - Exact duplicate file detected',
         processingTime: Date.now() - startTime,

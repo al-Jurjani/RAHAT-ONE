@@ -1012,13 +1012,15 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'workflow_status',
           'fraud_score',
           'fraud_detection_status',
+          // Detail fields (fraud_detection_details, document_hash, perceptual_hash,
+          // anomaly_confidence, clip_embedding, florence_analysis) fetched via getExpense()
           'manager_approved',
           'manager_approved_date',
           'hr_escalated',
           'hr_approved',
           'hr_approved_date',
           'policy_check_passed',
-          'approval_token',  // Added for HR decision validation
+          'approval_token',
           'create_date'
         ]
       ]);
@@ -1272,14 +1274,41 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
         fraud_score: fraudResult.overallScore,
         fraud_detection_status: fraudResult.status,  // 'clean', 'suspicious', 'fraudulent'
 
-        // Store detailed layer results
+        // Store detailed layer results (full objects with scores)
         fraud_detection_details: JSON.stringify({
           layers: {
-            md5: fraudResult.layers.md5.details,
-            pHash: fraudResult.layers.pHash.details,
-            clip: fraudResult.layers.clip.details,
-            florence: fraudResult.layers.florence.details,
-            anomaly: fraudResult.layers.anomaly.details
+            md5: {
+              score: fraudResult.layers.md5.score,
+              details: fraudResult.layers.md5.details,
+              matched: fraudResult.layers.md5.matched || false,
+              matchedExpenseId: fraudResult.layers.md5.matchedExpenseId || null
+            },
+            pHash: {
+              score: fraudResult.layers.pHash.score,
+              details: fraudResult.layers.pHash.details,
+              similarity: fraudResult.layers.pHash.similarity || 0,
+              matched: fraudResult.layers.pHash.matched || false
+            },
+            clip: {
+              score: fraudResult.layers.clip.score,
+              details: fraudResult.layers.clip.details,
+              similarity: fraudResult.layers.clip.similarity || 0,
+              matched: fraudResult.layers.clip.matched || false,
+              error: fraudResult.layers.clip.error || false
+            },
+            florence: {
+              score: fraudResult.layers.florence.score,
+              details: fraudResult.layers.florence.details,
+              flags: fraudResult.layers.florence.flags || [],
+              analysis: fraudResult.layers.florence.analysis || null,
+              error: fraudResult.layers.florence.error || false
+            },
+            anomaly: {
+              score: fraudResult.layers.anomaly.score,
+              details: fraudResult.layers.anomaly.details,
+              zScore: fraudResult.layers.anomaly.zScore || null,
+              isAnomaly: fraudResult.layers.anomaly.isAnomaly || false
+            }
           },
           recommendation: fraudResult.recommendation,
           confidence: fraudResult.confidence,

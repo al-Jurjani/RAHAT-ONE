@@ -50,7 +50,7 @@ async function analyzeInvoiceML(imageBuffer) {
             { image: base64Image },
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 30000  // 30 second timeout (cold start can take 20s)
+                timeout: 90000  // 90 second timeout (cold start can take 30-60s when loading CLIP + Florence-2 models)
             }
         );
 
