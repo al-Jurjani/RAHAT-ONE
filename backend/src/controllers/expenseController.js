@@ -63,10 +63,11 @@ class ExpenseController {
 
       return respondSuccess(res, {
         expenseId: result.expenseId,
-        status: result.policyCheckPassed ? 'pending_manager' : 'rejected',
+        status: result.expense.workflow_status,
         message: result.message,
         policyViolations: result.policyViolations,
-        escalatedForHR: result.escalatedForHR
+        escalatedForHR: result.escalatedForHR,
+        fraudDetection: result.fraudDetection
       }, 'Expense submitted successfully');
 
     } catch (error) {
@@ -292,25 +293,32 @@ class ExpenseController {
       const { token, decision, remarks } = req.body;
 
       console.log('👤 Manager decision received:', { expenseId, decision });
+      console.log('   Full request body:', JSON.stringify(req.body));
+      console.log('   Token provided:', token ? `${token.substring(0, 10)}...` : 'MISSING');
 
       if (!token || !decision) {
+        console.log('   ❌ Missing token or decision');
         return respondError(res, 'Token and decision are required', 400);
       }
 
       if (!['approve', 'reject'].includes(decision)) {
+        console.log('   ❌ Invalid decision value:', decision);
         return respondError(res, 'Decision must be "approve" or "reject"', 400);
       }
 
       // Validate token
       const tokenValidation = await expenseService.validateApprovalToken(expenseId, token);
       if (!tokenValidation.valid) {
+        console.log('   ❌ Token validation failed:', tokenValidation.reason);
         return respondError(res, tokenValidation.reason, 401);
       }
 
       const expense = tokenValidation.expense;
+      console.log('   Expense current status:', expense.workflow_status, '| hr_escalated:', expense.hr_escalated);
 
       // Verify expense is awaiting manager approval
       if (expense.workflow_status !== 'pending_manager') {
+        console.log('   ❌ Wrong state:', expense.workflow_status);
         return respondError(res, `Expense is in "${expense.workflow_status}" state, cannot process manager decision`, 400);
       }
 
@@ -327,6 +335,17 @@ class ExpenseController {
 
       // Trigger Power Automate for decision notification
       const employee = await odooAdapter.getEmployee(result.expense.employee_id[0]);
+
+      // Get manager details for Flow 2 (needed for fraudulent expense escalation)
+      let manager = null;
+      if (employee.parent_id && employee.parent_id[0]) {
+        try {
+          manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+        } catch (err) {
+          console.error('⚠️  Could not fetch manager details:', err.message);
+        }
+      }
+
       const payloadForPA = {
         expenseId: parseInt(expenseId, 10),  // Parse to integer
         decision,
@@ -342,7 +361,10 @@ class ExpenseController {
         approvalToken: result.expense.approval_token || null,
         workflowStatus: result.expense.workflow_status,
         processedAt: new Date().toISOString(),
-        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000',
+        fraudDetectionStatus: result.expense.fraud_detection_status || 'not_run',
+        managerEmail: manager ? (manager.work_email || manager.private_email) : null,
+        managerName: manager ? manager.name : null
       };
 
       powerAutomateService.triggerApprovalResponseFlow(payloadForPA).catch(err => {
@@ -411,6 +433,17 @@ class ExpenseController {
 
       // Trigger Power Automate for final notification
       const employee = await odooAdapter.getEmployee(result.expense.employee_id[0]);
+
+      // Get manager details for Flow 2 (needed for fraudulent expense escalation)
+      let manager = null;
+      if (employee.parent_id && employee.parent_id[0]) {
+        try {
+          manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+        } catch (err) {
+          console.error('⚠️  Could not fetch manager details:', err.message);
+        }
+      }
+
       const payloadForPA = {
         expenseId: parseInt(expenseId, 10),  // Parse to integer
         decision,
@@ -423,7 +456,11 @@ class ExpenseController {
         remarks: remarks || '',
         workflowStatus: result.expense.workflow_status,
         processedAt: new Date().toISOString(),
-        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000',
+        fraudDetectionStatus: result.expense.fraud_detection_status || 'not_run',
+        approvalToken: result.expense.approval_token || null,
+        managerEmail: manager ? (manager.work_email || manager.private_email) : null,
+        managerName: manager ? manager.name : null
       };
 
       powerAutomateService.triggerApprovalResponseFlow(payloadForPA).catch(err => {
@@ -488,6 +525,41 @@ class ExpenseController {
 
     } catch (error) {
       console.error('Get pending approval error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
+
+  /**
+   * POST /api/expenses/:expenseId/escalate-to-manager
+   * Escalate fraudulent expense to manager after HR approval (2-step approval)
+   */
+  async escalateToManagerAfterHR(req, res) {
+    try {
+      const { expenseId } = req.params;
+      const { hrApprovalToken } = req.body;
+
+      console.log('🔄 Escalating fraudulent expense to manager after HR approval:', expenseId);
+
+      if (!hrApprovalToken) {
+        return respondError(res, 'HR approval token required', 400);
+      }
+
+      // Escalate to manager (generates new token, updates workflow, sends email)
+      const result = await expenseService.escalateToManagerAfterHRApproval(
+        expenseId,
+        hrApprovalToken
+      );
+
+      return respondSuccess(res, {
+        success: true,
+        expenseId,
+        newApprovalToken: result.newApprovalToken,
+        managerEmail: result.managerEmail,
+        message: 'Expense escalated to manager for final approval'
+      }, 'Escalated to manager successfully');
+
+    } catch (error) {
+      console.error('Escalate to manager error:', error);
       return respondError(res, error.message, 500);
     }
   }

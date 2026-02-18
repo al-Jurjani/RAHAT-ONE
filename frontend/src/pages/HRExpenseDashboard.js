@@ -12,6 +12,7 @@ import { ArrowBack } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PendingExpensesTable from '../components/HRDashboard/PendingExpensesTable';
 import AllExpensesTable from '../components/HRDashboard/AllExpensesTable';
+import FlaggedExpensesTable from '../components/HRDashboard/FlaggedExpensesTable';
 
 const HRExpenseDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -62,11 +63,10 @@ const HRExpenseDashboard = () => {
             />
           )}
           {activeTab === 2 && (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
-              <Typography color="textSecondary">
-                Fraud detection system coming soon. Check back later!
-              </Typography>
-            </Box>
+            <FlaggedExpensesTable
+              refreshTrigger={refreshTrigger}
+              onActionComplete={handleActionComplete}
+            />
           )}
         </Box>
       </Paper>
