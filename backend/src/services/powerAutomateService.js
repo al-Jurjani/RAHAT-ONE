@@ -116,8 +116,8 @@ class PowerAutomateService {
         employeeId: expenseData.employeeId,
         employeeName: employee.name,
         employeeEmail: employee.work_email || employee.private_email,
-        managerName: manager?.name || null,
-        managerEmail: manager?.work_email || manager?.private_email || null,
+        managerName: manager?.name || '',
+        managerEmail: manager?.work_email || manager?.private_email || '',
         category: expenseData.category,
         amount: parseFloat(expenseData.amount),  // Convert to number
         vendor: expenseData.vendor_name,
