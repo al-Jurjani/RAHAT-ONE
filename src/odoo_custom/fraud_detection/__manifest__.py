@@ -1,20 +1,31 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "RAHAT-ONE Fraud Detection",
-    "version": "1.0",
+    "name": "RAHAT-ONE Fraud Detection & Expense Workflow",
+    "version": "2.0",
     "category": "Human Resources",
-    "summary": "Adds fraud detection fields to HR Expenses for RAHAT-ONE FYP",
+    "summary": "Fraud detection and multi-level approval workflow for HR Expenses",
     "description": """
-        This module extends the hr.expense model with custom fields for:
-        - Document hash (MD5)
-        - Perceptual hash
-        - Fraud score
-        - Verification status
+        This module extends the hr.expense model with:
+
+        Fraud Detection:
+        - Document hash (MD5) for exact duplicate detection
+        - Perceptual hash for visual similarity detection
+        - Fraud score and verification status
         - AI detection metadata
+
+        Expense Workflow:
+        - Expense categories (Medical, Petrol, Travel, Other)
+        - Multi-level approval (Manager + HR escalation)
+        - Policy validation tracking
+        - Secure token-based email approvals
+        - Complete workflow state management
     """,
-    "author": "Zuhair Farhan - IBA FYP CS-26",
-    "depends": ["hr_expense"],
-    "data": [],
+    "author": "RAHAT-ONE Team - IBA FYP CS-26",
+    "depends": ["base", "hr", "hr_expense"],
+    "data": [
+        "security/ir.model.access.csv",
+        "views/hr_expense_views.xml",
+    ],
     "installable": True,
     "application": False,
     "auto_install": False,

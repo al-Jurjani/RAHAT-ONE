@@ -6,9 +6,6 @@ const fs = require('fs').promises;
 
 class OnboardingService {
   /**
-   * Initiate onboarding for a new employee
-   */
-  /**
  * Initiate onboarding for a new employee
  */
 async initiateOnboarding(employeeData) {
@@ -20,6 +17,11 @@ async initiateOnboarding(employeeData) {
       mobile_phone: employeeData.phone,
       department_id: employeeData.departmentId || false,
       job_id: employeeData.jobId || false,
+
+      // 🆕 ALSO SET HR ASSIGNED FIELDS (for tracking original assignment)
+      hr_assigned_department_id: employeeData.departmentId || false,
+      hr_assigned_job_id: employeeData.jobId || false,
+
       onboarding_status: 'initiated',
       onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
     });
@@ -358,32 +360,73 @@ async runAIVerification(employeeId, cnicFilePath, enteredData, extractedData) {
 
 /**
  * Convert date from dd.mm.yyyy to YYYY-MM-DD format for Odoo
+ * Also validates that the date is actually valid
  */
 _convertToOdooDateFormat(dateStr) {
   if (!dateStr) return null;
 
-  // If already in YYYY-MM-DD format, return as-is
+  let day, month, year;
+
+  // If already in YYYY-MM-DD format, validate and return
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return dateStr;
+    const parts = dateStr.split('-');
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10);
+    day = parseInt(parts[2], 10);
+
+    if (this._isValidDate(year, month, day)) {
+      return dateStr;
+    } else {
+      console.warn('⚠️ Invalid date in YYYY-MM-DD format:', dateStr);
+      return null;
+    }
   }
 
   // Convert dd.mm.yyyy to YYYY-MM-DD
   const match = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
   if (match) {
-    const [, day, month, year] = match;
-    return `${year}-${month}-${day}`;
+    [, day, month, year] = match.map(v => parseInt(v, 10));
+    if (this._isValidDate(year, month, day)) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    } else {
+      console.warn('⚠️ Invalid date from dd.mm.yyyy format:', dateStr);
+      return null;
+    }
   }
 
   // Try dd-mm-yyyy or dd/mm/yyyy
   const match2 = dateStr.match(/(\d{2})[\-\/](\d{2})[\-\/](\d{4})/);
   if (match2) {
-    const [, day, month, year] = match2;
-    return `${year}-${month}-${day}`;
+    [, day, month, year] = match2.map(v => parseInt(v, 10));
+    if (this._isValidDate(year, month, day)) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    } else {
+      console.warn('⚠️ Invalid date from dd-mm-yyyy format:', dateStr);
+      return null;
+    }
   }
 
   // If can't convert, return null (Odoo will handle)
   console.warn('⚠️ Could not convert date to Odoo format:', dateStr);
   return null;
+}
+
+/**
+ * Validate if a date is actually valid
+ */
+_isValidDate(year, month, day) {
+  // Basic range checks
+  if (year < 1900 || year > 2100) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  // Check if the date actually exists (e.g., not 31st Feb or 39th Aug)
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return false;
+  }
+
+  return true;
 }
 
 

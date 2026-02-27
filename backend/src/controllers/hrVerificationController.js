@@ -58,6 +58,13 @@ async function getVerificationDetails(req, res) {
 
     console.log('👤 Employee found:', employee ? employee.name : 'NULL');
 
+    // 🆕 ADD THIS DEBUG BLOCK
+    console.log('🔍 RAW ODOO DATA - HR Assigned Fields:');
+    console.log('   hr_assigned_department_id:', employee.hr_assigned_department_id);
+    console.log('   hr_assigned_job_id:', employee.hr_assigned_job_id);
+    console.log('   department_id:', employee.department_id);
+    console.log('   job_id:', employee.job_id);
+
     if (!employee) {
       console.error('❌ Employee not found in Odoo:', employeeId);
       return respondError(res, 'Employee not found', 404);
@@ -87,8 +94,8 @@ async function getVerificationDetails(req, res) {
         personalEmail: employee.private_email,
         workEmail: employee.work_email,
         phone: employee.mobile_phone,
-        cnic: employee.cnic_number,
-        fatherName: employee.father_name,
+        cnic: employee.cnic_number || employee.entered_cnic_number || 'N/A',
+        fatherName: employee.father_name || employee.entered_father_name || 'N/A',
         dateOfBirth: employee.birthday,
         department: employee.department_id ? employee.department_id[1] : 'N/A',
         departmentId: employee.department_id ? employee.department_id[0] : null,
@@ -216,6 +223,22 @@ async function approveCandidate(req, res) {
         ]);
 
         console.log('✅ Login account created! User ID:', userId);
+
+        // 🆕 LINK USER TO EMPLOYEE RECORD
+        try {
+          await odooAdapter.execute('hr.employee', 'write', [
+            [parseInt(employeeId)],
+            {
+              user_id: userId,
+              work_email: emp.work_email
+            }
+          ]);
+          console.log('✅ Employee record linked to user account');
+        } catch (linkError) {
+          console.error('⚠️ Warning: Failed to link user to employee:', linkError.message);
+          // Don't fail the entire approval if linking fails
+        }
+
       } else {
         console.log('ℹ️  User account already exists or missing data');
       }
@@ -457,6 +480,63 @@ async function getDocument(req, res) {
   }
 }
 
+/**
+ * Override candidate's department/position selection with HR's original assignment
+ * PUT /api/hr/verification/:employeeId/override-assignment
+ */
+async function overrideAssignment(req, res) {
+  try {
+    const { employeeId } = req.params;
+    const { useHRAssignment } = req.body; // true = use HR's, false = keep candidate's
+
+    const id = parseInt(employeeId);
+
+    console.log('🔄 Override assignment request:', { employeeId: id, useHRAssignment });
+
+    // Get employee data
+    const employee = await odooAdapter.getEmployee(id);
+
+    if (!employee) {
+      return respondError(res, 'Employee not found', 404);
+    }
+
+    let updateData = {};
+
+    if (useHRAssignment) {
+      // Override with HR's original assignment
+      if (employee.hr_assigned_department_id) {
+        updateData.department_id = employee.hr_assigned_department_id[0];
+        console.log('   Setting department to HR assigned:', employee.hr_assigned_department_id);
+      }
+      if (employee.hr_assigned_job_id) {
+        updateData.job_id = employee.hr_assigned_job_id[0];
+        console.log('   Setting position to HR assigned:', employee.hr_assigned_job_id);
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return respondError(res, 'No HR assignment found to override', 400);
+    }
+
+    // Update employee record
+    await odooAdapter.updateEmployee(id, updateData);
+
+    console.log('✅ Assignment overridden successfully');
+
+    return respondSuccess(res, {
+      employeeId: id,
+      message: useHRAssignment
+        ? 'Assignment overridden with HR values'
+        : 'Candidate selection accepted',
+      updatedFields: updateData
+    });
+
+  } catch (error) {
+    console.error('❌ Override assignment error:', error);
+    return respondError(res, 'Failed to override assignment', 500);
+  }
+}
+
 
 module.exports = {
   getPendingRegistrations,
@@ -465,5 +545,6 @@ module.exports = {
   getVerificationDetails,
   getDocument,
   approveCandidate,
-  rejectCandidate
+  rejectCandidate,
+  overrideAssignment
 };

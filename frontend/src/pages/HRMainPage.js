@@ -11,7 +11,7 @@ import {
   AppBar,
   Toolbar
 } from '@mui/material';
-import { VerifiedUser, PersonAdd, Logout, EventNote } from '@mui/icons-material';
+import { VerifiedUser, PersonAdd, Logout, EventNote, Receipt } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import InitiateOnboardingModal from '../components/InitiateOnboardingModal';
@@ -166,6 +166,44 @@ function HRMainPage() {
                     onClick={() => navigate('/hr/leave-dashboard')}
                   >
                     Manage Leaves
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+
+            {/* Expense Management Card */}
+            <Grid item xs={12} sm={6} md={4}>
+              <Card
+                sx={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4
+                  }
+                }}
+              >
+                <CardContent sx={{ flexGrow: 1, textAlign: 'center' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <Receipt sx={{ fontSize: 60, color: 'success.main' }} />
+                  </Box>
+                  <Typography variant="h5" component="h2" gutterBottom>
+                    Expense Management
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    Review and approve employee expense reimbursements, view invoices, and manage fraud detection
+                  </Typography>
+                </CardContent>
+                <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    size="large"
+                    onClick={() => navigate('/hr/expense-dashboard')}
+                  >
+                    Manage Expenses
                   </Button>
                 </CardActions>
               </Card>

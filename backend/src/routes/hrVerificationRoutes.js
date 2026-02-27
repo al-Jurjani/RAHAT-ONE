@@ -10,5 +10,6 @@ router.get('/details/:employeeId', hrVerificationController.getVerificationDetai
 router.get('/document/:documentId', hrVerificationController.getDocument);
 router.post('/approve/:employeeId', hrVerificationController.approveCandidate);
 router.post('/reject/:employeeId', hrVerificationController.rejectCandidate);
+router.put('/:employeeId/override-assignment', hrVerificationController.overrideAssignment);
 
 module.exports = router;
