@@ -21,20 +21,26 @@ import {
   Alert,
   Box,
   Tabs,
-  Tab
+  Tab,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  HourglassEmpty as HourglassEmptyIcon
+  HourglassEmpty as HourglassEmptyIcon,
+  Notes as NotesIcon,
+  Timelapse as TimelapseIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import LeaveMessagesDialog from './LeaveMessagesDialog';
 
 const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'confirm', 'validate', 'refuse'
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedLeaveId, setSelectedLeaveId] = useState(null);
 
   useEffect(() => {
     fetchLeaves();
@@ -69,6 +75,11 @@ const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
         label: 'Pending',
         color: 'warning',
         icon: <HourglassEmptyIcon fontSize="small" />
+      },
+      validate1: {
+        label: 'Pending HR',
+        color: 'info',
+        icon: <TimelapseIcon fontSize="small" />
       },
       validate: {
         label: 'Approved',
@@ -164,6 +175,7 @@ const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
                   <TableCell><strong>Status</strong></TableCell>
                   <TableCell><strong>Remarks</strong></TableCell>
                   <TableCell><strong>Submitted</strong></TableCell>
+                  <TableCell align="center"><strong>Log</strong></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -194,6 +206,13 @@ const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
                         {formatDate(leave.create_date)}
                       </Typography>
                     </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="View decision log">
+                        <IconButton size="small" onClick={() => setSelectedLeaveId(leave.id)}>
+                          <NotesIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -210,6 +229,12 @@ const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
           </Box>
         )}
       </CardContent>
+
+      <LeaveMessagesDialog
+        leaveId={selectedLeaveId}
+        open={!!selectedLeaveId}
+        onClose={() => setSelectedLeaveId(null)}
+      />
     </Card>
   );
 };

@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import PendingLeavesTable from '../components/HRDashboard/PendingLeavesTable';
 import AllLeavesTable from '../components/HRDashboard/AllLeavesTable';
 import AllocationManagement from '../components/HRDashboard/AllocationManagement';
+import BlackoutDatesManagement from '../components/HRDashboard/BlackoutDatesManagement';
 
 const HRLeaveDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -42,6 +43,7 @@ const HRLeaveDashboard = () => {
           <Tab label="Pending Approvals" />
           <Tab label="All Leaves" />
           <Tab label="Allocate Leaves" />
+          <Tab label="Blackout Dates" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -54,6 +56,7 @@ const HRLeaveDashboard = () => {
           )}
           {activeTab === 1 && <AllLeavesTable />}
           {activeTab === 2 && <AllocationManagement />}
+          {activeTab === 3 && <BlackoutDatesManagement />}
         </Box>
       </Paper>
     </Container>

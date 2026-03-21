@@ -343,16 +343,17 @@ const PendingLeavesTable = ({ onActionComplete }) => {
   const confirmAction = async () => {
     try {
       setActionLoading(true);
-      const token = localStorage.getItem('accessToken');
 
-      await axios.put(
-        `http://localhost:5000/api/leaves/${selectedLeave.id}/status`,
+      // Map button action to managerDecision format
+      const decision = action === 'approve' ? 'approved' : 'rejected';
+
+      await axios.post(
+        `http://localhost:5000/api/leaves/${selectedLeave.id}/manager-decision`,
         {
-          action: action,
+          decision,
+          managerName: 'HR Admin',
+          managerEmail: '',
           remarks: remarks || `${action === 'approve' ? 'Approved' : 'Rejected'} by HR`
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
         }
       );
 
