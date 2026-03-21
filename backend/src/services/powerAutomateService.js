@@ -66,35 +66,43 @@ class PowerAutomateService {
 
       const response = await axios.post(this.leaveFlowUrl, leaveData, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+        timeout: 30000
       });
 
-      console.log(`✅ Leave flow triggered successfully`);
-      return response.data;
+      console.log(`✅ Leave flow triggered successfully (status: ${response.status})`);
+      return true;
 
     } catch (error) {
       console.error(`❌ Leave flow error:`, error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
       return null;
     }
   }
 
   async triggerManagerDecisionFlow(decisionData) {
-  try {
-    console.log(`🔄 Triggering Manager Decision Flow`);
+    try {
+      console.log(`🔄 Triggering Manager Decision Flow`);
 
-    const response = await axios.post(this.managerDecisionFlowUrl, decisionData, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 10000
-    });
+      const response = await axios.post(this.managerDecisionFlowUrl, decisionData, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      });
 
-    console.log(`✅ Manager decision flow triggered successfully`);
-    return response.data;
+      console.log(`✅ Manager decision flow triggered successfully (status: ${response.status})`);
+      return true;
 
-  } catch (error) {
-    console.error(`❌ Manager decision flow error:`, error.message);
-    return null;
+    } catch (error) {
+      console.error(`❌ Manager decision flow error:`, error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      return null;
+    }
   }
-}
 
   // ==========================================
   // EXPENSE FLOWS (new)

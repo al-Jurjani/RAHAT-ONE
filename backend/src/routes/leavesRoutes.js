@@ -158,17 +158,25 @@ router.get('/employee/:employeeId/balance', leaveController.getEmployeeBalance);
 router.post('/allocate', leaveController.allocateLeave);
 
 /**
+ * GET /api/config/blackout-dates
+ * Get current blackout periods (HR management)
+ */
+router.get('/config/blackout-dates', leaveController.getBlackoutDates);
+
+/**
+ * PUT /api/config/blackout-dates
+ * Replace blackout periods list (HR management)
+ */
+router.put('/config/blackout-dates', leaveController.updateBlackoutDates);
+
+/**
  * GET /api/leaves/:id/messages
  * Get messages/notes for a leave request
  */
 router.get('/:id/messages', leaveController.getLeaveMessages);
 
-/**
- * PUT /api/leaves/:id/status
- * Approve or reject a leave request
- * Body: { action: 'approve' | 'reject', remarks: 'optional' }
- */
-router.put('/:id/status', leaveController.updateStatus);
+// PUT /api/leaves/:id/status — disabled (PA owns approvals)
+// router.put('/:id/status', leaveController.updateStatus);
 
 
 
