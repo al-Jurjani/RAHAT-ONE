@@ -14,7 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Pages
 import Login from './pages/Login';
 import RegistrationPage from './pages/RegistrationPage';
-import StatusPage from './pages/StatusPage';
+// import StatusPage from './pages/StatusPage'; // Removed — candidates get status via email now
 import HRMainPage from './pages/HRMainPage';
 import HRDashboard from './pages/HRDashboard';
 import HRVerificationDetails from './pages/HRVerificationDetails';
@@ -50,7 +50,7 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<RegistrationPage />} />
-            <Route path="/status" element={<StatusPage />} />
+            {/* <Route path="/status" element={<StatusPage />} /> */}{/* Removed — candidates get status via email now */}
             <Route path="/approve-leave/:leaveId" element={<ApproveLeave />} />
             <Route path="/approve-expense/:expenseId" element={<ApproveExpense />} />
             {/* <Route path="/leaves" element={<EmployeeLeavePage />} /> */}
