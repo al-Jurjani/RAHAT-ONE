@@ -203,6 +203,7 @@ class AuthService {
     return jwt.sign(
       {
         userId: user.id,
+        employee_id: user.employee_id ? user.employee_id[0] : null,  // ← ADDED
         email: user.email || user.login,
         name: user.name,
         role: user.rahatone_role
@@ -216,6 +217,7 @@ class AuthService {
     return jwt.sign(
       {
         userId: user.id,
+        employee_id: user.employee_id ? user.employee_id[0] : null,  // ← ADDED
         email: user.email || user.login,
         name: user.name,
         role: user.rahatone_role

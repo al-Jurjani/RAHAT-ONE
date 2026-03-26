@@ -4,6 +4,8 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import ApproveLeave from './pages/ApproveLeave';
+import ApproveExpense from './pages/ApproveExpense';
 
 // Auth
 import { AuthProvider } from './contexts/AuthContext';
@@ -17,6 +19,11 @@ import HRMainPage from './pages/HRMainPage';
 import HRDashboard from './pages/HRDashboard';
 import HRVerificationDetails from './pages/HRVerificationDetails';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import EmployeeLeavePage from './pages/EmployeeLeavePage';
+import HRLeaveDashboard from './pages/HRLeaveDashboard';
+import HRExpenseDashboard from './pages/HRExpenseDashboard';
+import ExpenseSubmission from './pages/ExpenseSubmission';
+import ExpenseHistory from './pages/ExpenseHistory';
 
 // Outfitters theme colors
 const theme = createTheme({
@@ -44,6 +51,10 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<RegistrationPage />} />
             <Route path="/status" element={<StatusPage />} />
+            <Route path="/approve-leave/:leaveId" element={<ApproveLeave />} />
+            <Route path="/approve-expense/:expenseId" element={<ApproveExpense />} />
+            {/* <Route path="/leaves" element={<EmployeeLeavePage />} /> */}
+
 
             {/* Protected HR Routes */}
             <Route
@@ -70,6 +81,22 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/hr/leave-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRLeaveDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hr/expense-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['hr']}>
+                  <HRExpenseDashboard />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Protected Employee Routes */}
             <Route
@@ -80,6 +107,31 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/expenses/submit"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <ExpenseSubmission />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/expenses/history"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <ExpenseHistory />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employee/leaves"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <EmployeeLeavePage />
+                </ProtectedRoute>
+              }
+            />
+
 
             {/* Redirect root to login */}
             <Route path="/" element={<Navigate to="/login" replace />} />

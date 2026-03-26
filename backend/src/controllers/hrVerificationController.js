@@ -58,6 +58,13 @@ async function getVerificationDetails(req, res) {
 
     console.log('👤 Employee found:', employee ? employee.name : 'NULL');
 
+    // 🆕 ADD THIS DEBUG BLOCK
+    console.log('🔍 RAW ODOO DATA - HR Assigned Fields:');
+    console.log('   hr_assigned_department_id:', employee.hr_assigned_department_id);
+    console.log('   hr_assigned_job_id:', employee.hr_assigned_job_id);
+    console.log('   department_id:', employee.department_id);
+    console.log('   job_id:', employee.job_id);
+
     if (!employee) {
       console.error('❌ Employee not found in Odoo:', employeeId);
       return respondError(res, 'Employee not found', 404);
@@ -87,8 +94,8 @@ async function getVerificationDetails(req, res) {
         personalEmail: employee.private_email,
         workEmail: employee.work_email,
         phone: employee.mobile_phone,
-        cnic: employee.cnic_number,
-        fatherName: employee.father_name,
+        cnic: employee.cnic_number || employee.entered_cnic_number || 'N/A',
+        fatherName: employee.father_name || employee.entered_father_name || 'N/A',
         dateOfBirth: employee.birthday,
         department: employee.department_id ? employee.department_id[1] : 'N/A',
         departmentId: employee.department_id ? employee.department_id[0] : null,
@@ -150,8 +157,8 @@ async function getVerificationDetails(req, res) {
  */
 async function approveCandidate(req, res) {
   try {
-    const employeeId = parseInt(req.params.employeeId);  // ✅ Get from URL
-    const { notes } = req.body;  // ✅ Get notes from body
+    const employeeId = parseInt(req.params.employeeId);
+    const { notes } = req.body;
 
     console.log('📥 Received approval request for employee:', employeeId);
     console.log('📝 Notes:', notes);
@@ -170,8 +177,8 @@ async function approveCandidate(req, res) {
         'work_email',
         'private_email',
         'registration_password_hash',
-        'department_id',      // ✅ Add this
-        'job_id'              // ✅ Add this
+        'department_id',
+        'job_id'
       ]
     ]);
 
@@ -194,7 +201,6 @@ async function approveCandidate(req, res) {
 
     // CREATE LOGIN ACCOUNT
     try {
-      // Check if user already exists
       const existingUsers = await odooAdapter.execute('res.users', 'search_read', [
         [['employee_id', '=', employeeId]],
         ['id']
@@ -203,7 +209,6 @@ async function approveCandidate(req, res) {
       if (existingUsers.length === 0 && emp.registration_password_hash && emp.work_email) {
         console.log('🔐 Creating login account for:', emp.work_email);
 
-        // Create user with stored password hash
         const userId = await odooAdapter.execute('res.users', 'create', [
           {
             name: emp.name,
@@ -218,17 +223,52 @@ async function approveCandidate(req, res) {
         ]);
 
         console.log('✅ Login account created! User ID:', userId);
+
+        // 🆕 LINK USER TO EMPLOYEE RECORD
+        try {
+          await odooAdapter.execute('hr.employee', 'write', [
+            [parseInt(employeeId)],
+            {
+              user_id: userId,
+              work_email: emp.work_email
+            }
+          ]);
+          console.log('✅ Employee record linked to user account');
+        } catch (linkError) {
+          console.error('⚠️ Warning: Failed to link user to employee:', linkError.message);
+          // Don't fail the entire approval if linking fails
+        }
+
       } else {
         console.log('ℹ️  User account already exists or missing data');
       }
     } catch (userError) {
       console.error('⚠️  Failed to create user account:', userError.message);
-      // Don't fail the whole approval if user creation fails
+    }
+
+    // 🆕 ALLOCATE INITIAL LEAVES
+    let leaveAllocations = [];
+    try {
+      console.log('🎯 Starting leave allocation...');
+      const onboardingService = require('../services/onboardingService');
+      const allocationResult = await onboardingService.allocateInitialLeaves(employeeId);
+      leaveAllocations = allocationResult.allocations;
+      console.log('✅ Leave allocation successful:', leaveAllocations);
+    } catch (leaveError) {
+      console.error('⚠️  Leave allocation failed:', leaveError.message);
+      // Don't fail the approval if leave allocation fails
+      // HR can manually allocate later
     }
 
     // Extract department and position names
     const departmentName = emp.department_id ? emp.department_id[1] : 'N/A';
     const positionName = emp.job_id ? emp.job_id[1] : 'N/A';
+
+    // Prepare leave balances for email
+    const leaveBalances = {};
+    leaveAllocations.forEach(allocation => {
+      leaveBalances[allocation.leaveType] = allocation.days;
+    });
 
     // Trigger Power Automate approval email
     console.log('🔔 Attempting to send approval email...');
@@ -238,7 +278,8 @@ async function approveCandidate(req, res) {
       personalEmail: emp.private_email,
       workEmail: emp.work_email,
       department: departmentName || 'N/A',
-      position: positionName || 'N/A'
+      position: positionName || 'N/A',
+      leaveBalances: leaveBalances // 🆕 Add leave balances to payload
     }, notes || '')
       .then(() => console.log('✅ Approval email sent'))
       .catch(err => {
@@ -250,7 +291,8 @@ async function approveCandidate(req, res) {
     return respondSuccess(res, {
       employeeId,
       status: 'approved',
-      userAccountCreated: true
+      userAccountCreated: true,
+      leaveAllocations: leaveAllocations // 🆕 Return allocation info
     }, 'Candidate approved successfully');
 
   } catch (error) {
@@ -438,6 +480,63 @@ async function getDocument(req, res) {
   }
 }
 
+/**
+ * Override candidate's department/position selection with HR's original assignment
+ * PUT /api/hr/verification/:employeeId/override-assignment
+ */
+async function overrideAssignment(req, res) {
+  try {
+    const { employeeId } = req.params;
+    const { useHRAssignment } = req.body; // true = use HR's, false = keep candidate's
+
+    const id = parseInt(employeeId);
+
+    console.log('🔄 Override assignment request:', { employeeId: id, useHRAssignment });
+
+    // Get employee data
+    const employee = await odooAdapter.getEmployee(id);
+
+    if (!employee) {
+      return respondError(res, 'Employee not found', 404);
+    }
+
+    let updateData = {};
+
+    if (useHRAssignment) {
+      // Override with HR's original assignment
+      if (employee.hr_assigned_department_id) {
+        updateData.department_id = employee.hr_assigned_department_id[0];
+        console.log('   Setting department to HR assigned:', employee.hr_assigned_department_id);
+      }
+      if (employee.hr_assigned_job_id) {
+        updateData.job_id = employee.hr_assigned_job_id[0];
+        console.log('   Setting position to HR assigned:', employee.hr_assigned_job_id);
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return respondError(res, 'No HR assignment found to override', 400);
+    }
+
+    // Update employee record
+    await odooAdapter.updateEmployee(id, updateData);
+
+    console.log('✅ Assignment overridden successfully');
+
+    return respondSuccess(res, {
+      employeeId: id,
+      message: useHRAssignment
+        ? 'Assignment overridden with HR values'
+        : 'Candidate selection accepted',
+      updatedFields: updateData
+    });
+
+  } catch (error) {
+    console.error('❌ Override assignment error:', error);
+    return respondError(res, 'Failed to override assignment', 500);
+  }
+}
+
 
 module.exports = {
   getPendingRegistrations,
@@ -446,5 +545,6 @@ module.exports = {
   getVerificationDetails,
   getDocument,
   approveCandidate,
-  rejectCandidate
+  rejectCandidate,
+  overrideAssignment
 };
