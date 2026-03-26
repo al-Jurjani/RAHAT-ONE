@@ -63,9 +63,6 @@ export const registrationAPI = {
     api.post('/registration/complete', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
-
-  getStatus: (email) =>
-    api.get(`/registration/status?personalEmail=${email}`),
 };
 
 /* =========================

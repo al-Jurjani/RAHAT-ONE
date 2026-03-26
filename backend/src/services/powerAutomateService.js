@@ -2,7 +2,9 @@ const axios = require('axios');
 
 class PowerAutomateService {
   constructor() {
-    this.flowUrl = process.env.PA_ONBOARDING_WEBHOOK;
+    // Onboarding flows now handled by n8n (was Power Automate)
+    this.flowUrl = process.env.N8N_ONBOARDING_WEBHOOK || process.env.PA_ONBOARDING_WEBHOOK;
+    this.onboardingInviteUrl = process.env.N8N_ONBOARDING_INVITE_URL || this.flowUrl;
     this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
     this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
@@ -18,14 +20,17 @@ class PowerAutomateService {
         metadata
       };
 
-      console.log(`🔄 Triggering Power Automate: ${action}`, employeeData.name);
+      // Route to appropriate n8n flow based on action
+      const url = action === 'initiate' ? this.onboardingInviteUrl : this.flowUrl;
 
-      const response = await axios.post(this.flowUrl, payload, {
+      console.log(`Triggering n8n onboarding flow: ${action}`, employeeData.name);
+
+      const response = await axios.post(url, payload, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 30000 // 30 second timeout
       });
 
-      console.log(`✅ Power Automate triggered successfully: ${action}`);
+      console.log(`n8n flow triggered successfully: ${action}`);
       return response.data;
 
     } catch (error) {

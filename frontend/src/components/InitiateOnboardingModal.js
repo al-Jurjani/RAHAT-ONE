@@ -8,7 +8,9 @@ import {
   Button,
   MenuItem,
   CircularProgress,
-  Box
+  Box,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import { onboardingAPI, lookupAPI } from '../services/api';
@@ -19,7 +21,8 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
     email: '',
     phone: '',
     departmentId: '',
-    jobId: ''
+    jobId: '',
+    manualReviewRequired: false
   });
 
   const [departments, setDepartments] = useState([]);
@@ -69,7 +72,8 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
       email: '',
       phone: '',
       departmentId: '',
-      jobId: ''
+      jobId: '',
+      manualReviewRequired: false
     });
     setErrors({});
   };
@@ -113,7 +117,8 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
         email: formData.email.trim(),
         ...(formData.phone && { phone: formData.phone.trim() }),
         ...(formData.departmentId && { departmentId: parseInt(formData.departmentId) }),
-        ...(formData.jobId && { jobId: parseInt(formData.jobId) })
+        ...(formData.jobId && { jobId: parseInt(formData.jobId) }),
+        manualReviewRequired: formData.manualReviewRequired
       };
 
       const response = await onboardingAPI.initiate(payload);
@@ -210,6 +215,17 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
               </MenuItem>
             ))}
           </TextField>
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={formData.manualReviewRequired}
+                onChange={(e) => setFormData(prev => ({ ...prev, manualReviewRequired: e.target.checked }))}
+                disabled={loading}
+              />
+            }
+            label="Require manual approval (skip auto-approve even if all checks pass)"
+          />
         </Box>
       </DialogContent>
 
