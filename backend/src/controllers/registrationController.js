@@ -3,67 +3,35 @@ const { respondSuccess, respondError } = require('../utils/responseHandler');
 const bcrypt = require('bcryptjs');
 
 /**
- * HR initiates onboarding by adding personal email
- * Creates employee record with status "initiated"
- * Triggers n8n invitation flow
+ * HR initiates onboarding — thin trigger only.
+ * Validates input and fires n8n Flow C, which handles:
+ * Odoo record creation, employee type determination, and invitation email.
  */
 async function initiateOnboarding(req, res) {
   try {
-    const { personalEmail, name, email, phone, departmentId, jobId, manualReviewRequired } = req.body;
+    const { personalEmail, email, departmentId, jobId, manualReviewRequired } = req.body;
 
-    const candidateEmail = personalEmail || email;
+    const candidateEmail = (personalEmail || email || '').trim();
 
     if (!candidateEmail) {
       return respondError(res, 'Personal email is required', 400);
     }
-
-    // Create employee record with initiated status
-    const employeeData = {
-      name: name || 'Pending Registration',
-      private_email: candidateEmail,
-      onboarding_status: 'initiated',
-      onboarding_initiated_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      ai_verification_status: 'pending',
-      hr_verification_status: 'pending',
-      manual_review_required: manualReviewRequired || false
-    };
-
-    // Set HR-assigned department/position if provided
-    if (departmentId) {
-      employeeData.department_id = parseInt(departmentId);
-      employeeData.hr_assigned_department_id = parseInt(departmentId);
-    }
-    if (jobId) {
-      employeeData.job_id = parseInt(jobId);
-      employeeData.hr_assigned_job_id = parseInt(jobId);
-    }
-    if (phone) {
-      employeeData.mobile_phone = phone;
+    if (!departmentId || !jobId) {
+      return respondError(res, 'Department and position are required', 400);
     }
 
-    const employeeId = await odooAdapter.createEmployee(employeeData);
-
-    // Trigger n8n invitation flow
+    // Fire n8n webhook — all work happens in the flow
     const powerAutomateService = require('../services/powerAutomateService');
-    try {
-      await powerAutomateService.triggerOnboardingFlow('initiate', {
-        employeeId: employeeId,
-        name: name || 'Candidate',
-        email: candidateEmail,
-        phone: phone || '',
-        departmentId: departmentId || null,
-        jobId: jobId || null,
-        manualReviewRequired: manualReviewRequired || false
-      });
-    } catch (error) {
-      console.error('n8n trigger error:', error.message);
-    }
+    await powerAutomateService.triggerOnboardingFlow('initiate', {
+      email: candidateEmail,
+      departmentId: parseInt(departmentId),
+      jobId: parseInt(jobId),
+      manualReviewRequired: manualReviewRequired || false
+    });
 
     respondSuccess(res, {
-      employeeId,
       email: candidateEmail,
-      status: 'initiated',
-      message: 'Invitation email sent successfully'
+      status: 'initiated'
     }, 201);
 
   } catch (error) {
