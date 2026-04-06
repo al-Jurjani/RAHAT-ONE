@@ -173,8 +173,7 @@ function RegistrationPage() {
 
       const response = await registrationAPI.complete(submitData);
 
-      setWorkEmail(response.data.data.workEmail);
-      toast.success('Registration completed successfully!');
+      toast.success('Registration completed! You will receive an email once verified.');
       setActiveStep(steps.length); // Move to success screen
 
     } catch (error) {
@@ -477,11 +476,8 @@ function RegistrationPage() {
               Your registration has been submitted successfully.
             </Typography>
             <Alert severity="info" sx={{ mb: 2 }}>
-              Your work email: <strong>{workEmail}</strong>
+              Your documents are now being verified. You will receive an email with your work email and next steps once approved.
             </Alert>
-            <Typography variant="body2" color="text.secondary">
-              Your documents are being verified. You will receive an email once verification is complete.
-            </Typography>
           </Paper>
         </Box>
       </Container>
