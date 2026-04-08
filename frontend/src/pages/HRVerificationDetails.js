@@ -311,62 +311,45 @@ function HRVerificationDetails() {
             </CardContent>
           </Card>
 
-          {/* Side-by-Side Comparison */}
+          {/* CNIC Number Comparison */}
           <Card sx={{ mt: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Data Comparison
+                CNIC Number Comparison
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
               <TableContainer>
                 <Table size="small">
                   <TableBody>
-                    {/* Header Row */}
                     <TableRow>
-                      <TableCell><strong>Field</strong></TableCell>
-                      <TableCell>
-                        <Typography variant="subtitle2" color="primary">
-                          Entered by Candidate
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="subtitle2" color="secondary">
-                          Extracted from CNIC
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Name */}
-                    <TableRow>
-                      <TableCell><strong>Name:</strong></TableCell>
-                      <TableCell>{data.employee?.name || 'N/A'}</TableCell>
-                      <TableCell>{data.aiVerification?.extractedData?.name || 'N/A'}</TableCell>
-                    </TableRow>
-
-                    {/* CNIC */}
-                    <TableRow>
-                      <TableCell><strong>CNIC:</strong></TableCell>
+                      <TableCell><strong>Entered by Candidate:</strong></TableCell>
                       <TableCell>{data.employee?.cnic || 'N/A'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Extracted from CNIC (OCR):</strong></TableCell>
                       <TableCell>{data.aiVerification?.extractedData?.cnicNumber || 'N/A'}</TableCell>
                     </TableRow>
-
-                    {/* Father's Name */}
-                    <TableRow>
-                      <TableCell><strong>Father's Name:</strong></TableCell>
-                      <TableCell>{data.employee?.fatherName || 'N/A'}</TableCell>
-                      <TableCell>{data.aiVerification?.extractedData?.fatherName || 'N/A'}</TableCell>
-                    </TableRow>
-
-                    {/* Date of Birth */}
-                    <TableRow>
-                      <TableCell><strong>Date of Birth:</strong></TableCell>
-                      <TableCell>{data.employee?.dateOfBirth || 'N/A'}</TableCell>
-                      <TableCell>{data.aiVerification?.extractedData?.dob || 'N/A'}</TableCell>
-                    </TableRow>
+                    {data.aiVerification?.extractedData?.name && data.aiVerification.extractedData.name !== 'N/A' && (
+                      <TableRow>
+                        <TableCell><strong>Name from CNIC:</strong></TableCell>
+                        <TableCell>{data.aiVerification.extractedData.name}</TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {data.aiVerification?.extractedData?.rawMatches && data.aiVerification.extractedData.rawMatches.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    All CNIC patterns found in OCR text:
+                  </Typography>
+                  {data.aiVerification.extractedData.rawMatches.map((m, i) => (
+                    <Chip key={i} label={m} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                  ))}
+                </Box>
+              )}
             </CardContent>
           </Card>
 
@@ -374,21 +357,36 @@ function HRVerificationDetails() {
           <Card sx={{ mt: 3 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                {getVerificationIcon(data.hrVerification?.status)}
+                {getVerificationIcon(
+                  data.employee?.onboardingStatus === 'activated' ? 'approved' : data.hrVerification?.status
+                )}
                 <Typography variant="h6" sx={{ ml: 1 }}>
                   HR Verification
                 </Typography>
                 <Chip
-                  label={data.hrVerification?.status?.toUpperCase() || 'PENDING'}
-                  color={data.hrVerification?.status === 'approved' ? 'success' : 'warning'}
+                  label={
+                    data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending'
+                      ? 'AUTO-APPROVED'
+                      : data.hrVerification?.status?.toUpperCase() || 'PENDING'
+                  }
+                  color={
+                    data.employee?.onboardingStatus === 'activated' || data.hrVerification?.status === 'approved'
+                      ? 'success' : 'warning'
+                  }
                   size="small"
                   sx={{ ml: 'auto' }}
                 />
               </Box>
               <Divider sx={{ mb: 2 }} />
 
+              {data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending' && (
+                <Alert severity="success">
+                  This employee was auto-approved — all verification checks passed automatically.
+                </Alert>
+              )}
+
               {data.hrVerification?.notes && (
-                <Alert severity="info">
+                <Alert severity="info" sx={{ mt: 1 }}>
                   <strong>Notes:</strong> {data.hrVerification?.notes}
                 </Alert>
               )}
@@ -398,7 +396,7 @@ function HRVerificationDetails() {
       </Grid>
 
       {/* Action Buttons */}
-      {data.hrVerification?.status === 'pending' && (
+      {data.hrVerification?.status === 'pending' && data.employee?.onboardingStatus !== 'activated' && (
         <Paper sx={{ p: 3, mt: 3 }}>
           <Typography variant="h6" gutterBottom>
             Review Decision
@@ -520,10 +518,7 @@ function HRVerificationDetails() {
       documentId={cnicDocument?.id}
       documentName={cnicDocument?.name}
       enteredData={{
-        name: data?.employee?.name,
-        cnic: data?.employee?.cnic,
-        fatherName: data?.employee?.fatherName,
-        dob: data?.employee?.dateOfBirth
+        cnic: data?.employee?.cnic
       }}
       extractedData={data?.aiVerification?.extractedData}
       verificationDetails={data?.aiVerification?.details}

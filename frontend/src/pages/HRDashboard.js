@@ -67,7 +67,11 @@ function HRDashboard() {
     const statusConfig = {
       pending: { label: 'PENDING', color: 'warning' },
       approved: { label: 'APPROVED', color: 'success' },
-      rejected: { label: 'REJECTED', color: 'error' }
+      rejected: { label: 'REJECTED', color: 'error' },
+      activated: { label: 'ACTIVATED', color: 'success' },
+      verification_pending: { label: 'VERIFICATION PENDING', color: 'warning' },
+      initiated: { label: 'INITIATED', color: 'info' },
+      expired: { label: 'EXPIRED', color: 'default' }
     };
     const config = statusConfig[status] || statusConfig.pending;
     return <Chip label={config.label} color={config.color} size="small" />;
