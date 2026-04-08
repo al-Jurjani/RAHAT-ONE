@@ -8,9 +8,12 @@ class PowerAutomateService {
     this.onboardingDecisionUrl = process.env.N8N_ONBOARDING_DECISION_URL || this.flowUrl;
     this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
-    this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
-    this.expenseSubmissionFlowUrl = process.env.PA_EXPENSE_SUBMISSION_WEBHOOK;
-    this.expenseApprovalResponseFlowUrl = process.env.PA_EXPENSE_APPROVAL_RESPONSE_WEBHOOK;
+    // [n8n-migration] Expense flows now go to n8n instead of Power Automate
+    this.expenseFlowUrl = process.env.N8N_EXPENSE_WEBHOOK_URL;
+    // Old PA expense URLs (commented out):
+    // this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
+    // this.expenseSubmissionFlowUrl = process.env.PA_EXPENSE_SUBMISSION_WEBHOOK;
+    // this.expenseApprovalResponseFlowUrl = process.env.PA_EXPENSE_APPROVAL_RESPONSE_WEBHOOK;
   }
 
   async triggerOnboardingFlow(action, employeeData, metadata = {}) {
@@ -114,57 +117,33 @@ class PowerAutomateService {
   }
 
   // ==========================================
-  // EXPENSE FLOWS (new)
+  // EXPENSE FLOWS (n8n)
   // ==========================================
 
   /**
-   * Trigger expense policy flow
-   * Handles policy validation and sends appropriate notifications (approval to manager or rejection to employee)
+   * Trigger n8n expense intake flow
+   * Backend fires this webhook after creating draft expense + uploading invoice.
+   * n8n handles everything else: fraud detection, policy check, routing, approvals.
    */
-  async triggerExpensePolicyFlow(expenseData, policyCheck, employee, manager) {
+  async triggerExpenseFlow(payload) {
     try {
-      if (!this.expensePolicyFlowUrl) {
-        console.warn('⚠️  Power Automate expense policy flow URL not configured');
+      if (!this.expenseFlowUrl) {
+        console.warn('[ExpenseFlow] N8N_EXPENSE_WEBHOOK_URL not configured in .env');
         return null;
       }
 
-      const payload = {
-        expenseId: expenseData.expenseId,
-        employeeId: expenseData.employeeId,
-        employeeName: employee.name,
-        employeeEmail: employee.work_email || employee.private_email,
-        managerName: manager?.name || '',
-        managerEmail: manager?.work_email || manager?.private_email || '',
-        category: expenseData.category,
-        amount: parseFloat(expenseData.amount),  // Convert to number
-        vendor: expenseData.vendor_name,
-        expenseDate: expenseData.expense_date,
-        description: expenseData.description,
-        policyCheckPassed: policyCheck.passed,
-        policyViolations: policyCheck.violations || [],
-        submittedDate: new Date().toISOString(),
-        approvalToken: expenseData.approval_token || null,
-        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000',
-        // Workflow and fraud detection results (match Power Automate schema)
-        workflow_status: expenseData.workflow_status || 'pending_manager',
-        hr_escalated: expenseData.hr_escalated || false,
-        fraud: expenseData.fraud || null
-      };
+      console.log(`[ExpenseFlow] Triggering n8n expense flow for expense ${payload.expenseId}`);
 
-      console.log('📤 Triggering Power Automate expense policy flow...');
-      console.log('   Flow URL:', this.expensePolicyFlowUrl);
-      console.log('   Payload:', JSON.stringify(payload, null, 2));
-
-      const response = await axios.post(this.expensePolicyFlowUrl, payload, {
+      const response = await axios.post(this.expenseFlowUrl, payload, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 60000  // 60s — PA flows can take time to send emails and respond
+        timeout: 30000
       });
 
-      console.log('✅ Power Automate expense policy flow triggered successfully');
+      console.log(`[ExpenseFlow] n8n webhook fired successfully (status: ${response.status})`);
       return response.data;
 
     } catch (error) {
-      console.error('⚠️  Power Automate flow trigger failed:', error.message);
+      console.error(`[ExpenseFlow] n8n webhook error:`, error.message);
       if (error.response) {
         console.error('   Response status:', error.response.status);
         console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
@@ -173,39 +152,13 @@ class PowerAutomateService {
     }
   }
 
-  /**
-   * Trigger expense approval response flow
-   * Handles manager/HR decision notifications
-   */
-  async triggerApprovalResponseFlow(decisionData) {
-    try {
-      if (!this.expenseApprovalResponseFlowUrl) {
-        console.warn('⚠️  Expense approval response flow URL not configured');
-        return null;
-      }
-
-      console.log(`🔄 Triggering Expense Approval Response Flow for expense ${decisionData.expenseId}`);
-      console.log('   Decision:', decisionData.decision);
-      console.log('   Approver Type:', decisionData.approverType);
-      console.log('   Next Stage:', decisionData.nextStage);
-
-      const response = await axios.post(this.expenseApprovalResponseFlowUrl, decisionData, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
-      });
-
-      console.log(`✅ Approval response flow triggered successfully`);
-      return response.data;
-
-    } catch (error) {
-      console.error(`❌ Approval response flow error:`, error.message);
-      if (error.response) {
-        console.error('   Response status:', error.response.status);
-        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
-      }
-      return null;
-    }
-  }
+  // [n8n-migration] Old Power Automate expense methods commented out.
+  // triggerExpensePolicyFlow — was called by submitExpense with full fraud payload + policy result
+  // triggerApprovalResponseFlow — was called by manager/HR decision endpoints
+  /*
+  async triggerExpensePolicyFlow(expenseData, policyCheck, employee, manager) { ... }
+  async triggerApprovalResponseFlow(decisionData) { ... }
+  */
 }
 
 module.exports = new PowerAutomateService();

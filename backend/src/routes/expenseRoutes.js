@@ -48,43 +48,16 @@ router.get('/:id/attachment', authenticateToken, expenseController.getExpenseAtt
 router.get('/:id', authenticateToken, expenseController.getExpenseDetails);
 
 // ==========================================
-// PUBLIC ROUTES (token-based, no auth required)
+// [n8n-migration] PUBLIC ROUTES COMMENTED OUT
+// Token-based approval endpoints replaced by n8n webhook-wait URLs.
+// Manager/HR now click approve/reject links in emails that go directly to n8n.
 // ==========================================
-
-/**
- * GET /api/expenses/public/:expenseId
- * Public endpoint for approval page (token-based like ApproveLeave)
- * Query params: token
- */
+/*
 router.get('/public/:expenseId', expenseController.getExpenseForApproval);
-
-/**
- * GET /api/expenses/public/:expenseId/invoice
- * Public endpoint for viewing invoice attachment
- * Query params: token
- */
 router.get('/public/:expenseId/invoice', expenseController.getPublicInvoicePreview);
-
-/**
- * POST /api/expenses/:expenseId/manager-decision
- * Public endpoint for manager to approve/reject
- * Body: { token, decision ('approve'|'reject'), remarks (optional) }
- */
 router.post('/:expenseId/manager-decision', expenseController.handleManagerDecision);
-
-/**
- * POST /api/expenses/:expenseId/hr-decision
- * Public endpoint for HR to approve/reject (escalated items)
- * Body: { token, decision ('approve'|'reject'), remarks (optional) }
- */
 router.post('/:expenseId/hr-decision', expenseController.handleHRDecision);
-
-/**
- * POST /api/expenses/:expenseId/escalate-to-manager
- * Internal endpoint called by Power Automate Flow 2
- * When HR approves a fraudulent expense, escalate to manager for 2nd approval
- * Body: { hrApprovalToken }
- */
 router.post('/:expenseId/escalate-to-manager', expenseController.escalateToManagerAfterHR);
+*/
 
 module.exports = router;
