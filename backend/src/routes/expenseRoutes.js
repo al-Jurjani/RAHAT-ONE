@@ -79,4 +79,12 @@ router.post('/:expenseId/manager-decision', expenseController.handleManagerDecis
  */
 router.post('/:expenseId/hr-decision', expenseController.handleHRDecision);
 
+/**
+ * POST /api/expenses/:expenseId/escalate-to-manager
+ * Internal endpoint called by Power Automate Flow 2
+ * When HR approves a fraudulent expense, escalate to manager for 2nd approval
+ * Body: { hrApprovalToken }
+ */
+router.post('/:expenseId/escalate-to-manager', expenseController.escalateToManagerAfterHR);
+
 module.exports = router;

@@ -2,7 +2,10 @@ const axios = require('axios');
 
 class PowerAutomateService {
   constructor() {
-    this.flowUrl = process.env.PA_ONBOARDING_WEBHOOK;
+    // Onboarding flows now handled by n8n (was Power Automate)
+    this.flowUrl = process.env.N8N_ONBOARDING_WEBHOOK || process.env.PA_ONBOARDING_WEBHOOK;
+    this.onboardingInviteUrl = process.env.N8N_ONBOARDING_INVITE_URL || this.flowUrl;
+    this.onboardingDecisionUrl = process.env.N8N_ONBOARDING_DECISION_URL || this.flowUrl;
     this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
     this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
@@ -18,14 +21,20 @@ class PowerAutomateService {
         metadata
       };
 
-      console.log(`🔄 Triggering Power Automate: ${action}`, employeeData.name);
+      // Route to appropriate n8n flow based on action
+      let url;
+      if (action === 'initiate') url = this.onboardingInviteUrl;
+      else if (action === 'decision') url = this.onboardingDecisionUrl;
+      else url = this.flowUrl;
 
-      const response = await axios.post(this.flowUrl, payload, {
+      console.log(`Triggering n8n onboarding flow: ${action}`, employeeData.name);
+
+      const response = await axios.post(url, payload, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 30000 // 30 second timeout
       });
 
-      console.log(`✅ Power Automate triggered successfully: ${action}`);
+      console.log(`n8n flow triggered successfully: ${action}`);
       return response.data;
 
     } catch (error) {
@@ -66,35 +75,43 @@ class PowerAutomateService {
 
       const response = await axios.post(this.leaveFlowUrl, leaveData, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+        timeout: 30000
       });
 
-      console.log(`✅ Leave flow triggered successfully`);
-      return response.data;
+      console.log(`✅ Leave flow triggered successfully (status: ${response.status})`);
+      return true;
 
     } catch (error) {
       console.error(`❌ Leave flow error:`, error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
       return null;
     }
   }
 
   async triggerManagerDecisionFlow(decisionData) {
-  try {
-    console.log(`🔄 Triggering Manager Decision Flow`);
+    try {
+      console.log(`🔄 Triggering Manager Decision Flow`);
 
-    const response = await axios.post(this.managerDecisionFlowUrl, decisionData, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 10000
-    });
+      const response = await axios.post(this.managerDecisionFlowUrl, decisionData, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      });
 
-    console.log(`✅ Manager decision flow triggered successfully`);
-    return response.data;
+      console.log(`✅ Manager decision flow triggered successfully (status: ${response.status})`);
+      return true;
 
-  } catch (error) {
-    console.error(`❌ Manager decision flow error:`, error.message);
-    return null;
+    } catch (error) {
+      console.error(`❌ Manager decision flow error:`, error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      return null;
+    }
   }
-}
 
   // ==========================================
   // EXPENSE FLOWS (new)
@@ -116,8 +133,8 @@ class PowerAutomateService {
         employeeId: expenseData.employeeId,
         employeeName: employee.name,
         employeeEmail: employee.work_email || employee.private_email,
-        managerName: manager?.name || null,
-        managerEmail: manager?.work_email || manager?.private_email || null,
+        managerName: manager?.name || '',
+        managerEmail: manager?.work_email || manager?.private_email || '',
         category: expenseData.category,
         amount: parseFloat(expenseData.amount),  // Convert to number
         vendor: expenseData.vendor_name,
@@ -127,7 +144,11 @@ class PowerAutomateService {
         policyViolations: policyCheck.violations || [],
         submittedDate: new Date().toISOString(),
         approvalToken: expenseData.approval_token || null,
-        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000'
+        backendUrl: process.env.BACKEND_URL || 'http://localhost:5000',
+        // Workflow and fraud detection results (match Power Automate schema)
+        workflow_status: expenseData.workflow_status || 'pending_manager',
+        hr_escalated: expenseData.hr_escalated || false,
+        fraud: expenseData.fraud || null
       };
 
       console.log('📤 Triggering Power Automate expense policy flow...');
@@ -136,7 +157,7 @@ class PowerAutomateService {
 
       const response = await axios.post(this.expensePolicyFlowUrl, payload, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+        timeout: 60000  // 60s — PA flows can take time to send emails and respond
       });
 
       console.log('✅ Power Automate expense policy flow triggered successfully');

@@ -21,6 +21,7 @@ class HrEmployeeCustom(models.Model):
             ("provisioning", "Provisioning"),
             ("activated", "Activated"),
             ("rejected", "Rejected"),
+            ("expired", "Expired"),
         ],
         string="Onboarding Status",
         default="not_started",
@@ -42,6 +43,71 @@ class HrEmployeeCustom(models.Model):
     onboarding_completed_date = fields.Datetime(
         string="Onboarding Completed",
         readonly=True,
+    )
+
+    # ============================================
+    # N8N AUTOMATION FIELDS
+    # ============================================
+
+    employee_type = fields.Selection(
+        [
+            ("office", "Office"),
+            ("shop_floor", "Shop Floor"),
+        ],
+        string="Employee Type",
+        help="Determines registration form variant and required documents",
+    )
+
+    manual_review_required = fields.Boolean(
+        string="Require Manual Approval",
+        default=False,
+        help="HR flag to force manual review even if automated checks pass",
+    )
+
+    auto_approved = fields.Boolean(
+        string="Auto-Approved",
+        default=False,
+        readonly=True,
+        help="True if onboarding was auto-approved by n8n without HR intervention",
+    )
+
+    cnic_verified = fields.Boolean(
+        string="CNIC Number Verified",
+        default=False,
+        readonly=True,
+        help="True if OCR-extracted CNIC number matched candidate's entered CNIC number",
+    )
+
+    # ============================================
+    # BANK DETAILS (for salary disbursement)
+    # ============================================
+
+    bank_name = fields.Char(
+        string="Bank Name",
+    )
+
+    bank_account_number = fields.Char(
+        string="Bank Account Number",
+    )
+
+    bank_iban = fields.Char(
+        string="IBAN",
+    )
+
+    # ============================================
+    # EMERGENCY CONTACT
+    # ============================================
+
+    emergency_contact_name = fields.Char(
+        string="Emergency Contact Name",
+    )
+
+    emergency_contact_relationship = fields.Char(
+        string="Emergency Contact Relationship",
+    )
+
+    emergency_contact_phone = fields.Char(
+        string="Emergency Contact Phone",
     )
 
     # ============================================

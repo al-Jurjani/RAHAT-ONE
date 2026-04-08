@@ -102,6 +102,18 @@ class HrExpenseInherit(models.Model):
         readonly=True,
     )
 
+    clip_embedding = fields.Text(
+        string="CLIP Embedding",
+        help="512-dimensional CLIP visual embedding (JSON array) for similarity detection",
+        readonly=True,
+    )
+
+    florence_analysis = fields.Text(
+        string="Florence-2 Analysis",
+        help="Document analysis from Florence-2 vision-language model for forgery detection",
+        readonly=True,
+    )
+
     # ============================================
     # POLICY VALIDATION FIELDS
     # ============================================
@@ -560,6 +572,8 @@ class HrExpenseInherit(models.Model):
                 - status: pending/clean/suspicious/fraudulent
                 - details: Dict with per-layer results
                 - anomaly_confidence: 0.0-1.0
+                - clip_embedding: List[float] - 512-dim CLIP embedding
+                - florence_analysis: str - Florence-2 analysis text
                 - duplicate_of_id: ID of duplicate expense (if any)
         """
         self.ensure_one()
@@ -573,6 +587,14 @@ class HrExpenseInherit(models.Model):
             "anomaly_confidence": fraud_data.get("anomaly_confidence", 0.0),
             "ai_verification_date": datetime.now(),
         }
+
+        # Add CLIP embedding (store as JSON string)
+        if fraud_data.get("clip_embedding"):
+            update_vals["clip_embedding"] = json.dumps(fraud_data.get("clip_embedding"))
+
+        # Add Florence-2 analysis
+        if fraud_data.get("florence_analysis"):
+            update_vals["florence_analysis"] = fraud_data.get("florence_analysis")
 
         if fraud_data.get("duplicate_of_id"):
             update_vals["duplicate_of_expense_id"] = fraud_data.get("duplicate_of_id")

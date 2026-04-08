@@ -1,6 +1,7 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const crypto = require('crypto');
 const powerAutomateService = require('./powerAutomateService');
+const fraudDetectionService = require('./fraudDetectionService');
 
 class ExpenseService {
   /**
@@ -177,10 +178,68 @@ class ExpenseService {
         }
       }
 
-      // 6. Get created expense details
+      // 6. Run fraud detection if invoice file is provided
+      let fraudResult = null;
+      if (invoiceFile && policyCheck.passed) {
+        try {
+          console.log('🔍 Running fraud detection...');
+
+          // Run fraud detection pipeline
+          fraudResult = await fraudDetectionService.runFraudDetection(
+            invoiceFile.data, // Buffer
+            employeeId,
+            parseFloat(expenseData.amount)
+          );
+
+          console.log(`🔍 Fraud detection complete: ${fraudResult.status} (score: ${fraudResult.overallScore.toFixed(3)})`);
+
+          // Update expense with fraud detection results
+          await odooAdapter.updateExpenseWithFraudResult(expenseId, fraudResult);
+
+          // Adjust workflow based on fraud status
+          const workflowUpdates = {};
+
+          if (fraudResult.status === 'fraudulent') {
+            // Fraudulent: Auto-escalate to HR for review (Option A)
+            console.log('⚠️  FRAUDULENT expense detected - escalating to HR');
+            workflowUpdates.hr_escalated = true;
+            workflowUpdates.hr_decision = 'pending';
+            workflowUpdates.workflow_status = 'pending_hr'; // Skip manager, go straight to HR
+            workflowUpdates.approval_token_type = 'hr'; // Token for HR approval
+            // Note: manager_decision stays 'pending' since manager is bypassed
+
+          } else if (fraudResult.status === 'suspicious') {
+            // Suspicious: Flag for HR review but follow normal flow
+            console.log('⚠️  SUSPICIOUS expense detected - flagging for HR review');
+            workflowUpdates.hr_escalated = true;
+            workflowUpdates.hr_decision = 'pending';
+            // Keep workflow_status as 'pending_manager' - manager reviews first, then HR
+          }
+
+          // Apply workflow updates if needed
+          if (Object.keys(workflowUpdates).length > 0) {
+            await odooAdapter.updateExpense(expenseId, workflowUpdates);
+          }
+
+        } catch (fraudError) {
+          console.error('⚠️  Fraud detection failed (non-blocking):', fraudError.message);
+          // Don't fail expense submission if fraud detection fails
+          // Continue with normal workflow
+          fraudResult = {
+            status: 'error',
+            overallScore: 0,
+            recommendation: `Fraud detection unavailable: ${fraudError.message}`,
+            error: true
+          };
+        }
+      } else if (!invoiceFile && policyCheck.passed) {
+        console.log('⚠️  No invoice file provided - skipping fraud detection');
+      }
+
+      // 7. Get created expense details (after fraud detection updates)
       const createdExpense = await odooAdapter.getExpense(expenseId);
 
-      // 7. Trigger Power Automate flow for policy check and email notifications
+      // 8. Trigger Power Automate flow with fraud detection results
       try {
         // Get employee details
         const employee = await odooAdapter.getEmployee(employeeId);
@@ -191,13 +250,45 @@ class ExpenseService {
           manager = await odooAdapter.getEmployee(employee.parent_id[0]);
         }
 
+        // Prepare fraud detection payload
+        const fraudPayload = fraudResult ? {
+          fraudDetected: fraudResult.status !== 'clean',
+          fraudStatus: fraudResult.status, // 'clean', 'suspicious', 'fraudulent', 'error'
+          fraudScore: fraudResult.overallScore,
+          fraudConfidence: fraudResult.confidence || 0,
+          fraudRecommendation: fraudResult.recommendation,
+          fraudLayers: fraudResult.layers ? {
+            md5Match: fraudResult.layers.md5?.matched || false,
+            pHashSimilarity: fraudResult.layers.pHash?.similarity || 0,
+            clipSimilarity: fraudResult.layers.clip?.similarity || 0,
+            florenceFraudScore: fraudResult.layers.florence?.score || 0,
+            anomalyZScore: fraudResult.layers.anomaly?.zScore ?? 0  // Use 0 instead of null to match Power Automate schema
+          } : {
+            // Default values when fraud detection fails (Power Automate expects object, not null)
+            md5Match: false,
+            pHashSimilarity: 0,
+            clipSimilarity: 0,
+            florenceFraudScore: 0,
+            anomalyZScore: 0
+          },
+          fraudProcessingTime: fraudResult.processingTime || 0
+        } : {
+          fraudDetected: false,
+          fraudStatus: invoiceFile ? 'not_run' : 'no_invoice',
+          fraudScore: 0,
+          fraudRecommendation: invoiceFile ? 'Fraud detection not run' : 'No invoice file provided'
+        };
+
         // Trigger flow (fire and forget)
         powerAutomateService.triggerExpensePolicyFlow(
           {
             expenseId,
             employeeId,
             ...expenseData,
-            approval_token: odooExpenseData.approval_token
+            approval_token: createdExpense.approval_token,
+            workflow_status: createdExpense.workflow_status,
+            hr_escalated: createdExpense.hr_escalated || false,
+            fraud: fraudPayload
           },
           policyCheck,
           employee,
@@ -215,9 +306,20 @@ class ExpenseService {
         expense: createdExpense,
         policyCheckPassed: policyCheck.passed,
         policyViolations: policyCheck.violations,
-        escalatedForHR: odooExpenseData.hr_decision === 'pending',
+        escalatedForHR: createdExpense.hr_escalated || false,
+        fraudDetection: fraudResult ? {
+          status: fraudResult.status,
+          score: fraudResult.overallScore,
+          confidence: fraudResult.confidence || 0,
+          recommendation: fraudResult.recommendation,
+          processingTime: fraudResult.processingTime
+        } : null,
         message: policyCheck.passed
-          ? 'Expense submitted successfully'
+          ? (fraudResult?.status === 'fraudulent'
+              ? 'Expense submitted but flagged as fraudulent - escalated to HR'
+              : fraudResult?.status === 'suspicious'
+                ? 'Expense submitted but flagged as suspicious - will require HR review'
+                : 'Expense submitted successfully')
           : 'Expense rejected due to policy violations'
       };
     } catch (error) {
@@ -401,6 +503,80 @@ class ExpenseService {
       };
     } catch (error) {
       console.error('HR decision error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Escalate fraudulent expense to manager after HR approval
+   * (2-step approval: HR approves first, then manager must approve)
+   */
+  async escalateToManagerAfterHRApproval(expenseId, hrApprovalToken) {
+    try {
+      const expense = await odooAdapter.getExpense(expenseId);
+
+      if (!expense) {
+        throw new Error('Expense not found');
+      }
+
+      // Verify this was a fraudulent expense
+      if (expense.fraud_detection_status !== 'fraudulent') {
+        throw new Error('This endpoint is only for fraudulent expenses');
+      }
+
+      // Verify HR approval token matches
+      if (expense.approval_token !== hrApprovalToken) {
+        throw new Error('Invalid HR approval token');
+      }
+
+      // Verify expense is in pending_hr state
+      if (expense.workflow_status !== 'pending_hr') {
+        throw new Error(`Expense is in ${expense.workflow_status} state, cannot escalate to manager`);
+      }
+
+      console.log(`📝 Escalating fraudulent expense ${expenseId} to manager after HR approval`);
+
+      // Get employee and manager details
+      const employee = await odooAdapter.getEmployee(expense.employee_id[0]);
+
+      if (!employee.parent_id || !employee.parent_id[0]) {
+        throw new Error('Employee has no manager assigned');
+      }
+
+      const manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+
+      // Generate new approval token for manager
+      const newApprovalToken = this.generateApprovalToken();
+      const tokenExpiry = this.getTokenExpiry();
+
+      // Update expense: change workflow to pending_manager, update token
+      const updateData = {
+        workflow_status: 'pending_manager',
+        approval_token: newApprovalToken,
+        approval_token_expiry: tokenExpiry,
+        approval_token_type: 'manager',
+        hr_approved: true, // Mark HR as approved
+        hr_approved_date: this.formatOdooDateTime(),
+        hr_decision: 'approved',
+        manager_decision: 'pending' // Reset manager decision
+      };
+
+      await odooAdapter.updateExpense(expenseId, updateData);
+
+      console.log('✅ Expense escalated to manager successfully');
+
+      return {
+        success: true,
+        newApprovalToken,
+        managerEmail: manager.work_email || manager.private_email,
+        managerName: manager.name,
+        employeeName: employee.name,
+        fraudScore: expense.fraud_score,
+        fraudStatus: expense.fraud_detection_status
+      };
+
+    } catch (error) {
+      console.error('Escalate to manager error:', error);
       throw error;
     }
   }

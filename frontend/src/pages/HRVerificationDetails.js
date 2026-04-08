@@ -61,25 +61,8 @@ function HRVerificationDetails() {
   try {
     const response = await hrAPI.getDetails(employeeId);
 
-    console.log('📋 RAW RESPONSE:', response);
-
-    // The response from axios is: { data: { success: true, data: {...} } }
-    // So we need response.data.data
     if (response.data && response.data.success) {
       const employeeData = response.data.data;
-      console.log('✅ Setting employee data:', employeeData);
-
-      console.log('🔍 HR Assigned Fields:', {
-        hrAssignedDepartment: employeeData.employee?.hrAssignedDepartment,
-        hrAssignedDepartmentId: employeeData.employee?.hrAssignedDepartmentId,
-        hrAssignedPosition: employeeData.employee?.hrAssignedPosition,
-        hrAssignedPositionId: employeeData.employee?.hrAssignedPositionId,
-        department: employeeData.employee?.department,
-        departmentId: employeeData.employee?.departmentId,
-        position: employeeData.employee?.position,
-        positionId: employeeData.employee?.positionId
-      });
-
       setData(employeeData);
     } else {
       console.error('❌ Invalid response structure:', response);
@@ -99,7 +82,7 @@ function HRVerificationDetails() {
       console.log("approve employee ID:", employeeId);
       console.log('👉 Approving candidate with notes:', approveNotes);
       await hrAPI.approve(employeeId, approveNotes);
-      toast.success('Candidate approved successfully!');
+      toast.success('Candidate approved — provisioning in progress. They will receive a welcome email shortly.');
       setApproveDialogOpen(false);
       navigate('/hr/verification');
     } catch (error) {
@@ -118,7 +101,7 @@ function HRVerificationDetails() {
     setSubmitting(true);
     try {
       await hrAPI.reject(employeeId, rejectReason, rejectDetails);
-      toast.success('Candidate rejected');
+      toast.success('Candidate rejected — they will be notified by email.');
       setRejectDialogOpen(false);
       navigate('/hr/verification');
     } catch (error) {
@@ -136,11 +119,6 @@ function HRVerificationDetails() {
       return <Cancel color="error" />;
     }
     return <CheckCircle color="disabled" />;
-  };
-
-  const getMatchColor = (match) => {
-    if (match) return 'success.main';
-    return 'error.main';
   };
 
   if (loading) {
@@ -277,116 +255,101 @@ function HRVerificationDetails() {
 
         {/* Right Column - Verification */}
         <Grid item xs={12} md={6}>
-          {/* AI Verification */}
+          {/* CNIC Verification Result */}
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 {getVerificationIcon(data.aiVerification?.status)}
                 <Typography variant="h6" sx={{ ml: 1 }}>
-                  AI Verification
+                  CNIC Verification
                 </Typography>
                 <Chip
-                  label={data.aiVerification?.status?.toUpperCase() || 'PENDING'}
-                  color={data.aiVerification?.status === 'passed' ? 'success' : 'warning'}
+                  label={data.aiVerification?.status === 'passed' ? 'VERIFIED' : data.aiVerification?.status === 'failed' ? 'FAILED' : 'PENDING'}
+                  color={data.aiVerification?.status === 'passed' ? 'success' : data.aiVerification?.status === 'failed' ? 'error' : 'warning'}
                   size="small"
                   sx={{ ml: 'auto' }}
                 />
               </Box>
               <Divider sx={{ mb: 2 }} />
 
-              {data.aiVerification?.score > 0 && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Overall Score: <strong>{data.aiVerification.score}%</strong>
-                </Alert>
-              )}
+              {data.aiVerification?.status !== 'pending' ? (
+                <>
+                  {/* CNIC Number Match */}
+                  <Alert
+                    severity={data.aiVerification?.extractedData?.cnicNumber &&
+                      data.aiVerification.extractedData.cnicNumber !== 'N/A' &&
+                      data.employee?.cnic &&
+                      data.aiVerification.extractedData.cnicNumber.replace(/[\s-]/g, '') === data.employee.cnic.replace(/[\s-]/g, '')
+                        ? 'success' : 'error'}
+                    sx={{ mb: 2 }}
+                  >
+                    <strong>CNIC Number:</strong>{' '}
+                    {data.aiVerification?.extractedData?.cnicNumber &&
+                      data.aiVerification.extractedData.cnicNumber !== 'N/A' &&
+                      data.employee?.cnic &&
+                      data.aiVerification.extractedData.cnicNumber.replace(/[\s-]/g, '') === data.employee.cnic.replace(/[\s-]/g, '')
+                        ? 'Matched' : 'Mismatched'}
+                  </Alert>
 
-              {/* Data Comparison */}
-              {data.aiVerification?.details && Object.keys(data.aiVerification.details).length > 0 ? (
-                <TableContainer>
-                  <Table size="small">
-                    <TableBody>
-                      {Object.entries(data.aiVerification.details).map(([key, value]) => (
-                        <TableRow key={key}>
-                          <TableCell>
-                            <strong>{key.toUpperCase()}:</strong>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color={getMatchColor(value.match)}>
-                              {value.match ? '✓ Match' : '✗ Mismatch'}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Score: {value.score}%
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                  {data.aiVerification?.extractedData?.confidence > 0 && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      OCR Confidence: {Math.round(data.aiVerification.extractedData.confidence)}%
+                    </Typography>
+                  )}
+
+                  {data.aiVerification?.verifiedAt && (
+                    <Typography variant="caption" color="text.secondary">
+                      Verified: {new Date(data.aiVerification.verifiedAt).toLocaleString()}
+                    </Typography>
+                  )}
+                </>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  AI verification pending or no details available
+                  CNIC verification pending — awaiting registration completion
                 </Typography>
               )}
             </CardContent>
           </Card>
 
-          {/* Side-by-Side Comparison */}
+          {/* CNIC Number Comparison */}
           <Card sx={{ mt: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Data Comparison
+                CNIC Number Comparison
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
               <TableContainer>
                 <Table size="small">
                   <TableBody>
-                    {/* Header Row */}
                     <TableRow>
-                      <TableCell><strong>Field</strong></TableCell>
-                      <TableCell>
-                        <Typography variant="subtitle2" color="primary">
-                          Entered by Candidate
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="subtitle2" color="secondary">
-                          Extracted from CNIC
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Name */}
-                    <TableRow>
-                      <TableCell><strong>Name:</strong></TableCell>
-                      <TableCell>{data.employee?.name || 'N/A'}</TableCell>
-                      <TableCell>{data.aiVerification?.extractedData?.name || 'N/A'}</TableCell>
-                    </TableRow>
-
-                    {/* CNIC */}
-                    <TableRow>
-                      <TableCell><strong>CNIC:</strong></TableCell>
+                      <TableCell><strong>Entered by Candidate:</strong></TableCell>
                       <TableCell>{data.employee?.cnic || 'N/A'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell><strong>Extracted from CNIC (OCR):</strong></TableCell>
                       <TableCell>{data.aiVerification?.extractedData?.cnicNumber || 'N/A'}</TableCell>
                     </TableRow>
-
-                    {/* Father's Name */}
-                    <TableRow>
-                      <TableCell><strong>Father's Name:</strong></TableCell>
-                      <TableCell>{data.employee?.fatherName || 'N/A'}</TableCell>
-                      <TableCell>{data.aiVerification?.extractedData?.fatherName || 'N/A'}</TableCell>
-                    </TableRow>
-
-                    {/* Date of Birth */}
-                    <TableRow>
-                      <TableCell><strong>Date of Birth:</strong></TableCell>
-                      <TableCell>{data.employee?.dateOfBirth || 'N/A'}</TableCell>
-                      <TableCell>{data.aiVerification?.extractedData?.dob || 'N/A'}</TableCell>
-                    </TableRow>
+                    {data.aiVerification?.extractedData?.name && data.aiVerification.extractedData.name !== 'N/A' && (
+                      <TableRow>
+                        <TableCell><strong>Name from CNIC:</strong></TableCell>
+                        <TableCell>{data.aiVerification.extractedData.name}</TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {data.aiVerification?.extractedData?.rawMatches && data.aiVerification.extractedData.rawMatches.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    All CNIC patterns found in OCR text:
+                  </Typography>
+                  {data.aiVerification.extractedData.rawMatches.map((m, i) => (
+                    <Chip key={i} label={m} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                  ))}
+                </Box>
+              )}
             </CardContent>
           </Card>
 
@@ -394,21 +357,36 @@ function HRVerificationDetails() {
           <Card sx={{ mt: 3 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                {getVerificationIcon(data.hrVerification?.status)}
+                {getVerificationIcon(
+                  data.employee?.onboardingStatus === 'activated' ? 'approved' : data.hrVerification?.status
+                )}
                 <Typography variant="h6" sx={{ ml: 1 }}>
                   HR Verification
                 </Typography>
                 <Chip
-                  label={data.hrVerification?.status?.toUpperCase() || 'PENDING'}
-                  color={data.hrVerification?.status === 'approved' ? 'success' : 'warning'}
+                  label={
+                    data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending'
+                      ? 'AUTO-APPROVED'
+                      : data.hrVerification?.status?.toUpperCase() || 'PENDING'
+                  }
+                  color={
+                    data.employee?.onboardingStatus === 'activated' || data.hrVerification?.status === 'approved'
+                      ? 'success' : 'warning'
+                  }
                   size="small"
                   sx={{ ml: 'auto' }}
                 />
               </Box>
               <Divider sx={{ mb: 2 }} />
 
+              {data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending' && (
+                <Alert severity="success">
+                  This employee was auto-approved — all verification checks passed automatically.
+                </Alert>
+              )}
+
               {data.hrVerification?.notes && (
-                <Alert severity="info">
+                <Alert severity="info" sx={{ mt: 1 }}>
                   <strong>Notes:</strong> {data.hrVerification?.notes}
                 </Alert>
               )}
@@ -417,239 +395,8 @@ function HRVerificationDetails() {
         </Grid>
       </Grid>
 
-      {/* 🆕 ASSIGNMENT VERIFICATION - FULL WIDTH BELOW COLUMNS */}
-      {(data.employee?.hrAssignedDepartment || data.employee?.hrAssignedPosition) && (
-        <Card sx={{ mt: 3 }}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Assignment Verification
-              </Typography>
-              {(() => {
-                const deptMatch = !data.employee?.hrAssignedDepartment ||
-                                 (data.employee.hrAssignedDepartmentId === data.employee.departmentId);
-                const posMatch = !data.employee?.hrAssignedPosition ||
-                                (data.employee.hrAssignedPositionId === data.employee.positionId);
-                const allMatch = deptMatch && posMatch;
-
-                return (
-                  <Chip
-                    icon={allMatch ? <CheckCircle /> : <Cancel />}
-                    label={allMatch ? 'All Match' : 'Mismatch Detected'}
-                    color={allMatch ? 'success' : 'error'}
-                    size="small"
-                    sx={{ ml: 'auto' }}
-                  />
-                );
-              })()}
-            </Box>
-            <Divider sx={{ mb: 2 }} />
-
-            <TableContainer>
-              <Table size="small">
-                <TableBody>
-                  <TableRow sx={{ bgcolor: 'grey.100' }}>
-                    <TableCell width="20%"><strong>Field</strong></TableCell>
-                    <TableCell width="30%">
-                      <Typography variant="subtitle2" color="primary">
-                        HR Assigned
-                      </Typography>
-                    </TableCell>
-                    <TableCell width="30%">
-                      <Typography variant="subtitle2" color="secondary">
-                        Candidate Selected
-                      </Typography>
-                    </TableCell>
-                    <TableCell width="20%" align="center"><strong>Status</strong></TableCell>
-                  </TableRow>
-
-                  {data.employee?.hrAssignedDepartment && (
-                    <TableRow
-                      sx={{
-                        bgcolor: data.employee.hrAssignedDepartmentId === data.employee.departmentId
-                          ? 'rgba(76, 175, 80, 0.08)'
-                          : 'rgba(244, 67, 54, 0.08)'
-                      }}
-                    >
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="bold">
-                          Department
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="primary.main" fontWeight="medium">
-                          {data.employee.hrAssignedDepartment}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ID: {data.employee.hrAssignedDepartmentId}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          color={
-                            data.employee.hrAssignedDepartmentId === data.employee.departmentId
-                              ? 'success.main'
-                              : 'error.main'
-                          }
-                          fontWeight="medium"
-                        >
-                          {data.employee.department || 'N/A'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ID: {data.employee.departmentId || 'N/A'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        {data.employee.hrAssignedDepartmentId === data.employee.departmentId ? (
-                          <Chip
-                            icon={<CheckCircle />}
-                            label="Match"
-                            color="success"
-                            size="small"
-                          />
-                        ) : (
-                          <Chip
-                            icon={<Cancel />}
-                            label="Mismatch"
-                            color="error"
-                            size="small"
-                          />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-
-                  {data.employee?.hrAssignedPosition && (
-                    <TableRow
-                      sx={{
-                        bgcolor: data.employee.hrAssignedPositionId === data.employee.positionId
-                          ? 'rgba(76, 175, 80, 0.08)'
-                          : 'rgba(244, 67, 54, 0.08)'
-                      }}
-                    >
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="bold">
-                          Position
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="primary.main" fontWeight="medium">
-                          {data.employee.hrAssignedPosition}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ID: {data.employee.hrAssignedPositionId}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          color={
-                            data.employee.hrAssignedPositionId === data.employee.positionId
-                              ? 'success.main'
-                              : 'error.main'
-                          }
-                          fontWeight="medium"
-                        >
-                          {data.employee.position || 'N/A'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ID: {data.employee.positionId || 'N/A'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        {data.employee.hrAssignedPositionId === data.employee.positionId ? (
-                          <Chip
-                            icon={<CheckCircle />}
-                            label="Match"
-                            color="success"
-                            size="small"
-                          />
-                        ) : (
-                          <Chip
-                            icon={<Cancel />}
-                            label="Mismatch"
-                            color="error"
-                            size="small"
-                          />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            {(data.employee.hrAssignedDepartmentId !== data.employee.departmentId ||
-              data.employee.hrAssignedPositionId !== data.employee.positionId) && (
-              <>
-                <Box sx={{ mt: 2 }}>
-                  <Alert severity="warning">
-                    <Typography variant="body2" fontWeight="bold" gutterBottom>
-                      ⚠️ Assignment Mismatch Detected
-                    </Typography>
-                    <Typography variant="body2">
-                      The candidate selected a different {
-                        data.employee.hrAssignedDepartmentId !== data.employee.departmentId &&
-                        data.employee.hrAssignedPositionId !== data.employee.positionId
-                          ? 'department and position'
-                          : data.employee.hrAssignedDepartmentId !== data.employee.departmentId
-                            ? 'department'
-                            : 'position'
-                      } than what was initially assigned by HR.
-                    </Typography>
-                  </Alert>
-                </Box>
-
-                {data.hrVerification?.status === 'pending' && (
-                  <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.300' }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      🔧 Quick Actions:
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="primary"
-                        onClick={async () => {
-                          try {
-                            setSubmitting(true);
-                            await hrAPI.overrideAssignment(employeeId, { useHRAssignment: true });
-                            toast.success('✅ Assignment updated to HR values');
-                            loadDetails();
-                          } catch (error) {
-                            toast.error('Failed to override assignment');
-                            console.error(error);
-                          } finally {
-                            setSubmitting(false);
-                          }
-                        }}
-                        disabled={submitting}
-                      >
-                        {submitting ? <CircularProgress size={16} sx={{ mr: 1 }} /> : '✓ '}
-                        Use HR Assignment
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="secondary"
-                      >
-                        Accept Candidate Selection
-                      </Button>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      💡 Tip: Use "Use HR Assignment" to force the original values, or proceed with approval to keep candidate's selection.
-                    </Typography>
-                  </Box>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Action Buttons */}
-      {data.hrVerification?.status === 'pending' && (
+      {data.hrVerification?.status === 'pending' && data.employee?.onboardingStatus !== 'activated' && (
         <Paper sx={{ p: 3, mt: 3 }}>
           <Typography variant="h6" gutterBottom>
             Review Decision
@@ -771,10 +518,7 @@ function HRVerificationDetails() {
       documentId={cnicDocument?.id}
       documentName={cnicDocument?.name}
       enteredData={{
-        name: data?.employee?.name,
-        cnic: data?.employee?.cnic,
-        fatherName: data?.employee?.fatherName,
-        dob: data?.employee?.dateOfBirth
+        cnic: data?.employee?.cnic
       }}
       extractedData={data?.aiVerification?.extractedData}
       verificationDetails={data?.aiVerification?.details}

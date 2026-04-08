@@ -324,7 +324,8 @@ async getEmployeeDocuments(employeeId) {
         'hr_verification_status', 'onboarding_initiated_date',
         'hr_verified_date', 'rejection_date', 'rejection_reason',
         'cnic_uploaded', 'degree_uploaded', 'medical_uploaded',
-        'entered_cnic_number', 'entered_father_name', 'active'
+        'entered_cnic_number', 'entered_father_name', 'active',
+        'cnic_verified', 'auto_approved', 'onboarding_completed_date'
       ];
 
       // If we need to include inactive records, modify the domain
@@ -1012,13 +1013,15 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'workflow_status',
           'fraud_score',
           'fraud_detection_status',
+          // Detail fields (fraud_detection_details, document_hash, perceptual_hash,
+          // anomaly_confidence, clip_embedding, florence_analysis) fetched via getExpense()
           'manager_approved',
           'manager_approved_date',
           'hr_escalated',
           'hr_approved',
           'hr_approved_date',
           'policy_check_passed',
-          'approval_token',  // Added for HR decision validation
+          'approval_token',
           'create_date'
         ]
       ]);
@@ -1108,6 +1111,225 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
     };
 
     return mimeTypes[ext] || 'application/octet-stream';
+  }
+
+  // ==========================================
+  // FRAUD DETECTION METHODS
+  // ==========================================
+
+  /**
+   * Get employee's past expenses for fraud detection comparison
+   *
+   * @param {number} employeeId - Employee ID
+   * @param {Object} options - Query options
+   * @returns {Promise<Array>} - List of past expenses with fraud detection data
+   */
+  async getEmployeePastExpenses(employeeId, options = {}) {
+    const {
+      fields = [
+        'id',
+        'name',
+        'description',
+        'total_amount',
+        'document_hash',
+        'perceptual_hash',
+        'clip_embedding',
+        'florence_analysis',
+        'fraud_score',
+        'create_date'
+      ],
+      limit = 100
+    } = options;
+
+    try {
+      console.log(`[FraudDetection] Fetching past expenses for employee ${employeeId}...`);
+
+      // Search for processed expenses by this employee that have been fraud-checked
+      const domain = [
+        ['employee_id', '=', employeeId],
+        ['document_hash', '!=', false]  // Must have been fraud-checked
+      ];
+
+      const expenses = await this.search('hr.expense', domain, fields, limit);
+
+      console.log(`[FraudDetection] Found ${expenses.length} past expenses`);
+      return expenses;
+
+    } catch (error) {
+      console.error('[FraudDetection] Error fetching past expenses:', error.message);
+      return [];  // Return empty array on error (fraud detection can continue)
+    }
+  }
+
+  /**
+   * Find expense by MD5 hash (exact duplicate detection)
+   *
+   * @param {string} md5Hash - MD5 hash of invoice image
+   * @returns {Promise<Object|null>} - Matched expense or null
+   */
+  async findExpenseByMD5(md5Hash) {
+    try {
+      console.log(`[FraudDetection] Searching for MD5 hash: ${md5Hash}`);
+
+      const domain = [
+        ['document_hash', '=', md5Hash]
+      ];
+
+      const expenses = await this.search('hr.expense', domain,
+        ['id', 'name', 'description', 'employee_id', 'total_amount', 'workflow_status'],
+        1
+      );
+
+      if (expenses.length > 0) {
+        console.log(`[FraudDetection] Found MD5 match: Expense #${expenses[0].id}`);
+        return expenses[0];
+      }
+
+      return null;
+
+    } catch (error) {
+      console.error('[FraudDetection] Error searching MD5:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get employee expense statistics for anomaly detection
+   *
+   * Calculates mean, standard deviation, and count of employee's past expenses
+   *
+   * @param {number} employeeId - Employee ID
+   * @returns {Promise<Object|null>} - Statistics or null if insufficient data
+   */
+  async getEmployeeExpenseStats(employeeId) {
+    try {
+      console.log(`[FraudDetection] Calculating expense stats for employee ${employeeId}...`);
+
+      // Fetch all past expenses for this employee
+      const domain = [
+        ['employee_id', '=', employeeId],
+        ['total_amount', '>', 0]  // Only non-zero amounts
+      ];
+
+      const expenses = await this.search('hr.expense', domain, ['total_amount'], 500);
+
+      if (expenses.length < 3) {
+        console.log(`[FraudDetection] Insufficient data (${expenses.length} expenses)`);
+        return null;  // Need at least 3 expenses for meaningful stats
+      }
+
+      // Extract amounts
+      const amounts = expenses.map(exp => parseFloat(exp.total_amount));
+
+      // Calculate statistics
+      const count = amounts.length;
+      const mean = amounts.reduce((sum, val) => sum + val, 0) / count;
+
+      // Calculate standard deviation
+      const variance = amounts.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / count;
+      const stdDev = Math.sqrt(variance);
+
+      const min = Math.min(...amounts);
+      const max = Math.max(...amounts);
+
+      const stats = {
+        mean: parseFloat(mean.toFixed(2)),
+        stdDev: parseFloat(stdDev.toFixed(2)),
+        count,
+        min: parseFloat(min.toFixed(2)),
+        max: parseFloat(max.toFixed(2))
+      };
+
+      console.log(`[FraudDetection] Stats: mean=$${stats.mean}, stdDev=$${stats.stdDev}, count=${count}`);
+      return stats;
+
+    } catch (error) {
+      console.error('[FraudDetection] Error calculating stats:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Update expense with fraud detection results
+   *
+   * @param {number} expenseId - Expense ID
+   * @param {Object} fraudResult - Fraud detection result from fraudDetectionService
+   * @returns {Promise<boolean>} - Success status
+   */
+  async updateExpenseWithFraudResult(expenseId, fraudResult) {
+    try {
+      console.log(`[FraudDetection] Updating expense ${expenseId} with fraud result...`);
+
+      const values = {
+        // Store all hashes and embeddings
+        document_hash: fraudResult.layers.md5.hash,
+        perceptual_hash: fraudResult.layers.pHash.hash,
+        clip_embedding: fraudResult.layers.clip.embedding
+          ? JSON.stringify(fraudResult.layers.clip.embedding)
+          : false,
+
+        // Store Florence-2 analysis
+        florence_analysis: fraudResult.layers.florence.analysis || false,
+
+        // Store overall fraud score and status
+        fraud_score: fraudResult.overallScore,
+        fraud_detection_status: fraudResult.status,  // 'clean', 'suspicious', 'fraudulent'
+
+        // Store detailed layer results (full objects with scores)
+        fraud_detection_details: JSON.stringify({
+          layers: {
+            md5: {
+              score: fraudResult.layers.md5.score,
+              details: fraudResult.layers.md5.details,
+              matched: fraudResult.layers.md5.matched || false,
+              matchedExpenseId: fraudResult.layers.md5.matchedExpenseId || null
+            },
+            pHash: {
+              score: fraudResult.layers.pHash.score,
+              details: fraudResult.layers.pHash.details,
+              similarity: fraudResult.layers.pHash.similarity || 0,
+              matched: fraudResult.layers.pHash.matched || false
+            },
+            clip: {
+              score: fraudResult.layers.clip.score,
+              details: fraudResult.layers.clip.details,
+              similarity: fraudResult.layers.clip.similarity || 0,
+              matched: fraudResult.layers.clip.matched || false,
+              error: fraudResult.layers.clip.error || false
+            },
+            florence: {
+              score: fraudResult.layers.florence.score,
+              details: fraudResult.layers.florence.details,
+              flags: fraudResult.layers.florence.flags || [],
+              analysis: fraudResult.layers.florence.analysis || null,
+              error: fraudResult.layers.florence.error || false
+            },
+            anomaly: {
+              score: fraudResult.layers.anomaly.score,
+              details: fraudResult.layers.anomaly.details,
+              zScore: fraudResult.layers.anomaly.zScore || null,
+              isAnomaly: fraudResult.layers.anomaly.isAnomaly || false
+            }
+          },
+          recommendation: fraudResult.recommendation,
+          confidence: fraudResult.confidence,
+          processingTime: fraudResult.processingTime,
+          timestamp: fraudResult.timestamp
+        }),
+
+        // Store anomaly confidence separately for easy filtering
+        anomaly_confidence: fraudResult.layers.anomaly.score
+      };
+
+      await this.update('hr.expense', expenseId, values);
+
+      console.log(`[FraudDetection] ✅ Expense ${expenseId} updated successfully`);
+      return true;
+
+    } catch (error) {
+      console.error('[FraudDetection] Error updating expense:', error.message);
+      return false;
+    }
   }
 }
 

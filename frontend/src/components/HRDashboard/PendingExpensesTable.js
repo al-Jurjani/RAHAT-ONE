@@ -214,7 +214,16 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
 
                   <Box sx={{ my: 1 }}>
                     <Chip label={expense.expense_category} size="small" sx={{ mr: 1 }} />
-                    <Chip label={`Fraud: N/A`} size="small" color="default" variant="outlined" />
+                    {expense.fraud_score !== null && expense.fraud_score !== undefined ? (
+                      <Chip
+                        label={`Fraud: ${(expense.fraud_score * 100).toFixed(0)}%`}
+                        size="small"
+                        color={expense.fraud_score >= 0.70 ? 'error' : expense.fraud_score >= 0.40 ? 'warning' : 'success'}
+                        variant="outlined"
+                      />
+                    ) : (
+                      <Chip label={`Fraud: N/A`} size="small" color="default" variant="outlined" />
+                    )}
                   </Box>
 
                   <Typography variant="body2" color="textSecondary">
@@ -394,7 +403,15 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   <TableCell>{expense.vendor_name}</TableCell>
                   <TableCell>{getStatusChip(expense.workflow_status)}</TableCell>
                   <TableCell>
-                    <Chip label="N/A" size="small" color="default" variant="outlined" />
+                    {expense.fraud_score !== null && expense.fraud_score !== undefined ? (
+                      <Chip
+                        label={`${(expense.fraud_score * 100).toFixed(0)}%`}
+                        size="small"
+                        color={expense.fraud_score >= 0.70 ? 'error' : expense.fraud_score >= 0.40 ? 'warning' : 'success'}
+                      />
+                    ) : (
+                      <Chip label="N/A" size="small" color="default" variant="outlined" />
+                    )}
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">

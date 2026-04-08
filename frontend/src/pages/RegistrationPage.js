@@ -9,19 +9,31 @@ import {
   Typography,
   TextField,
   Button,
-  MenuItem,
   Grid,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Checkbox,
+  FormControlLabel,
+  Divider
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import { lookupAPI, registrationAPI } from '../services/api';
+import { registrationAPI } from '../services/api';
 
-const steps = ['Personal Information', 'Job Details', 'Upload Documents', 'Set Password'];
+const steps = ['Personal Information', 'Additional Details', 'Upload Documents', 'Set Password'];
 
 function RegistrationPage() {
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  // Read employee type and employee ID from URL query params
+  // e.g. /register?token=123&type=office
+  const params = new URLSearchParams(window.location.search);
+  const employeeType = params.get('type') || 'office'; // 'office' or 'shop_floor'
+  const employeeToken = params.get('token') || '';
+
+  // Info passed via query params (read-only display)
+  const assignedDepartment = params.get('department') || '';
+  const assignedPosition = params.get('position') || '';
 
   // Form data
   const [formData, setFormData] = useState({
@@ -31,10 +43,19 @@ function RegistrationPage() {
     fatherName: '',
     dateOfBirth: '',
     phone: '',
-    departmentId: '',
-    jobPositionId: '',
+    // Bank details
+    bankName: '',
+    bankAccountNumber: '',
+    bankIban: '',
+    // Emergency contact
+    emergencyContactName: '',
+    emergencyContactRelationship: '',
+    emergencyContactPhone: '',
+    // Password
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    // Medical declaration (for shop floor — checkbox instead of file)
+    medicalDeclaration: false
   });
 
   // Files
@@ -44,45 +65,14 @@ function RegistrationPage() {
     medical: null
   });
 
-  // Lookup data
-  const [departments, setDepartments] = useState([]);
-  const [positions, setPositions] = useState([]);
-  const [allPositions, setAllPositions] = useState([]);
   const [workEmail, setWorkEmail] = useState('');
 
-  // Load departments on mount
-  useEffect(() => {
-    loadDepartments();
-  }, []);
-
-  // Filter positions when department changes
-  useEffect(() => {
-    if (formData.departmentId && allPositions.length > 0) {
-      const filtered = allPositions.filter(
-        pos => pos.departmentId === parseInt(formData.departmentId)
-      );
-      setPositions(filtered);
-    } else {
-      setPositions([]);
-    }
-  }, [formData.departmentId, allPositions]);
-
-  const loadDepartments = async () => {
-    try {
-      const deptResponse = await lookupAPI.getDepartments();
-      setDepartments(deptResponse.data.data);
-
-      const posResponse = await lookupAPI.getPositions();
-      setAllPositions(posResponse.data.data);
-    } catch (error) {
-      toast.error('Failed to load departments');
-      console.error(error);
-    }
-  };
-
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
 
   const handleFileChange = (e) => {
@@ -91,7 +81,6 @@ function RegistrationPage() {
   };
 
   const handleNext = () => {
-    // Validate current step
     if (activeStep === 0 && !validateStep1()) return;
     if (activeStep === 1 && !validateStep2()) return;
     if (activeStep === 2 && !validateStep3()) return;
@@ -122,8 +111,8 @@ function RegistrationPage() {
   };
 
   const validateStep2 = () => {
-    if (!formData.departmentId || !formData.jobPositionId) {
-      toast.error('Please select department and position');
+    if (!formData.emergencyContactName || !formData.emergencyContactPhone) {
+      toast.error('Emergency contact name and phone are required');
       return false;
     }
     return true;
@@ -160,17 +149,31 @@ function RegistrationPage() {
       submitData.append('fatherName', formData.fatherName);
       submitData.append('dateOfBirth', formData.dateOfBirth);
       submitData.append('phone', formData.phone);
-      submitData.append('departmentId', formData.departmentId);
-      submitData.append('jobPositionId', formData.jobPositionId);
       submitData.append('password', formData.password);
+      // Bank details
+      submitData.append('bankName', formData.bankName);
+      submitData.append('bankAccountNumber', formData.bankAccountNumber);
+      submitData.append('bankIban', formData.bankIban);
+      // Emergency contact
+      submitData.append('emergencyContactName', formData.emergencyContactName);
+      submitData.append('emergencyContactRelationship', formData.emergencyContactRelationship);
+      submitData.append('emergencyContactPhone', formData.emergencyContactPhone);
+      // Medical declaration (shop floor)
+      if (employeeType === 'shop_floor') {
+        submitData.append('medicalDeclaration', formData.medicalDeclaration);
+      }
+      // Employee token (links to the initiated employee record)
+      if (employeeToken) {
+        submitData.append('employeeToken', employeeToken);
+      }
+      // Files
       submitData.append('cnic', files.cnic);
       if (files.degree) submitData.append('degree', files.degree);
       if (files.medical) submitData.append('medical', files.medical);
 
       const response = await registrationAPI.complete(submitData);
 
-      setWorkEmail(response.data.data.workEmail);
-      toast.success('Registration completed successfully!');
+      toast.success('Registration completed! You will receive an email once verified.');
       setActiveStep(steps.length); // Move to success screen
 
     } catch (error) {
@@ -186,6 +189,15 @@ function RegistrationPage() {
       case 0:
         return (
           <Grid container spacing={3}>
+            {/* Read-only assignment info from HR */}
+            {(assignedDepartment || assignedPosition) && (
+              <Grid item xs={12}>
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  You have been assigned to: <strong>{assignedDepartment}</strong>
+                  {assignedPosition && <> as <strong>{assignedPosition}</strong></>}
+                </Alert>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 required
@@ -252,47 +264,6 @@ function RegistrationPage() {
                 onChange={handleInputChange}
               />
             </Grid>
-          </Grid>
-        );
-
-      case 1:
-        return (
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <TextField
-                required
-                fullWidth
-                select
-                label="Department"
-                name="departmentId"
-                value={formData.departmentId}
-                onChange={handleInputChange}
-              >
-                {departments.map(dept => (
-                  <MenuItem key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                required
-                fullWidth
-                select
-                label="Job Position"
-                name="jobPositionId"
-                value={formData.jobPositionId}
-                onChange={handleInputChange}
-                disabled={!formData.departmentId}
-              >
-                {positions.map(pos => (
-                  <MenuItem key={pos.id} value={pos.id}>
-                    {pos.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
             {formData.name && (
               <Grid item xs={12}>
                 <Alert severity="info">
@@ -300,6 +271,85 @@ function RegistrationPage() {
                 </Alert>
               </Grid>
             )}
+          </Grid>
+        );
+
+      case 1:
+        return (
+          <Grid container spacing={3}>
+            {/* Bank Details */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                Bank Details (for salary disbursement)
+              </Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Bank Name"
+                name="bankName"
+                value={formData.bankName}
+                onChange={handleInputChange}
+                placeholder="e.g. HBL, Meezan Bank, JazzCash"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Account Number"
+                name="bankAccountNumber"
+                value={formData.bankAccountNumber}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="IBAN"
+                name="bankIban"
+                value={formData.bankIban}
+                onChange={handleInputChange}
+                placeholder="PK00XXXX0000000000000000"
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                Emergency Contact
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                required
+                fullWidth
+                label="Contact Name"
+                name="emergencyContactName"
+                value={formData.emergencyContactName}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Relationship"
+                name="emergencyContactRelationship"
+                value={formData.emergencyContactRelationship}
+                onChange={handleInputChange}
+                placeholder="e.g. Father, Spouse, Sibling"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                label="Contact Phone"
+                name="emergencyContactPhone"
+                value={formData.emergencyContactPhone}
+                onChange={handleInputChange}
+                placeholder="+92-300-1234567"
+              />
+            </Grid>
           </Grid>
         );
 
@@ -319,43 +369,64 @@ function RegistrationPage() {
               />
               {files.cnic && (
                 <Typography variant="caption" color="success.main">
-                  ✓ {files.cnic.name}
+                  {files.cnic.name}
                 </Typography>
               )}
             </Grid>
-            <Grid item xs={12}>
-              <Typography variant="body2" gutterBottom>
-                Degree Certificate (Optional)
-              </Typography>
-              <input
-                type="file"
-                name="degree"
-                accept=".pdf"
-                onChange={handleFileChange}
-                style={{ marginBottom: 16 }}
-              />
-              {files.degree && (
-                <Typography variant="caption" color="success.main">
-                  ✓ {files.degree.name}
+
+            {/* Degree upload — only for office workers */}
+            {employeeType === 'office' && (
+              <Grid item xs={12}>
+                <Typography variant="body2" gutterBottom>
+                  Degree Certificate (Optional)
                 </Typography>
-              )}
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="body2" gutterBottom>
-                Medical Certificate (Optional)
-              </Typography>
-              <input
-                type="file"
-                name="medical"
-                accept=".pdf"
-                onChange={handleFileChange}
-              />
-              {files.medical && (
-                <Typography variant="caption" color="success.main">
-                  ✓ {files.medical.name}
+                <input
+                  type="file"
+                  name="degree"
+                  accept=".pdf,image/*"
+                  onChange={handleFileChange}
+                  style={{ marginBottom: 16 }}
+                />
+                {files.degree && (
+                  <Typography variant="caption" color="success.main">
+                    {files.degree.name}
+                  </Typography>
+                )}
+              </Grid>
+            )}
+
+            {/* Medical — file upload for office, checkbox for shop floor */}
+            {employeeType === 'office' ? (
+              <Grid item xs={12}>
+                <Typography variant="body2" gutterBottom>
+                  Medical Certificate (Optional)
                 </Typography>
-              )}
-            </Grid>
+                <input
+                  type="file"
+                  name="medical"
+                  accept=".pdf,image/*"
+                  onChange={handleFileChange}
+                />
+                {files.medical && (
+                  <Typography variant="caption" color="success.main">
+                    {files.medical.name}
+                  </Typography>
+                )}
+              </Grid>
+            ) : (
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      name="medicalDeclaration"
+                      checked={formData.medicalDeclaration}
+                      onChange={handleInputChange}
+                    />
+                  }
+                  label="I declare that I am medically fit to perform the duties of this position"
+                />
+              </Grid>
+            )}
           </Grid>
         );
 
@@ -399,24 +470,14 @@ function RegistrationPage() {
         <Box sx={{ mt: 8, mb: 4 }}>
           <Paper elevation={3} sx={{ p: 4 }}>
             <Typography variant="h4" gutterBottom color="success.main">
-              ✓ Registration Successful!
+              Registration Successful!
             </Typography>
             <Typography variant="body1" paragraph>
               Your registration has been submitted successfully.
             </Typography>
             <Alert severity="info" sx={{ mb: 2 }}>
-              Your work email: <strong>{workEmail}</strong>
+              Your documents are now being verified. You will receive an email with your work email and next steps once approved.
             </Alert>
-            <Typography variant="body2" color="text.secondary">
-              Your documents are being verified. You will receive an email once verification is complete.
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={() => window.location.href = '/status'}
-              sx={{ mt: 3 }}
-            >
-              Check Status
-            </Button>
           </Paper>
         </Box>
       </Container>
