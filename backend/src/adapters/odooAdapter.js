@@ -324,7 +324,8 @@ async getEmployeeDocuments(employeeId) {
         'hr_verification_status', 'onboarding_initiated_date',
         'hr_verified_date', 'rejection_date', 'rejection_reason',
         'cnic_uploaded', 'degree_uploaded', 'medical_uploaded',
-        'entered_cnic_number', 'entered_father_name', 'active'
+        'entered_cnic_number', 'entered_father_name', 'active',
+        'cnic_verified', 'auto_approved', 'onboarding_completed_date'
       ];
 
       // If we need to include inactive records, modify the domain

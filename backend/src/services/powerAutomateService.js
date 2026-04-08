@@ -5,6 +5,7 @@ class PowerAutomateService {
     // Onboarding flows now handled by n8n (was Power Automate)
     this.flowUrl = process.env.N8N_ONBOARDING_WEBHOOK || process.env.PA_ONBOARDING_WEBHOOK;
     this.onboardingInviteUrl = process.env.N8N_ONBOARDING_INVITE_URL || this.flowUrl;
+    this.onboardingDecisionUrl = process.env.N8N_ONBOARDING_DECISION_URL || this.flowUrl;
     this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
     this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
@@ -21,7 +22,10 @@ class PowerAutomateService {
       };
 
       // Route to appropriate n8n flow based on action
-      const url = action === 'initiate' ? this.onboardingInviteUrl : this.flowUrl;
+      let url;
+      if (action === 'initiate') url = this.onboardingInviteUrl;
+      else if (action === 'decision') url = this.onboardingDecisionUrl;
+      else url = this.flowUrl;
 
       console.log(`Triggering n8n onboarding flow: ${action}`, employeeData.name);
 

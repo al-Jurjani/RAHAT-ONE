@@ -85,6 +85,7 @@ export const lookupAPI = {
 export const hrAPI = {
   getPending: () => api.get('/hr/verification/pending'),
   getApproved: () => api.get('/hr/verification/approved'),
+  getAutoApproved: () => api.get('/hr/verification/auto-approved'),
   getRejected: () => api.get('/hr/verification/rejected'),
 
   getDetails: (employeeId) =>
@@ -102,10 +103,7 @@ export const hrAPI = {
     api.post(`/hr/verification/reject/${employeeId}`, {
       reason,
       details,
-    }),
-
-    overrideAssignment: (employeeId, data) =>
-    api.put(`/hr/verification/${employeeId}/override-assignment`, data)
+    })
 };
 
 /* =========================
