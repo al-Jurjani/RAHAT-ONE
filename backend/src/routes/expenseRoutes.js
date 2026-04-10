@@ -48,16 +48,11 @@ router.get('/:id/attachment', authenticateToken, expenseController.getExpenseAtt
 router.get('/:id', authenticateToken, expenseController.getExpenseDetails);
 
 // ==========================================
-// [n8n-migration] PUBLIC ROUTES COMMENTED OUT
-// Token-based approval endpoints replaced by n8n webhook-wait URLs.
-// Manager/HR now click approve/reject links in emails that go directly to n8n.
+// PUBLIC TOKEN ROUTES (approval page + decision handoff)
 // ==========================================
-/*
 router.get('/public/:expenseId', expenseController.getExpenseForApproval);
 router.get('/public/:expenseId/invoice', expenseController.getPublicInvoicePreview);
 router.post('/:expenseId/manager-decision', expenseController.handleManagerDecision);
 router.post('/:expenseId/hr-decision', expenseController.handleHRDecision);
-router.post('/:expenseId/escalate-to-manager', expenseController.escalateToManagerAfterHR);
-*/
 
 module.exports = router;

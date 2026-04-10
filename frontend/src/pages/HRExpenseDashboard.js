@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import PendingExpensesTable from '../components/HRDashboard/PendingExpensesTable';
 import AllExpensesTable from '../components/HRDashboard/AllExpensesTable';
 import FlaggedExpensesTable from '../components/HRDashboard/FlaggedExpensesTable';
+import AutoApprovedExpensesTable from '../components/HRDashboard/AutoApprovedExpensesTable';
 
 const HRExpenseDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -47,6 +48,7 @@ const HRExpenseDashboard = () => {
           <Tab label="All Expenses" />
           <Tab label="Pending HR Approval" />
           <Tab label="Flagged (Fraud Detection)" />
+          <Tab label="Auto-Approved" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -66,6 +68,11 @@ const HRExpenseDashboard = () => {
             <FlaggedExpensesTable
               refreshTrigger={refreshTrigger}
               onActionComplete={handleActionComplete}
+            />
+          )}
+          {activeTab === 3 && (
+            <AutoApprovedExpensesTable
+              refreshTrigger={refreshTrigger}
             />
           )}
         </Box>

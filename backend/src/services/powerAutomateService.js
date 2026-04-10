@@ -10,6 +10,8 @@ class PowerAutomateService {
     this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
     // [n8n-migration] Expense flows now go to n8n instead of Power Automate
     this.expenseFlowUrl = process.env.N8N_EXPENSE_WEBHOOK_URL;
+    this.expenseManagerDecisionUrl = process.env.N8N_MANAGER_DECISION_WEBHOOK;
+    this.expenseHrDecisionUrl = process.env.N8N_HR_DECISION_WEBHOOK;
     // Old PA expense URLs (commented out):
     // this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
     // this.expenseSubmissionFlowUrl = process.env.PA_EXPENSE_SUBMISSION_WEBHOOK;
@@ -144,6 +146,64 @@ class PowerAutomateService {
 
     } catch (error) {
       console.error(`[ExpenseFlow] n8n webhook error:`, error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      return null;
+    }
+  }
+
+  async triggerExpenseManagerDecision(payload) {
+    try {
+      if (!this.expenseManagerDecisionUrl) {
+        console.warn('[ExpenseFlow] N8N_MANAGER_DECISION_WEBHOOK not configured in .env');
+        return null;
+      }
+
+      const response = await axios.get(this.expenseManagerDecisionUrl, {
+        params: {
+          expenseId: payload.expenseId,
+          action: payload.action,
+          reason: payload.reason,
+          token: payload.token
+        },
+        timeout: 30000
+      });
+
+      console.log(`[ExpenseFlow] Manager decision webhook fired successfully (status: ${response.status})`);
+      return true;
+    } catch (error) {
+      console.error('[ExpenseFlow] Manager decision webhook error:', error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      return null;
+    }
+  }
+
+  async triggerExpenseHRDecision(payload) {
+    try {
+      if (!this.expenseHrDecisionUrl) {
+        console.warn('[ExpenseFlow] N8N_HR_DECISION_WEBHOOK not configured in .env');
+        return null;
+      }
+
+      const response = await axios.get(this.expenseHrDecisionUrl, {
+        params: {
+          expenseId: payload.expenseId,
+          action: payload.action,
+          reason: payload.reason,
+          token: payload.token
+        },
+        timeout: 30000
+      });
+
+      console.log(`[ExpenseFlow] HR decision webhook fired successfully (status: ${response.status})`);
+      return true;
+    } catch (error) {
+      console.error('[ExpenseFlow] HR decision webhook error:', error.message);
       if (error.response) {
         console.error('   Response status:', error.response.status);
         console.error('   Response data:', JSON.stringify(error.response.data, null, 2));

@@ -212,15 +212,144 @@ class ExpenseController {
     }
   }
 
-  // [n8n-migration] All public/approval endpoints below are replaced by n8n webhook-wait pattern.
-  // Manager and HR now click approve/reject links in emails that hit n8n webhook-wait URLs directly.
-  // No backend involvement in the approval flow anymore.
-  /*
-  async getExpenseForApproval(req, res) { ... }
-  async getPublicInvoicePreview(req, res) { ... }
-  async handleManagerDecision(req, res) { ... }
-  async handleHRDecision(req, res) { ... }
-  */
+  /**
+   * GET /api/expenses/public/:expenseId
+   * Public endpoint for manager approval page (token protected)
+   */
+  async getExpenseForApproval(req, res) {
+    try {
+      const { expenseId } = req.params;
+      const { token } = req.query;
+
+      if (!token) {
+        return respondError(res, 'Approval token is required', 400);
+      }
+
+      const validation = await expenseService.validateApprovalToken(expenseId, token);
+      if (!validation.valid) {
+        return respondError(res, validation.reason, 401);
+      }
+
+      const expense = validation.expense;
+      const employee = expense.employee_id?.[0]
+        ? await odooAdapter.getEmployee(expense.employee_id[0])
+        : null;
+
+      return respondSuccess(res, {
+        expense,
+        employee: employee || { name: 'Unknown', work_email: null }
+      }, 'Expense fetched for approval');
+    } catch (error) {
+      console.error('Get expense for approval error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
+
+  /**
+   * GET /api/expenses/public/:expenseId/invoice
+   * Public endpoint for invoice preview in manager approval page (token protected)
+   */
+  async getPublicInvoicePreview(req, res) {
+    try {
+      const { expenseId } = req.params;
+      const { token } = req.query;
+
+      if (!token) {
+        return respondError(res, 'Approval token is required', 400);
+      }
+
+      const validation = await expenseService.validateApprovalToken(expenseId, token);
+      if (!validation.valid) {
+        return respondError(res, validation.reason, 401);
+      }
+
+      const attachment = await odooAdapter.getExpenseAttachment(expenseId);
+
+      if (!attachment || !attachment.datas) {
+        return respondError(res, 'Invoice attachment not found', 404);
+      }
+
+      const fileBuffer = Buffer.from(attachment.datas, 'base64');
+      const fileName = (attachment.name || `expense-${expenseId}-invoice`).replace(/"/g, '');
+
+      res.setHeader('Content-Type', attachment.mimetype || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      return res.status(200).send(fileBuffer);
+    } catch (error) {
+      console.error('Get public invoice preview error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
+
+  /**
+   * POST /api/expenses/:expenseId/manager-decision
+   * Token-protected decision endpoint; backend validates token and forwards to n8n Flow 2.
+   */
+  async handleManagerDecision(req, res) {
+    try {
+      const { expenseId } = req.params;
+      const { token, decision, remarks } = req.body;
+
+      if (!token) {
+        return respondError(res, 'Approval token is required', 400);
+      }
+
+      if (!['approve', 'reject'].includes(decision)) {
+        return respondError(res, 'Decision must be either approve or reject', 400);
+      }
+
+      const validation = await expenseService.validateApprovalToken(expenseId, token);
+      if (!validation.valid) {
+        return respondError(res, validation.reason, 401);
+      }
+
+      await expenseService.handleManagerDecision(expenseId, decision, remarks, token);
+
+      return respondSuccess(res, {
+        expenseId: Number(expenseId),
+        decision,
+        status: 'queued'
+      }, 'Manager decision accepted and forwarded to workflow');
+    } catch (error) {
+      console.error('Handle manager decision error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
+
+  /**
+   * POST /api/expenses/:expenseId/hr-decision
+   * Token-protected HR decision endpoint; forwarded to n8n HR flow.
+   */
+  async handleHRDecision(req, res) {
+    try {
+      const { expenseId } = req.params;
+      const { token, decision, remarks } = req.body;
+
+      if (!token) {
+        return respondError(res, 'Approval token is required', 400);
+      }
+
+      if (!['approve', 'reject'].includes(decision)) {
+        return respondError(res, 'Decision must be either approve or reject', 400);
+      }
+
+      const validation = await expenseService.validateApprovalToken(expenseId, token);
+      if (!validation.valid) {
+        return respondError(res, validation.reason, 401);
+      }
+
+      await expenseService.handleHRDecision(expenseId, decision, remarks, token);
+
+      return respondSuccess(res, {
+        expenseId: Number(expenseId),
+        decision,
+        status: 'queued'
+      }, 'HR decision accepted and forwarded to workflow');
+    } catch (error) {
+      console.error('Handle HR decision error:', error);
+      return respondError(res, error.message, 500);
+    }
+  }
 
   /**
    * GET /api/expenses/pending-approval

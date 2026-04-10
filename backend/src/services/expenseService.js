@@ -1,6 +1,5 @@
 const odooAdapter = require('../adapters/odooAdapter');
-// [n8n-migration] crypto no longer needed — token generation moved to n8n webhook-wait
-// const crypto = require('crypto');
+const crypto = require('crypto');
 const powerAutomateService = require('./powerAutomateService');
 // [n8n-migration] Fraud detection now called directly by n8n via Modal HTTP endpoint
 // const fraudDetectionService = require('./fraudDetectionService');
@@ -71,18 +70,15 @@ class ExpenseService {
   }
   */
 
-  // [n8n-migration] Token generation no longer needed — n8n webhook-wait URLs replace tokens
-  /*
   generateApprovalToken() {
     return crypto.randomBytes(32).toString('hex');
   }
 
   getTokenExpiry(daysValid = 7) {
     const expiry = new Date();
-    expiry.setDate(expiry.getDate() + daysValid);
+    expiry.setHours(expiry.getHours() + (daysValid * 24));
     return this.formatOdooDateTime(expiry);
   }
-  */
 
   /**
    * Submit a new expense (THINNED for n8n migration)
@@ -122,6 +118,9 @@ class ExpenseService {
         date: expenseData.expense_date,
         description: expenseData.description,
         name: expenseData.description,
+        approval_token: this.generateApprovalToken(),
+        approval_token_expiry: this.getTokenExpiry(2),
+        approval_token_type: 'manager',
         workflow_status: 'draft',
         submitted_date: this.formatOdooDateTime()
       };
@@ -174,6 +173,8 @@ class ExpenseService {
         hrEmail: process.env.HR_EMAIL || 'hr@outfitters.com',
         amount: parseFloat(expenseData.amount),
         category: normalizedCategory,
+        approvalToken: odooExpenseData.approval_token,
+        approvalTokenExpiry: odooExpenseData.approval_token_expiry,
         hasInvoice: !!attachmentId,
         attachmentId: attachmentId,
         submittedAt: new Date().toISOString()
@@ -336,15 +337,6 @@ class ExpenseService {
     }
   }
 
-  // [n8n-migration] All approval/decision handling moved to n8n flows.
-  // Token validation, manager decisions, HR decisions, and escalation
-  // are now handled by n8n webhook-wait pattern.
-  // Odoo field updates reference (used in n8n flows):
-  //   Manager approve: manager_decision='approved', manager_approved=true, manager_approved_date, workflow_status='pending_hr'|'approved'
-  //   Manager reject:  manager_decision='rejected', workflow_status='rejected', completed_date
-  //   HR approve:      hr_decision='approved', hr_approved=true, hr_approved_date, workflow_status='approved', completed_date
-  //   HR reject:       hr_decision='rejected', workflow_status='rejected', completed_date
-  /*
   async validateApprovalToken(expenseId, token) {
     try {
       const expense = await odooAdapter.getExpense(expenseId);
@@ -357,71 +349,54 @@ class ExpenseService {
     } catch (error) { console.error('Token validation error:', error); throw error; }
   }
 
-  async handleManagerDecision(expenseId, decision, managerId, remarks = '') {
+  async consumeApprovalToken(expenseId) {
+    await odooAdapter.updateExpense(expenseId, {
+      approval_token: null,
+      approval_token_expiry: null,
+      approval_token_type: null
+    });
+  }
+
+  async handleManagerDecision(expenseId, decision, remarks = '', approvalToken = null) {
     try {
-      const expense = await odooAdapter.getExpense(expenseId);
-      if (!expense) throw new Error('Expense not found');
-      const updateData = {
-        manager_approved: decision === 'approve', manager_approved_by: managerId,
-        manager_approved_date: this.formatOdooDateTime(), manager_remarks: remarks,
-        manager_decision: decision === 'approve' ? 'approved' : 'rejected'
-      };
-      if (decision === 'approve') {
-        if (expense.hr_escalated) {
-          updateData.approval_token = this.generateApprovalToken();
-          updateData.approval_token_expiry = this.getTokenExpiry();
-          updateData.approval_token_type = 'hr'; updateData.workflow_status = 'pending_hr';
-        } else { updateData.workflow_status = 'approved'; updateData.completed_date = this.formatOdooDateTime(); }
-      } else { updateData.workflow_status = 'rejected'; updateData.completed_date = this.formatOdooDateTime(); }
-      await odooAdapter.updateExpense(expenseId, updateData);
-      const updatedExpense = await odooAdapter.getExpense(expenseId);
-      return { success: true, expense: updatedExpense, nextAction: updatedExpense.workflow_status === 'pending_hr' ? 'hr_approval' : 'none' };
+      const action = decision === 'approve' ? 'approve' : 'reject';
+      const triggerOk = await powerAutomateService.triggerExpenseManagerDecision({
+        expenseId,
+        action,
+        reason: remarks || (action === 'approve' ? 'Approved by manager' : 'Rejected by manager'),
+        token: approvalToken
+      });
+
+      if (!triggerOk) {
+        throw new Error('Failed to trigger manager decision workflow');
+      }
+
+      // One-time use link semantics: consume token after successful handoff to n8n
+      await this.consumeApprovalToken(expenseId);
+
+      return { success: true };
     } catch (error) { console.error('Manager decision error:', error); throw error; }
   }
 
-  async handleHRDecision(expenseId, decision, hrUserId, remarks = '') {
+  async handleHRDecision(expenseId, decision, remarks = '', approvalToken = null) {
     try {
-      const expense = await odooAdapter.getExpense(expenseId);
-      if (!expense) throw new Error('Expense not found');
-      const updateData = {
-        hr_approved: decision === 'approve', hr_approved_by: hrUserId,
-        hr_approved_date: this.formatOdooDateTime(), hr_remarks: remarks,
-        hr_decision: decision === 'approve' ? 'approved' : 'rejected',
-        workflow_status: decision === 'approve' ? 'approved' : 'rejected',
-        completed_date: this.formatOdooDateTime()
-      };
-      await odooAdapter.updateExpense(expenseId, updateData);
-      const updatedExpense = await odooAdapter.getExpense(expenseId);
-      return { success: true, expense: updatedExpense };
+      const action = decision === 'approve' ? 'approve' : 'reject';
+      const triggerOk = await powerAutomateService.triggerExpenseHRDecision({
+        expenseId,
+        action,
+        reason: remarks || (action === 'approve' ? 'Approved by HR' : 'Rejected by HR'),
+        token: approvalToken
+      });
+
+      if (!triggerOk) {
+        throw new Error('Failed to trigger HR decision workflow');
+      }
+
+      await this.consumeApprovalToken(expenseId);
+
+      return { success: true };
     } catch (error) { console.error('HR decision error:', error); throw error; }
   }
-
-  async escalateToManagerAfterHRApproval(expenseId, hrApprovalToken) {
-    // No longer needed — n8n HR decision is final, no second manager pass.
-    // If HR approves a fraudulent expense, n8n sends audit email to senior HR (fire-and-forget).
-    try {
-      const expense = await odooAdapter.getExpense(expenseId);
-      if (!expense) throw new Error('Expense not found');
-      if (expense.fraud_detection_status !== 'fraudulent') throw new Error('Only for fraudulent expenses');
-      if (expense.approval_token !== hrApprovalToken) throw new Error('Invalid HR approval token');
-      if (expense.workflow_status !== 'pending_hr') throw new Error('Wrong state');
-      const employee = await odooAdapter.getEmployee(expense.employee_id[0]);
-      if (!employee.parent_id?.[0]) throw new Error('No manager assigned');
-      const manager = await odooAdapter.getEmployee(employee.parent_id[0]);
-      const newApprovalToken = this.generateApprovalToken();
-      const tokenExpiry = this.getTokenExpiry();
-      await odooAdapter.updateExpense(expenseId, {
-        workflow_status: 'pending_manager', approval_token: newApprovalToken,
-        approval_token_expiry: tokenExpiry, approval_token_type: 'manager',
-        hr_approved: true, hr_approved_date: this.formatOdooDateTime(),
-        hr_decision: 'approved', manager_decision: 'pending'
-      });
-      return { success: true, newApprovalToken, managerEmail: manager.work_email || manager.private_email,
-        managerName: manager.name, employeeName: employee.name,
-        fraudScore: expense.fraud_score, fraudStatus: expense.fraud_detection_status };
-    } catch (error) { console.error('Escalate to manager error:', error); throw error; }
-  }
-  */
 
   /**
    * Upload file and create Odoo attachment
