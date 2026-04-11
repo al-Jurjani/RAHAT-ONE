@@ -14,6 +14,7 @@ import PendingExpensesTable from '../components/HRDashboard/PendingExpensesTable
 import AllExpensesTable from '../components/HRDashboard/AllExpensesTable';
 import FlaggedExpensesTable from '../components/HRDashboard/FlaggedExpensesTable';
 import AutoApprovedExpensesTable from '../components/HRDashboard/AutoApprovedExpensesTable';
+import AutoRejectedExpensesTable from '../components/HRDashboard/AutoRejectedExpensesTable';
 
 const HRExpenseDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -49,6 +50,7 @@ const HRExpenseDashboard = () => {
           <Tab label="Pending HR Approval" />
           <Tab label="Flagged (Fraud Detection)" />
           <Tab label="Auto-Approved" />
+          <Tab label="Auto-Rejected" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -72,6 +74,11 @@ const HRExpenseDashboard = () => {
           )}
           {activeTab === 3 && (
             <AutoApprovedExpensesTable
+              refreshTrigger={refreshTrigger}
+            />
+          )}
+          {activeTab === 4 && (
+            <AutoRejectedExpensesTable
               refreshTrigger={refreshTrigger}
             />
           )}

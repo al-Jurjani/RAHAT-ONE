@@ -357,6 +357,14 @@ class ExpenseService {
     });
   }
 
+  async rotateApprovalTokenForHR(expenseId) {
+    await odooAdapter.updateExpense(expenseId, {
+      approval_token: this.generateApprovalToken(),
+      approval_token_expiry: this.getTokenExpiry(2),
+      approval_token_type: 'hr'
+    });
+  }
+
   async handleManagerDecision(expenseId, decision, remarks = '', approvalToken = null) {
     try {
       const action = decision === 'approve' ? 'approve' : 'reject';
@@ -371,8 +379,13 @@ class ExpenseService {
         throw new Error('Failed to trigger manager decision workflow');
       }
 
-      // One-time use link semantics: consume token after successful handoff to n8n
-      await this.consumeApprovalToken(expenseId);
+      // Manager's one-time token is spent. On approve, Flow 2 may escalate to HR — mint a fresh
+      // HR-scoped token so the HR dashboard can act on it. On reject, the workflow is terminal.
+      if (action === 'approve') {
+        await this.rotateApprovalTokenForHR(expenseId);
+      } else {
+        await this.consumeApprovalToken(expenseId);
+      }
 
       return { success: true };
     } catch (error) { console.error('Manager decision error:', error); throw error; }

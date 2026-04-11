@@ -248,7 +248,7 @@ def detect_forgery_florence(image_bytes: bytes) -> Dict:
 web_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("libjpeg-dev", "libpng-dev")  # JPEG/PNG codec support for Pillow
-    .pip_install("fastapi", "pydantic", "Pillow", "numpy")
+    .pip_install("fastapi", "pydantic", "Pillow", "numpy", "pymupdf")
 )
 
 
@@ -550,13 +550,34 @@ def fastapi_app():
         embedding: List[float]
 
     class FullAnalysisRequest(BaseModel):
-        image: str  # base64 encoded image
+        image: str  # base64 encoded image or PDF
+        mimetype: Optional[str] = None  # e.g. "image/jpeg", "application/pdf"
         employee_id: int = 0
         expense_id: int = 0
         amount: float = 0.0
         employee_stats: Optional[EmployeeStats] = None
         past_hashes: Optional[List[PastHash]] = []
         past_embeddings: Optional[List[PastEmbedding]] = []
+
+    def is_pdf_bytes(data: bytes, mimetype: Optional[str]) -> bool:
+        if mimetype and "pdf" in mimetype.lower():
+            return True
+        return len(data) >= 4 and data[:4] == b"%PDF"
+
+    def pdf_to_image_bytes(pdf_bytes: bytes) -> bytes:
+        """Render page 1 of a PDF to PNG bytes via PyMuPDF."""
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        if doc.page_count == 0:
+            doc.close()
+            raise ValueError("PDF has no pages")
+        page = doc.load_page(0)
+        # 200 DPI gives a clean render for OCR/VLM without being huge
+        pix = page.get_pixmap(dpi=200, alpha=False)
+        png_bytes = pix.tobytes("png")
+        doc.close()
+        return png_bytes
 
     # ===== ENDPOINTS =====
 
@@ -598,14 +619,29 @@ def fastapi_app():
                 f"[PIPELINE] Fraud detection for expense #{request.expense_id}, employee #{request.employee_id}, amount={request.amount}"
             )
 
-            # Decode image
+            # Decode payload (image OR pdf)
             try:
-                image_bytes = base64.b64decode(request.image)
-                print(f"[PIPELINE] Decoded image: {len(image_bytes)} bytes")
+                raw_bytes = base64.b64decode(request.image)
+                print(
+                    f"[PIPELINE] Decoded payload: {len(raw_bytes)} bytes, mimetype={request.mimetype}"
+                )
             except Exception as e:
                 raise HTTPException(
-                    status_code=400, detail=f"Invalid base64 image: {str(e)}"
+                    status_code=400, detail=f"Invalid base64 payload: {str(e)}"
                 )
+
+            # If PDF, render page 1 to a PNG — downstream layers need an image
+            if is_pdf_bytes(raw_bytes, request.mimetype):
+                print("[PIPELINE] PDF detected — rendering page 1 to PNG")
+                try:
+                    image_bytes = pdf_to_image_bytes(raw_bytes)
+                    print(f"[PIPELINE] Rendered PDF page: {len(image_bytes)} bytes")
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=400, detail=f"Failed to render PDF: {str(e)}"
+                    )
+            else:
+                image_bytes = raw_bytes
 
             # ===== PHASE 1: LOCAL LAYERS (CPU, instant) =====
             print("[PIPELINE] Phase 1: Running local layers (MD5, pHash, Anomaly)...")
@@ -614,7 +650,8 @@ def fastapi_app():
                 request.employee_stats.model_dump() if request.employee_stats else None
             )
 
-            md5_hash = compute_md5(image_bytes)
+            # MD5 on original bytes — byte-identical re-uploads (PDF or image) must collide
+            md5_hash = compute_md5(raw_bytes)
             md5_result = run_md5_layer(md5_hash, past_hashes)
 
             p_hash = compute_phash(image_bytes)

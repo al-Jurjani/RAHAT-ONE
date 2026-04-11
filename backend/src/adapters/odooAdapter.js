@@ -1022,6 +1022,8 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'hr_approved_date',
           'policy_check_passed',
           'approval_token',
+          'rejection_reason',
+          'rejection_details',
           'create_date'
         ]
       ]);

@@ -25,11 +25,13 @@ import {
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import DescriptionIcon from '@mui/icons-material/Description';
 import axios from 'axios';
 import { expenseAPI } from '../../services/api';
+import FraudDetailModal from './FraudDetailModal';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -54,6 +56,13 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 960);
+  const [fraudModalOpen, setFraudModalOpen] = useState(false);
+  const [fraudModalExpense, setFraudModalExpense] = useState(null);
+
+  const handleViewFraudAnalysis = (expense) => {
+    setFraudModalExpense(expense);
+    setFraudModalOpen(true);
+  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 960);
@@ -238,6 +247,16 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                     <Button
                       fullWidth
                       size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => handleViewFraudAnalysis(expense)}
+                      sx={{ mb: 1 }}
+                    >
+                      View Fraud Analysis
+                    </Button>
+                    <Button
+                      fullWidth
+                      size="small"
                       onClick={() => setExpandedExpenseId(expandedExpenseId === expense.id ? null : expense.id)}
                       endIcon={expandedExpenseId === expense.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                     >
@@ -351,6 +370,19 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
             <Button onClick={() => setPreviewDialogOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
+
+        <FraudDetailModal
+          open={fraudModalOpen}
+          expense={fraudModalExpense}
+          onClose={() => {
+            setFraudModalOpen(false);
+            setFraudModalExpense(null);
+          }}
+          onActionComplete={() => {
+            fetchPendingExpenses();
+            if (onActionComplete) onActionComplete();
+          }}
+        />
       </>
     );
   }
@@ -419,6 +451,13 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleViewFraudAnalysis(expense)}
+                      title="View Fraud Analysis"
+                    >
+                      <VisibilityIcon />
+                    </IconButton>
                     <IconButton
                       size="small"
                       onClick={() => loadInvoicePreview(expense.id)}
@@ -516,6 +555,19 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
           <Button onClick={() => setPreviewDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <FraudDetailModal
+        open={fraudModalOpen}
+        expense={fraudModalExpense}
+        onClose={() => {
+          setFraudModalOpen(false);
+          setFraudModalExpense(null);
+        }}
+        onActionComplete={() => {
+          fetchPendingExpenses();
+          if (onActionComplete) onActionComplete();
+        }}
+      />
     </>
   );
 };
