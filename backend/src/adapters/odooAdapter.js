@@ -915,6 +915,8 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'workflow_status',
           'document_hash',
           'perceptual_hash',
+          'clip_embedding',
+          'florence_analysis',
           'fraud_score',
           'fraud_detection_details',
           'fraud_detection_status',

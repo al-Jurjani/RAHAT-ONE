@@ -2,11 +2,11 @@
 RAHAT-ONE Fraud Detection Modal Service
 
 Full 5-layer fraud detection pipeline:
-- Layer 1: MD5 Hash (0.35) — exact duplicate detection
-- Layer 2: pHash (0.20) — perceptual similarity via DCT
-- Layer 3: CLIP ViT-B-32 (0.25) — visual embedding similarity
-- Layer 4: Florence-2-large (0.10) — VLM forgery keyword scan
-- Layer 5: Anomaly Detection (0.10) — Z-score vs employee history
+- Layer 1: MD5 Hash (0.35) â€” exact duplicate detection
+- Layer 2: pHash (0.20) â€” perceptual similarity via DCT
+- Layer 3: CLIP ViT-B-32 (0.25) â€” visual embedding similarity
+- Layer 4: Florence-2-large (0.10) â€” VLM forgery keyword scan
+- Layer 5: Anomaly Detection (0.10) â€” Z-score vs employee history
 
 CLIP and Florence-2 run on GPU containers (T4).
 MD5, pHash, anomaly, and aggregation run in the web endpoint container (CPU).
@@ -18,7 +18,8 @@ import base64
 import hashlib
 import io
 import math
-from typing import Dict, List, Optional
+import re
+from typing import Dict, List, Optional, cast
 
 import modal
 
@@ -120,7 +121,7 @@ def generate_clip_embedding(image_bytes: bytes) -> List[float]:
 
     print(f"[CLIP] Generated embedding: {len(embedding_list)} dimensions")
 
-    return embedding_list
+    return cast(List[float], embedding_list)
 
 
 # ===== FLORENCE-2 FORGERY DETECTION FUNCTION =====
@@ -132,12 +133,15 @@ def generate_clip_embedding(image_bytes: bytes) -> List[float]:
     timeout=600,
     secrets=[],
 )
-def detect_forgery_florence(image_bytes: bytes) -> Dict:
+def detect_forgery_florence(
+    image_bytes: bytes, claimed_amount: Optional[float] = None
+) -> Dict:
     """
     Analyze invoice for visual inconsistencies using Florence-2 VLM.
 
     Args:
         image_bytes: Raw image bytes
+        claimed_amount: Expense amount claimed by employee (for OCR cross-check)
 
     Returns:
         Dict containing:
@@ -176,35 +180,48 @@ def detect_forgery_florence(image_bytes: bytes) -> Dict:
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    # Use detailed caption task to get comprehensive analysis
-    task_prompt = "<DETAILED_CAPTION>"
+    def run_task(task_prompt: str, question: Optional[str] = None) -> str:
+        prompt = task_prompt if question is None else f"{task_prompt}{question}"
+        inputs = processor(text=prompt, images=image, return_tensors="pt")
+        inputs = {
+            k: v.to(device, dtype=torch.float16)
+            if v.dtype == torch.float32
+            else v.to(device)
+            for k, v in inputs.items()
+        }
 
-    inputs = processor(text=task_prompt, images=image, return_tensors="pt")
+        with torch.no_grad():
+            generated_ids = model.generate(
+                **inputs, max_new_tokens=512, num_beams=3, do_sample=False
+            )
 
-    # Move inputs to device and match model dtype (float16)
-    inputs = {
-        k: v.to(device, dtype=torch.float16)
-        if v.dtype == torch.float32
-        else v.to(device)
-        for k, v in inputs.items()
-    }
+        generated_text = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )[0]
+        return cast(str, generated_text.replace(prompt, "").strip())
 
-    # Generate analysis
-    with torch.no_grad():
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=256, num_beams=3, do_sample=False
-        )
+    analysis = run_task("<MORE_DETAILED_CAPTION>")
+    ocr_text = run_task("<OCR>")
+    ocr_with_region = run_task("<OCR_WITH_REGION>")
+    forensic_q1 = run_task(
+        "<VQA>",
+        "Does the total amount text look visually different in font, weight, or alignment from nearby numbers? Answer yes or no with one short reason.",
+    )
+    forensic_q2 = run_task(
+        "<VQA>",
+        "Do you see signs of edited, overwritten, pasted, or tampered digits in the total/grand total area? Answer yes or no with one short reason.",
+    )
+    forensic_q3 = run_task(
+        "<VQA>",
+        "Is the grand total internally inconsistent with other fare amounts on this document? Answer yes or no with one short reason.",
+    )
+    forensic_q4 = run_task(
+        "<VQA>",
+        "Read the grand total amount only as digits (no words). If unreadable, answer unreadable.",
+    )
 
-    # Decode the output
-    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    print(f"[FLORENCE] Caption: {analysis[:120]}...")
 
-    # Extract the actual description (Florence-2 returns format: "task_prompt description")
-    analysis = generated_text.replace(task_prompt, "").strip()
-
-    print(f"[FLORENCE] Analysis: {analysis[:100]}...")
-
-    # Simple heuristic-based fraud scoring
-    # Look for keywords that might indicate manipulation
     suspicious_keywords = [
         "inconsistent",
         "edited",
@@ -219,25 +236,112 @@ def detect_forgery_florence(image_bytes: bytes) -> Dict:
         "compression",
         "quality difference",
         "irregular",
+        "misaligned",
+        "tampered",
+        "manipulated",
+        "font change",
+        "text replacement",
+        "pixelated",
+        "cloned",
+        "copy paste",
+        "inpainted",
     ]
 
     detected_flags = []
     analysis_lower = analysis.lower()
+    ocr_lower = ocr_text.lower()
 
     for keyword in suspicious_keywords:
         if keyword in analysis_lower:
-            detected_flags.append(keyword)
+            detected_flags.append(f"caption:{keyword}")
 
-    # Calculate fraud score (0.0 to 1.0)
-    # More flags = higher score, but cap at 1.0
-    fraud_score = min(len(detected_flags) / 5.0, 1.0)
+    amount_mismatch = False
+    amount_delta_pct = None
+    ocr_amount = None
+    amount_matches = re.findall(r"\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?|\d+\.\d+", ocr_lower)
+    numeric_amounts = []
+    for raw in amount_matches:
+        compact = raw.replace(",", "").replace(" ", "")
+        try:
+            value = float(compact)
+            if value > 0:
+                numeric_amounts.append(value)
+        except ValueError:
+            continue
 
-    print(f"[FLORENCE] Detected flags: {detected_flags}, Score: {fraud_score}")
+    if numeric_amounts and claimed_amount is not None and claimed_amount > 0:
+        ocr_amount = max(numeric_amounts)
+        amount_delta_pct = abs(ocr_amount - claimed_amount) / claimed_amount
+        if amount_delta_pct > 0.15:
+            amount_mismatch = True
+            detected_flags.append("ocr_amount_mismatch")
+
+    q1_lower = forensic_q1.lower()
+    q2_lower = forensic_q2.lower()
+    q3_lower = forensic_q3.lower()
+    q4_lower = forensic_q4.lower()
+
+    if "yes" in q1_lower:
+        detected_flags.append("vqa_font_style_mismatch")
+    if "yes" in q2_lower:
+        detected_flags.append("vqa_tamper_detected")
+    if "yes" in q3_lower:
+        detected_flags.append("vqa_total_inconsistent")
+    if "unreadable" in q4_lower:
+        detected_flags.append("vqa_total_unreadable")
+
+    # Florence sometimes hallucinates giant repeated flight lists; treat this as a reliability red flag.
+    if analysis_lower.count("flight ") >= 40:
+        detected_flags.append("caption_repetitive_hallucination")
+
+    if len(ocr_lower.strip()) < 20:
+        detected_flags.append("ocr_text_too_short")
+
+    if len(analysis_lower.strip()) < 50:
+        detected_flags.append("caption_too_vague")
+
+    unique_flags = list(dict.fromkeys(detected_flags))
+
+    # Multi-signal scoring with high emphasis on explicit forensic VQA signals.
+    score = 0.0
+    keyword_hits = len([f for f in unique_flags if f.startswith("caption:")])
+    score += min(keyword_hits * 0.04, 0.20)
+    if amount_mismatch:
+        score += 0.30
+    if "vqa_font_style_mismatch" in unique_flags:
+        score += 0.35
+    if "vqa_tamper_detected" in unique_flags:
+        score += 0.45
+    if "vqa_total_inconsistent" in unique_flags:
+        score += 0.25
+    if "vqa_total_unreadable" in unique_flags:
+        score += 0.10
+    if "caption_repetitive_hallucination" in unique_flags:
+        score += 0.12
+    if "ocr_text_too_short" in unique_flags:
+        score += 0.10
+    if "caption_too_vague" in unique_flags:
+        score += 0.05
+    fraud_score = min(score, 1.0)
+
+    print(f"[FLORENCE] Detected flags: {unique_flags}, Score: {fraud_score}")
 
     return {
         "analysis": analysis,
+        "ocr_text": ocr_text,
+        "ocr_with_region": ocr_with_region,
+        "forensic_vqa": {
+            "font_style_check": forensic_q1,
+            "tamper_check": forensic_q2,
+            "total_consistency_check": forensic_q3,
+            "grand_total_read": forensic_q4,
+        },
         "fraud_score": fraud_score,
-        "flags": detected_flags,
+        "flags": unique_flags,
+        "amount_mismatch": amount_mismatch,
+        "ocr_amount": ocr_amount,
+        "claimed_amount": claimed_amount,
+        "amount_delta_pct": amount_delta_pct,
         "model": model_name,
     }
 
@@ -272,16 +376,16 @@ def fastapi_app():
     # ===== THRESHOLDS & WEIGHTS (ported from fraudDetectionService.js) =====
 
     WEIGHTS = {
-        "md5": 0.35,
-        "pHash": 0.20,
-        "clip": 0.25,
-        "florence": 0.10,
-        "anomaly": 0.10,
+        "md5": 0.30,
+        "pHash": 0.15,
+        "clip": 0.20,
+        "florence": 0.15,
+        "anomaly": 0.20,
     }
 
     THRESHOLDS = {
-        "pHash": {"veryHigh": 0.92, "high": 0.77, "suspicious": 0.70},
-        "clip": {"extreme": 0.95, "veryHigh": 0.85, "moderate": 0.70},
+        "pHash": {"veryHigh": 0.95, "high": 0.88, "suspicious": 0.80},
+        "clip": {"extreme": 0.98, "veryHigh": 0.93, "moderate": 0.85},
         "anomaly": {"extreme": 3.0, "high": 2.5, "moderate": 2.0},
         "overall": {"fraudulent": 0.70, "suspicious": 0.40},
     }
@@ -292,7 +396,7 @@ def fastapi_app():
         return hashlib.md5(image_bytes).hexdigest()
 
     def compute_phash(image_bytes: bytes) -> str:
-        """DCT-based perceptual hash — same algorithm as backend imageHashing.js"""
+        """DCT-based perceptual hash â€” same algorithm as backend imageHashing.js"""
         img = Image.open(io.BytesIO(image_bytes)).resize((32, 32)).convert("L")
         pixels = list(img.getdata())
         matrix = [pixels[i * 32 : (i + 1) * 32] for i in range(32)]
@@ -324,7 +428,7 @@ def fastapi_app():
         return hex(int(bits, 2))[2:].zfill(16)
 
     def phash_similarity(hash1: str, hash2: str) -> float:
-        """Hamming distance → similarity (0.0-1.0)"""
+        """Hamming distance â†’ similarity (0.0-1.0)"""
         if not hash1 or not hash2 or len(hash1) != len(hash2):
             return 0.0
         bin1 = bin(int(hash1, 16))[2:].zfill(64)
@@ -359,29 +463,57 @@ def fastapi_app():
             "hash": md5_hash,
         }
 
-    def run_phash_layer(p_hash: str, past_hashes: list) -> dict:
+    def amount_delta_ratio(
+        current_amount: float, past_amount: Optional[float]
+    ) -> Optional[float]:
+        if past_amount is None or current_amount <= 0 or past_amount <= 0:
+            return None
+        denom = max(current_amount, past_amount)
+        return abs(current_amount - past_amount) / denom
+
+    def run_phash_layer(p_hash: str, past_hashes: list, current_amount: float) -> dict:
         max_sim = 0.0
         matched_id = None
+        matched_amount_delta = None
         for past in past_hashes:
             if past.get("perceptual_hash"):
                 sim = phash_similarity(p_hash, past["perceptual_hash"])
                 if sim > max_sim:
                     max_sim = sim
                     matched_id = past["id"]
+                    matched_amount_delta = amount_delta_ratio(
+                        current_amount, past.get("amount")
+                    )
+
+        likely_template_only = (
+            matched_amount_delta is not None and matched_amount_delta > 0.20
+        )
 
         if max_sim >= THRESHOLDS["pHash"]["veryHigh"]:
-            score, detail = (
-                0.90,
-                f"Very high similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
-            )
+            if likely_template_only:
+                score, detail = (
+                    0.20,
+                    f"Very high template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, but amount differs significantly",
+                )
+            else:
+                score, detail = (
+                    0.65,
+                    f"Very high similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
+                )
         elif max_sim >= THRESHOLDS["pHash"]["high"]:
-            score, detail = (
-                0.60,
-                f"High similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
-            )
+            if likely_template_only:
+                score, detail = (
+                    0.12,
+                    f"High template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, likely same receipt format",
+                )
+            else:
+                score, detail = (
+                    0.35,
+                    f"High similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
+                )
         elif max_sim >= THRESHOLDS["pHash"]["suspicious"]:
             score, detail = (
-                0.30,
+                0.15,
                 f"Moderate similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
             )
         else:
@@ -394,12 +526,18 @@ def fastapi_app():
             "score": score,
             "matched": max_sim >= THRESHOLDS["pHash"]["suspicious"],
             "matchedExpenseId": matched_id,
+            "amountDeltaRatio": round(matched_amount_delta, 4)
+            if matched_amount_delta is not None
+            else None,
+            "likelyTemplateOnly": likely_template_only,
             "similarity": round(max_sim, 4),
             "details": detail,
             "hash": p_hash,
         }
 
-    def run_clip_layer(clip_embedding: list, past_embeddings: list) -> dict:
+    def run_clip_layer(
+        clip_embedding: list, past_embeddings: list, current_amount: float
+    ) -> dict:
         if not past_embeddings:
             return {
                 "score": 0.0,
@@ -410,25 +548,45 @@ def fastapi_app():
             }
         max_sim = 0.0
         matched_id = None
+        matched_amount_delta = None
         for past in past_embeddings:
             sim = cosine_similarity(clip_embedding, past["embedding"])
             if sim > max_sim:
                 max_sim = sim
                 matched_id = past["id"]
+                matched_amount_delta = amount_delta_ratio(
+                    current_amount, past.get("amount")
+                )
+
+        likely_template_only = (
+            matched_amount_delta is not None and matched_amount_delta > 0.20
+        )
 
         if max_sim >= THRESHOLDS["clip"]["extreme"]:
-            score, detail = (
-                0.95,
-                f"Extremely similar ({max_sim*100:.1f}%) to expense #{matched_id} - likely same receipt",
-            )
+            if likely_template_only:
+                score, detail = (
+                    0.25,
+                    f"Extremely high visual template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, but amount differs significantly",
+                )
+            else:
+                score, detail = (
+                    0.75,
+                    f"Extremely similar ({max_sim*100:.1f}%) to expense #{matched_id} - likely same receipt",
+                )
         elif max_sim >= THRESHOLDS["clip"]["veryHigh"]:
-            score, detail = (
-                0.70,
-                f"Very similar ({max_sim*100:.1f}%) to expense #{matched_id} - possibly rescanned",
-            )
+            if likely_template_only:
+                score, detail = (
+                    0.15,
+                    f"Very high visual template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, likely same layout",
+                )
+            else:
+                score, detail = (
+                    0.45,
+                    f"Very similar ({max_sim*100:.1f}%) to expense #{matched_id} - possibly rescanned",
+                )
         elif max_sim >= THRESHOLDS["clip"]["moderate"]:
             score, detail = (
-                0.35,
+                0.20,
                 f"Somewhat similar ({max_sim*100:.1f}%) to expense #{matched_id}",
             )
         else:
@@ -441,6 +599,10 @@ def fastapi_app():
             "score": score,
             "matched": max_sim >= THRESHOLDS["clip"]["moderate"],
             "matchedExpenseId": matched_id,
+            "amountDeltaRatio": round(matched_amount_delta, 4)
+            if matched_amount_delta is not None
+            else None,
+            "likelyTemplateOnly": likely_template_only,
             "similarity": round(max_sim, 4),
             "details": detail,
             "embedding": clip_embedding,
@@ -458,9 +620,10 @@ def fastapi_app():
             "flags": flags,
             "details": detail,
             "analysis": florence_result.get("analysis", ""),
+            "ocr_text": florence_result.get("ocr_text", ""),
         }
 
-    def run_anomaly_layer(amount: float, stats: dict) -> dict:
+    def run_anomaly_layer(amount: float, stats: Optional[dict]) -> dict:
         if not stats or stats.get("count", 0) < 3:
             return {
                 "score": 0.0,
@@ -498,9 +661,34 @@ def fastapi_app():
         # Weighted score
         overall = sum(layers[k]["score"] * WEIGHTS[k] for k in WEIGHTS)
 
+        p_hash_similarity = layers["pHash"].get("similarity", 0.0) or 0.0
+        clip_similarity = layers["clip"].get("similarity", 0.0) or 0.0
+        florence_flags = set(layers["florence"].get("flags", []))
+
+        template_plus_anomaly = layers["anomaly"].get("score", 0) >= 0.80 and (
+            layers["pHash"].get("likelyTemplateOnly") is True
+            or layers["clip"].get("likelyTemplateOnly") is True
+        )
+        likely_tampered_duplicate = (
+            p_hash_similarity >= 0.995
+            and clip_similarity >= 0.995
+            and layers["anomaly"].get("score", 0) < 0.20
+            and (
+                "vqa_total_unreadable" in florence_flags
+                or "caption_repetitive_hallucination" in florence_flags
+            )
+        )
+        florence_strong = layers["florence"].get("score", 0) >= 0.70
+
         # Status
         if layers["md5"]["matched"]:
             status = "fraudulent"
+        elif likely_tampered_duplicate:
+            status = "fraudulent"
+        elif florence_strong:
+            status = "fraudulent"
+        elif template_plus_anomaly:
+            status = "suspicious"
         elif overall >= THRESHOLDS["overall"]["fraudulent"]:
             status = "fraudulent"
         elif overall >= THRESHOLDS["overall"]["suspicious"]:
@@ -519,6 +707,8 @@ def fastapi_app():
         if status == "fraudulent":
             if layers["md5"]["matched"]:
                 rec = "REJECT - Exact duplicate file detected"
+            elif likely_tampered_duplicate:
+                rec = "REJECT - Likely tampered duplicate template with unreadable/edited total area"
             elif layers["pHash"]["matched"] and layers["clip"]["matched"]:
                 rec = "REJECT - Multiple duplicate detection methods confirm fraud"
             else:
@@ -544,10 +734,12 @@ def fastapi_app():
         id: int
         md5: Optional[str] = None
         perceptual_hash: Optional[str] = None
+        amount: Optional[float] = None
 
     class PastEmbedding(BaseModel):
         id: int
         embedding: List[float]
+        amount: Optional[float] = None
 
     class FullAnalysisRequest(BaseModel):
         image: str  # base64 encoded image or PDF
@@ -577,7 +769,7 @@ def fastapi_app():
         pix = page.get_pixmap(dpi=200, alpha=False)
         png_bytes = pix.tobytes("png")
         doc.close()
-        return png_bytes
+        return cast(bytes, png_bytes)
 
     # ===== ENDPOINTS =====
 
@@ -630,9 +822,9 @@ def fastapi_app():
                     status_code=400, detail=f"Invalid base64 payload: {str(e)}"
                 )
 
-            # If PDF, render page 1 to a PNG — downstream layers need an image
+            # If PDF, render page 1 to a PNG â€” downstream layers need an image
             if is_pdf_bytes(raw_bytes, request.mimetype):
-                print("[PIPELINE] PDF detected — rendering page 1 to PNG")
+                print("[PIPELINE] PDF detected â€” rendering page 1 to PNG")
                 try:
                     image_bytes = pdf_to_image_bytes(raw_bytes)
                     print(f"[PIPELINE] Rendered PDF page: {len(image_bytes)} bytes")
@@ -650,12 +842,12 @@ def fastapi_app():
                 request.employee_stats.model_dump() if request.employee_stats else None
             )
 
-            # MD5 on original bytes — byte-identical re-uploads (PDF or image) must collide
+            # MD5 on original bytes â€” byte-identical re-uploads (PDF or image) must collide
             md5_hash = compute_md5(raw_bytes)
             md5_result = run_md5_layer(md5_hash, past_hashes)
 
             p_hash = compute_phash(image_bytes)
-            phash_result = run_phash_layer(p_hash, past_hashes)
+            phash_result = run_phash_layer(p_hash, past_hashes, request.amount)
 
             anomaly_result = run_anomaly_layer(request.amount, stats)
 
@@ -663,7 +855,7 @@ def fastapi_app():
 
             # Early exit on exact MD5 match
             if md5_result["matched"]:
-                print("[PIPELINE] EXACT DUPLICATE — early exit")
+                print("[PIPELINE] EXACT DUPLICATE â€” early exit")
                 layers = {
                     "md5": md5_result,
                     "pHash": phash_result,
@@ -699,7 +891,7 @@ def fastapi_app():
             # ===== PHASE 2: GPU LAYERS (CLIP + Florence in parallel) =====
             print("[PIPELINE] Phase 2: Spawning CLIP + Florence on GPU...")
             clip_task = generate_clip_embedding.spawn(image_bytes)
-            florence_task = detect_forgery_florence.spawn(image_bytes)
+            florence_task = detect_forgery_florence.spawn(image_bytes, request.amount)
 
             clip_embedding = clip_task.get()
             florence_raw = florence_task.get()
@@ -707,10 +899,10 @@ def fastapi_app():
 
             # ===== PHASE 3: SCORE ALL LAYERS =====
             past_embs = [
-                {"id": e.id, "embedding": e.embedding}
+                {"id": e.id, "embedding": e.embedding, "amount": e.amount}
                 for e in (request.past_embeddings or [])
             ]
-            clip_result = run_clip_layer(clip_embedding, past_embs)
+            clip_result = run_clip_layer(clip_embedding, past_embs, request.amount)
             florence_result = run_florence_layer(florence_raw)
 
             layers = {
@@ -747,7 +939,7 @@ def fastapi_app():
             print(f"[PIPELINE] Error after {processing_time}s: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    # Legacy endpoint — kept for backwards compatibility if anything still calls the old contract
+    # Legacy endpoint â€” kept for backwards compatibility if anything still calls the old contract
     class LegacyRequest(BaseModel):
         image: str
 
@@ -792,63 +984,30 @@ def test_local():
     test_image_path = "modal/test_images/sample_invoice.jpg"
 
     if not os.path.exists(test_image_path):
-        print(f"⚠️  No test image found at {test_image_path}")
+        print(f"âš ï¸  No test image found at {test_image_path}")
         print(
             "Please add a sample invoice image to modal/test_images/sample_invoice.jpg"
         )
         return
 
-    print(f"📄 Testing with image: {test_image_path}")
+    print(f"ðŸ“„ Testing with image: {test_image_path}")
 
     with open(test_image_path, "rb") as f:
         image_bytes = f.read()
 
     print("\n=== Testing CLIP Embedding ===")
     embedding = generate_clip_embedding.remote(image_bytes)
-    print(f"✅ CLIP embedding: {len(embedding)} dimensions")
+    print(f"âœ… CLIP embedding: {len(embedding)} dimensions")
     print(f"   First 5 values: {embedding[:5]}")
 
     print("\n=== Testing Florence-2 Analysis ===")
     florence_result = detect_forgery_florence.remote(image_bytes)
-    print(f"✅ Florence analysis:")
+    print(f"âœ… Florence analysis:")
     print(f"   Description: {florence_result['analysis'][:200]}...")
     print(f"   Fraud score: {florence_result['fraud_score']}")
     print(f"   Flags: {florence_result['flags']}")
 
-    print("\n✅ Both functions tested successfully!")
+    print("\nâœ… Both functions tested successfully!")
     print("\nTo test the web endpoint, deploy first:")
     print("  modal deploy modal/fraud_detection.py")
     print("\nThen use curl or Postman to POST to the /analyze endpoint")
-
-
-# ===== UTILITY: COMPARE EMBEDDINGS =====
-
-
-@app.function()
-def compare_embeddings(embedding1: List[float], embedding2: List[float]) -> float:
-    """
-    Calculate cosine similarity between two CLIP embeddings.
-
-    Args:
-        embedding1: First 512-dim embedding
-        embedding2: Second 512-dim embedding
-
-    Returns:
-        Similarity score 0.0-1.0 (1.0 = identical)
-
-    Usage: similarity = compare_embeddings.remote(emb1, emb2)
-    """
-    import math
-
-    # Cosine similarity: dot(A, B) / (||A|| * ||B||)
-    dot_product = sum(a * b for a, b in zip(embedding1, embedding2))
-
-    magnitude_a = math.sqrt(sum(a * a for a in embedding1))
-    magnitude_b = math.sqrt(sum(b * b for b in embedding2))
-
-    similarity = dot_product / (magnitude_a * magnitude_b)
-
-    # Normalize to 0-1 range (cosine similarity is -1 to 1)
-    normalized_similarity = (similarity + 1) / 2
-
-    return normalized_similarity
