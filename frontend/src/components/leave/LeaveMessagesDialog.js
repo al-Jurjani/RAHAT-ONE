@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -30,13 +30,7 @@ const LeaveMessagesDialog = ({ leaveId, open, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (open && leaveId) {
-      fetchMessages();
-    }
-  }, [open, leaveId]);
-
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -54,7 +48,13 @@ const LeaveMessagesDialog = ({ leaveId, open, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [leaveId]);
+
+  useEffect(() => {
+    if (open && leaveId) {
+      fetchMessages();
+    }
+  }, [open, leaveId, fetchMessages]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';

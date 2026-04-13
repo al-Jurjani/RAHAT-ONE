@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -30,11 +30,7 @@ const AllLeavesTable = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedLeaveId, setSelectedLeaveId] = useState(null);
 
-  useEffect(() => {
-    fetchLeaves();
-  }, [statusFilter]);
-
-  const fetchLeaves = async () => {
+  const fetchLeaves = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('accessToken');
@@ -56,7 +52,11 @@ const AllLeavesTable = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchLeaves();
+  }, [fetchLeaves]);
 
   const getStatusColor = (state) => {
     switch (state) {

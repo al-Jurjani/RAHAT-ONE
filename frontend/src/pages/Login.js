@@ -1,16 +1,9 @@
 import React, { useState } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  CircularProgress,
-  Container
-} from '@mui/material';
+import { Button, FormField } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
+import rahatOneLogo from '../assets/rahat-one-logo.svg';
+import outfittersLogo from '../assets/outfitters-logo.svg';
+import './Login.css';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -34,88 +27,62 @@ function Login() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-      }}
-    >
-      <Container maxWidth="sm">
-        <Card elevation={8}>
-          <CardContent sx={{ p: 4 }}>
-            {/* Logo/Title */}
-            <Box sx={{ textAlign: 'center', mb: 4 }}>
-              <Typography variant="h4" fontWeight="bold" color="primary" gutterBottom>
-                RAHAT-ONE
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Intelligent HR Automation System
-              </Typography>
-            </Box>
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <img src={rahatOneLogo} alt="RAHAT-ONE logo" className="login-logo" />
+          <h1 className="login-title">RAHAT-ONE</h1>
+          <p className="login-subtitle">HR Automation Platform</p>
+          <div className="login-divider" />
+          <div className="login-powered">
+            <img src={outfittersLogo} alt="Outfitters" className="login-outfitters-logo" />
+          </div>
+        </div>
 
-            {/* Error Alert */}
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
+        {error && <div className="login-error">{error}</div>}
 
-            {/* Login Form */}
-            <form onSubmit={handleSubmit}>
-              <TextField
-                label="Email"
-                type="email"
-                fullWidth
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                margin="normal"
-                autoFocus
-                disabled={loading}
-              />
+        <form className="login-form" onSubmit={handleSubmit} noValidate>
+          <FormField
+            label="Email"
+            type="email"
+            name="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@outfitters.com.pk"
+            required
+            disabled={loading}
+          />
 
-              <TextField
-                label="Password"
-                type="password"
-                fullWidth
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                margin="normal"
-                disabled={loading}
-              />
+          <FormField
+            label="Password"
+            type="password"
+            name="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            disabled={loading}
+          />
 
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                size="large"
-                disabled={loading}
-                sx={{ mt: 3, mb: 2, py: 1.5 }}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Sign In'}
-              </Button>
-            </form>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            fullWidth
+            loading={loading}
+            className="login-submit"
+          >
+            Sign In
+          </Button>
+        </form>
 
-            {/* Test Credentials Hint */}
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                <strong>Test Credentials:</strong>
-              </Typography>
-              <Typography variant="caption" color="text.secondary" display="block">
-                Email: hr@outfitters.com.pk
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Password: hr123
-              </Typography>
-            </Box>
-          </CardContent>
-        </Card>
-      </Container>
-    </Box>
+        <div className="login-credentials">
+          <p className="login-credentials-label">Test Credentials</p>
+          <p>Email: hr@outfitters.com.pk</p>
+          <p>Password: hr123</p>
+        </div>
+      </div>
+    </div>
   );
 }
 

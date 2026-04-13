@@ -1,9 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container,
   Box,
-  Typography,
-  Paper,
   Grid,
   Card,
   CardContent,
@@ -22,7 +19,8 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
-  Divider
+  Divider,
+  Typography,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, Cancel, ArrowBack, ThumbUp, ThumbDown } from '@mui/icons-material';
@@ -30,6 +28,8 @@ import { toast } from 'react-toastify';
 import { hrAPI } from '../services/api';
 import DocumentViewerModal from '../components/DocumentViewerModal';
 import CNICViewerModal from '../components/CNICViewerModal';
+import AppShell from '../components/layout/AppShell';
+import { LoadingSpinner } from '../components/ui';
 
 function HRVerificationDetails() {
   const { employeeId } = useParams();
@@ -38,7 +38,6 @@ function HRVerificationDetails() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
 
-  // Approve/Reject dialogs
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [approveNotes, setApproveNotes] = useState('');
@@ -46,41 +45,34 @@ function HRVerificationDetails() {
   const [rejectDetails, setRejectDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Document viewer modals
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [cnicViewerOpen, setCnicViewerOpen] = useState(false);
   const [cnicDocument, setCnicDocument] = useState(null);
 
-  useEffect(() => {
-    loadDetails();
+  const loadDetails = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await hrAPI.getDetails(employeeId);
+      if (response.data && response.data.success) {
+        setData(response.data.data);
+      } else {
+        toast.error('Invalid response from server');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to load details');
+    } finally {
+      setLoading(false);
+    }
   }, [employeeId]);
 
-  const loadDetails = async () => {
-  setLoading(true);
-  try {
-    const response = await hrAPI.getDetails(employeeId);
-
-    if (response.data && response.data.success) {
-      const employeeData = response.data.data;
-      setData(employeeData);
-    } else {
-      console.error('❌ Invalid response structure:', response);
-      toast.error('Invalid response from server');
-    }
-  } catch (error) {
-    console.error('❌ Load details error:', error);
-    toast.error(error.response?.data?.message || 'Failed to load details');
-  } finally {
-    setLoading(false);
-  }
-};
+  useEffect(() => {
+    loadDetails();
+  }, [loadDetails]);
 
   const handleApprove = async () => {
     setSubmitting(true);
     try {
-      console.log("approve employee ID:", employeeId);
-      console.log('👉 Approving candidate with notes:', approveNotes);
       await hrAPI.approve(employeeId, approveNotes);
       toast.success('Candidate approved — provisioning in progress. They will receive a welcome email shortly.');
       setApproveDialogOpen(false);
@@ -97,7 +89,6 @@ function HRVerificationDetails() {
       toast.error('Please select a rejection reason');
       return;
     }
-
     setSubmitting(true);
     try {
       await hrAPI.reject(employeeId, rejectReason, rejectDetails);
@@ -112,118 +103,76 @@ function HRVerificationDetails() {
   };
 
   const getVerificationIcon = (status) => {
-    if (status === 'passed' || status === 'approved') {
-      return <CheckCircle color="success" />;
-    }
-    if (status === 'failed' || status === 'rejected') {
-      return <Cancel color="error" />;
-    }
+    if (status === 'passed' || status === 'approved') return <CheckCircle color="success" />;
+    if (status === 'failed'  || status === 'rejected') return <Cancel color="error" />;
     return <CheckCircle color="disabled" />;
   };
 
   if (loading) {
     return (
-      <Container maxWidth="lg">
-        <Box sx={{ mt: 8, display: 'flex', justifyContent: 'center' }}>
-          <CircularProgress />
-        </Box>
-      </Container>
+      <AppShell pageTitle="Verification Details">
+        <LoadingSpinner />
+      </AppShell>
     );
   }
 
   if (!data || !data.employee) {
     return (
-      <Container maxWidth="lg">
-        <Box sx={{ mt: 8 }}>
-          <Alert severity="error">Employee not found</Alert>
-          <Button
-            startIcon={<ArrowBack />}
-            onClick={() => navigate('/hr/verification')}
-            sx={{ mt: 2 }}
-          >
-            Back to Dashboard
-          </Button>
-        </Box>
-      </Container>
+      <AppShell pageTitle="Verification Details">
+        <Alert severity="error">Employee not found</Alert>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/hr/verification')} sx={{ mt: 2 }}>
+          Back to Dashboard
+        </Button>
+      </AppShell>
     );
   }
 
   return (
-  <Container maxWidth="lg">
-    <Box sx={{ mt: 8, mb: 4 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button
-          startIcon={<ArrowBack />}
-          onClick={() => navigate('/hr/verification')}
-          sx={{ mr: 2 }}
-        >
+    <AppShell pageTitle="Verification Details">
+      <Box sx={{ mb: 2 }}>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/hr/verification')}>
           Back to Dashboard
         </Button>
-        <Typography variant="h4" component="h1">
-          Verification Details
-        </Typography>
       </Box>
 
       <Grid container spacing={3}>
-        {/* Left Column - Employee Info */}
+        {/* Left Column */}
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Employee Information
-              </Typography>
+              <Typography variant="h6" gutterBottom>Employee Information</Typography>
               <Divider sx={{ mb: 2 }} />
-
               <TableContainer>
                 <Table size="small">
                   <TableBody>
-                    <TableRow>
-                      <TableCell><strong>Name:</strong></TableCell>
-                      <TableCell>{data.employee?.name || 'N/A'}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Personal Email:</strong></TableCell>
-                      <TableCell>{data.employee?.personalEmail || 'N/A'}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Work Email:</strong></TableCell>
-                      <TableCell>{data.employee?.workEmail || 'N/A'}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Phone:</strong></TableCell>
-                      <TableCell>{data.employee?.phone || 'N/A'}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Department:</strong></TableCell>
-                      <TableCell>{data.employee?.department || 'N/A'}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Position:</strong></TableCell>
-                      <TableCell>{data.employee?.position || 'N/A'}</TableCell>
-                    </TableRow>
+                    {[
+                      ['Name',           data.employee?.name],
+                      ['Personal Email', data.employee?.personalEmail],
+                      ['Work Email',     data.employee?.workEmail],
+                      ['Phone',          data.employee?.phone],
+                      ['Department',     data.employee?.department],
+                      ['Position',       data.employee?.position],
+                    ].map(([label, val]) => (
+                      <TableRow key={label}>
+                        <TableCell><strong>{label}:</strong></TableCell>
+                        <TableCell>{val || 'N/A'}</TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </TableContainer>
             </CardContent>
           </Card>
 
-          {/* Documents */}
           <Card sx={{ mt: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Uploaded Documents
-              </Typography>
+              <Typography variant="h6" gutterBottom>Uploaded Documents</Typography>
               <Divider sx={{ mb: 2 }} />
-
               {!data.documents || data.documents.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No documents uploaded
-                </Typography>
+                <Typography variant="body2" color="text.secondary">No documents uploaded</Typography>
               ) : (
                 data.documents.map((doc) => {
                   const isCNIC = doc.name.toLowerCase().includes('cnic');
-
                   return (
                     <Box key={doc.id} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Chip
@@ -232,13 +181,8 @@ function HRVerificationDetails() {
                         variant="outlined"
                         size="small"
                         onClick={() => {
-                          if (isCNIC) {
-                            setCnicDocument(doc);
-                            setCnicViewerOpen(true);
-                          } else {
-                            setSelectedDocument(doc);
-                            setViewerOpen(true);
-                          }
+                          if (isCNIC) { setCnicDocument(doc); setCnicViewerOpen(true); }
+                          else        { setSelectedDocument(doc); setViewerOpen(true); }
                         }}
                         sx={{ cursor: 'pointer' }}
                       />
@@ -253,16 +197,13 @@ function HRVerificationDetails() {
           </Card>
         </Grid>
 
-        {/* Right Column - Verification */}
+        {/* Right Column */}
         <Grid item xs={12} md={6}>
-          {/* CNIC Verification Result */}
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 {getVerificationIcon(data.aiVerification?.status)}
-                <Typography variant="h6" sx={{ ml: 1 }}>
-                  CNIC Verification
-                </Typography>
+                <Typography variant="h6" sx={{ ml: 1 }}>CNIC Verification</Typography>
                 <Chip
                   label={data.aiVerification?.status === 'passed' ? 'VERIFIED' : data.aiVerification?.status === 'failed' ? 'FAILED' : 'PENDING'}
                   color={data.aiVerification?.status === 'passed' ? 'success' : data.aiVerification?.status === 'failed' ? 'error' : 'warning'}
@@ -271,10 +212,8 @@ function HRVerificationDetails() {
                 />
               </Box>
               <Divider sx={{ mb: 2 }} />
-
               {data.aiVerification?.status !== 'pending' ? (
                 <>
-                  {/* CNIC Number Match */}
                   <Alert
                     severity={data.aiVerification?.extractedData?.cnicNumber &&
                       data.aiVerification.extractedData.cnicNumber !== 'N/A' &&
@@ -284,19 +223,14 @@ function HRVerificationDetails() {
                     sx={{ mb: 2 }}
                   >
                     <strong>CNIC Number:</strong>{' '}
-                    {data.aiVerification?.extractedData?.cnicNumber &&
-                      data.aiVerification.extractedData.cnicNumber !== 'N/A' &&
-                      data.employee?.cnic &&
-                      data.aiVerification.extractedData.cnicNumber.replace(/[\s-]/g, '') === data.employee.cnic.replace(/[\s-]/g, '')
-                        ? 'Matched' : 'Mismatched'}
+                    {data.aiVerification?.extractedData?.cnicNumber?.replace(/[\s-]/g, '') === data.employee?.cnic?.replace(/[\s-]/g, '')
+                      ? 'Matched' : 'Mismatched'}
                   </Alert>
-
                   {data.aiVerification?.extractedData?.confidence > 0 && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       OCR Confidence: {Math.round(data.aiVerification.extractedData.confidence)}%
                     </Typography>
                   )}
-
                   {data.aiVerification?.verifiedAt && (
                     <Typography variant="caption" color="text.secondary">
                       Verified: {new Date(data.aiVerification.verifiedAt).toLocaleString()}
@@ -311,14 +245,10 @@ function HRVerificationDetails() {
             </CardContent>
           </Card>
 
-          {/* CNIC Number Comparison */}
           <Card sx={{ mt: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                CNIC Number Comparison
-              </Typography>
+              <Typography variant="h6" gutterBottom>CNIC Number Comparison</Typography>
               <Divider sx={{ mb: 2 }} />
-
               <TableContainer>
                 <Table size="small">
                   <TableBody>
@@ -339,8 +269,7 @@ function HRVerificationDetails() {
                   </TableBody>
                 </Table>
               </TableContainer>
-
-              {data.aiVerification?.extractedData?.rawMatches && data.aiVerification.extractedData.rawMatches.length > 0 && (
+              {data.aiVerification?.extractedData?.rawMatches?.length > 0 && (
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     All CNIC patterns found in OCR text:
@@ -353,41 +282,27 @@ function HRVerificationDetails() {
             </CardContent>
           </Card>
 
-          {/* HR Verification Status */}
           <Card sx={{ mt: 3 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                {getVerificationIcon(
-                  data.employee?.onboardingStatus === 'activated' ? 'approved' : data.hrVerification?.status
-                )}
-                <Typography variant="h6" sx={{ ml: 1 }}>
-                  HR Verification
-                </Typography>
+                {getVerificationIcon(data.employee?.onboardingStatus === 'activated' ? 'approved' : data.hrVerification?.status)}
+                <Typography variant="h6" sx={{ ml: 1 }}>HR Verification</Typography>
                 <Chip
-                  label={
-                    data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending'
-                      ? 'AUTO-APPROVED'
-                      : data.hrVerification?.status?.toUpperCase() || 'PENDING'
-                  }
-                  color={
-                    data.employee?.onboardingStatus === 'activated' || data.hrVerification?.status === 'approved'
-                      ? 'success' : 'warning'
-                  }
+                  label={data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending' ? 'AUTO-APPROVED' : (data.hrVerification?.status?.toUpperCase() || 'PENDING')}
+                  color={data.employee?.onboardingStatus === 'activated' || data.hrVerification?.status === 'approved' ? 'success' : 'warning'}
                   size="small"
                   sx={{ ml: 'auto' }}
                 />
               </Box>
               <Divider sx={{ mb: 2 }} />
-
               {data.employee?.onboardingStatus === 'activated' && data.hrVerification?.status === 'pending' && (
                 <Alert severity="success">
                   This employee was auto-approved — all verification checks passed automatically.
                 </Alert>
               )}
-
               {data.hrVerification?.notes && (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  <strong>Notes:</strong> {data.hrVerification?.notes}
+                  <strong>Notes:</strong> {data.hrVerification.notes}
                 </Alert>
               )}
             </CardContent>
@@ -397,134 +312,81 @@ function HRVerificationDetails() {
 
       {/* Action Buttons */}
       {data.hrVerification?.status === 'pending' && data.employee?.onboardingStatus !== 'activated' && (
-        <Paper sx={{ p: 3, mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Review Decision
-          </Typography>
+        <Box sx={{ mt: 3, p: 3, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
+          <Typography variant="h6" gutterBottom>Review Decision</Typography>
           <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-            <Button
-              variant="contained"
-              color="success"
-              size="large"
-              startIcon={<ThumbUp />}
-              onClick={() => setApproveDialogOpen(true)}
-            >
+            <Button variant="contained" color="success" size="large" startIcon={<ThumbUp />} onClick={() => setApproveDialogOpen(true)}>
               Approve Candidate
             </Button>
-            <Button
-              variant="contained"
-              color="error"
-              size="large"
-              startIcon={<ThumbDown />}
-              onClick={() => setRejectDialogOpen(true)}
-            >
+            <Button variant="contained" color="error" size="large" startIcon={<ThumbDown />} onClick={() => setRejectDialogOpen(true)}>
               Reject Candidate
             </Button>
           </Box>
-        </Paper>
+        </Box>
       )}
-    </Box>
 
-    {/* Approve Dialog */}
-    <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle>Approve Candidate</DialogTitle>
-      <DialogContent>
-        <TextField
-          fullWidth
-          multiline
-          rows={4}
-          label="Approval Notes (Optional)"
-          value={approveNotes}
-          onChange={(e) => setApproveNotes(e.target.value)}
-          sx={{ mt: 2 }}
-          placeholder="e.g., All documents verified. Department and role confirmed."
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setApproveDialogOpen(false)} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color="success"
-          onClick={handleApprove}
-          disabled={submitting}
-        >
-          {submitting ? <CircularProgress size={24} /> : 'Approve'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      {/* Approve Dialog */}
+      <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Approve Candidate</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth multiline rows={4} label="Approval Notes (Optional)"
+            value={approveNotes} onChange={(e) => setApproveNotes(e.target.value)}
+            sx={{ mt: 2 }} placeholder="e.g., All documents verified. Department and role confirmed."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setApproveDialogOpen(false)} disabled={submitting}>Cancel</Button>
+          <Button variant="contained" color="success" onClick={handleApprove} disabled={submitting}>
+            {submitting ? <CircularProgress size={24} /> : 'Approve'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-    {/* Reject Dialog */}
-    <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle>Reject Candidate</DialogTitle>
-      <DialogContent>
-        <TextField
-          fullWidth
-          select
-          label="Rejection Reason"
-          value={rejectReason}
-          onChange={(e) => setRejectReason(e.target.value)}
-          sx={{ mt: 2 }}
-        >
-          <MenuItem value="cnic_mismatch">CNIC Mismatch</MenuItem>
-          <MenuItem value="name_mismatch">Name Mismatch</MenuItem>
-          <MenuItem value="dob_mismatch">Date of Birth Mismatch</MenuItem>
-          <MenuItem value="invalid_documents">Invalid Documents</MenuItem>
-          <MenuItem value="wrong_department">Wrong Department</MenuItem>
-          <MenuItem value="duplicate_entry">Duplicate Entry</MenuItem>
-          <MenuItem value="failed_background_check">Failed Background Check</MenuItem>
-          <MenuItem value="other">Other</MenuItem>
-        </TextField>
-        <TextField
-          fullWidth
-          multiline
-          rows={4}
-          label="Additional Details"
-          value={rejectDetails}
-          onChange={(e) => setRejectDetails(e.target.value)}
-          sx={{ mt: 2 }}
-          placeholder="Explain the reason for rejection..."
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setRejectDialogOpen(false)} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={handleReject}
-          disabled={submitting}
-        >
-          {submitting ? <CircularProgress size={24} /> : 'Reject'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Reject Candidate</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth select label="Rejection Reason"
+            value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} sx={{ mt: 2 }}
+          >
+            <MenuItem value="cnic_mismatch">CNIC Mismatch</MenuItem>
+            <MenuItem value="name_mismatch">Name Mismatch</MenuItem>
+            <MenuItem value="dob_mismatch">Date of Birth Mismatch</MenuItem>
+            <MenuItem value="invalid_documents">Invalid Documents</MenuItem>
+            <MenuItem value="wrong_department">Wrong Department</MenuItem>
+            <MenuItem value="duplicate_entry">Duplicate Entry</MenuItem>
+            <MenuItem value="failed_background_check">Failed Background Check</MenuItem>
+            <MenuItem value="other">Other</MenuItem>
+          </TextField>
+          <TextField
+            fullWidth multiline rows={4} label="Additional Details"
+            value={rejectDetails} onChange={(e) => setRejectDetails(e.target.value)}
+            sx={{ mt: 2 }} placeholder="Explain the reason for rejection..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectDialogOpen(false)} disabled={submitting}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleReject} disabled={submitting}>
+            {submitting ? <CircularProgress size={24} /> : 'Reject'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-    {/* Document Viewer Modal */}
-    <DocumentViewerModal
-      open={viewerOpen}
-      onClose={() => setViewerOpen(false)}
-      documentId={selectedDocument?.id}
-      documentName={selectedDocument?.name}
-      documentType={selectedDocument?.type}
-    />
-
-    {/* CNIC Viewer Modal with OCR Comparison */}
-    <CNICViewerModal
-      open={cnicViewerOpen}
-      onClose={() => setCnicViewerOpen(false)}
-      documentId={cnicDocument?.id}
-      documentName={cnicDocument?.name}
-      enteredData={{
-        cnic: data?.employee?.cnic
-      }}
-      extractedData={data?.aiVerification?.extractedData}
-      verificationDetails={data?.aiVerification?.details}
-    />
-  </Container>
-);
+      <DocumentViewerModal
+        open={viewerOpen} onClose={() => setViewerOpen(false)}
+        documentId={selectedDocument?.id} documentName={selectedDocument?.name} documentType={selectedDocument?.type}
+      />
+      <CNICViewerModal
+        open={cnicViewerOpen} onClose={() => setCnicViewerOpen(false)}
+        documentId={cnicDocument?.id} documentName={cnicDocument?.name}
+        enteredData={{ cnic: data?.employee?.cnic }}
+        extractedData={data?.aiVerification?.extractedData}
+        verificationDetails={data?.aiVerification?.details}
+      />
+    </AppShell>
+  );
 }
 
 export default HRVerificationDetails;

@@ -21,8 +21,7 @@ import {
 } from '@mui/material';
 import {
   FilterList as FilterListIcon,
-  Visibility as VisibilityIcon,
-  Cancel as CancelIcon
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import DescriptionIcon from '@mui/icons-material/Description';
 import axios from 'axios';
@@ -172,7 +171,7 @@ const AutoRejectedExpensesTable = ({ refreshTrigger }) => {
 
   return (
     <>
-      <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+      <Box sx={{ mb: 3, p: 2, bgcolor: 'var(--bg-elevated)', borderRadius: 1 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
           <FilterListIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 18 }} />
           Filters
@@ -220,7 +219,7 @@ const AutoRejectedExpensesTable = ({ refreshTrigger }) => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow sx={{ backgroundColor: '#ffebee' }}>
+            <TableRow sx={{ backgroundColor: 'var(--status-danger-bg)' }}>
               <TableCell>
                 <TableSortLabel active={sortField === 'employee'} direction={sortField === 'employee' ? sortDirection : 'asc'} onClick={() => handleSortChange('employee')}>
                   <strong>Employee</strong>
@@ -256,7 +255,7 @@ const AutoRejectedExpensesTable = ({ refreshTrigger }) => {
           </TableHead>
           <TableBody>
             {pagedExpenses.map((expense) => (
-              <TableRow key={expense.id} hover sx={{ backgroundColor: '#fff5f5' }}>
+              <TableRow key={expense.id} hover sx={{ backgroundColor: 'var(--status-danger-bg)' }}>
                 <TableCell>
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>{getEmployeeName(expense)}</Typography>
                   <Typography variant="caption" color="textSecondary">#{expense.id}</Typography>

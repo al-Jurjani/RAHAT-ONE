@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -150,7 +150,7 @@ const ExpenseHistoryTable = ({ showTitle = true }) => {
     return params;
   };
 
-  const fetchExpenses = async (activeFilters) => {
+  const fetchExpenses = useCallback(async (activeFilters) => {
     setLoading(true);
     setError('');
 
@@ -165,15 +165,16 @@ const ExpenseHistoryTable = ({ showTitle = true }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchExpenses(appliedFilters);
-  }, [appliedFilters]);
+  }, [appliedFilters, fetchExpenses]);
 
   useEffect(() => {
+    const previewUrls = previewUrlsRef.current;
     return () => {
-      Object.values(previewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+      Object.values(previewUrls).forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
