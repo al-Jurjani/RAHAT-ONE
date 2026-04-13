@@ -54,3 +54,4 @@ backend/temp/*
 .claude/
 
 n8n-flows/
+receipts/

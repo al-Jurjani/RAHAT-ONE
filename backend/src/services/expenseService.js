@@ -1,7 +1,8 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const crypto = require('crypto');
 const powerAutomateService = require('./powerAutomateService');
-const fraudDetectionService = require('./fraudDetectionService');
+// [n8n-migration] Fraud detection now called directly by n8n via Modal HTTP endpoint
+// const fraudDetectionService = require('./fraudDetectionService');
 
 class ExpenseService {
   /**
@@ -17,16 +18,19 @@ class ExpenseService {
     const seconds = pad(date.getSeconds());
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
-  /**
-   * Validate expense against policy rules
-   */
+  // [n8n-migration] Policy validation moved to n8n Code node
+  // Policy rules for reference:
+  //   Category limits (PKR): medical=50000, petrol=10000, travel=75000, other=25000
+  //   Frequency: max 5 claims/month per employee
+  //   HR escalation: amount > 10000 PKR
+  //   Auto-approve: clean fraud + amount <= 10000 PKR
+  /*
   async validateExpensePolicy(category, amount, employeeId) {
     const validationResult = {
       passed: true,
       violations: []
     };
 
-    // Category limits (in PKR)
     const categoryLimits = {
       medical: 50000,
       petrol: 10000,
@@ -36,7 +40,6 @@ class ExpenseService {
 
     const normalizedCategory = (category || '').toLowerCase();
 
-    // Check category limit
     if (categoryLimits[normalizedCategory] && amount > categoryLimits[normalizedCategory]) {
       validationResult.passed = false;
       validationResult.violations.push(
@@ -44,10 +47,9 @@ class ExpenseService {
       );
     }
 
-    // Check monthly expense frequency (max 5 claims/month)
     try {
       const currentMonth = new Date();
-      currentMonth.setDate(1); // First day of month
+      currentMonth.setDate(1);
 
       const monthlyExpenses = await odooAdapter.searchExpenses({
         employee_id: [employeeId],
@@ -62,30 +64,31 @@ class ExpenseService {
       }
     } catch (err) {
       console.error('Error checking monthly frequency:', err);
-      // Don't fail on this check - log but continue
     }
 
     return validationResult;
   }
+  */
 
-  /**
-   * Generate approval token for secure email links
-   */
   generateApprovalToken() {
     return crypto.randomBytes(32).toString('hex');
   }
 
-  /**
-   * Set token expiry (default: 7 days)
-   */
   getTokenExpiry(daysValid = 7) {
     const expiry = new Date();
-    expiry.setDate(expiry.getDate() + daysValid);
+    expiry.setHours(expiry.getHours() + (daysValid * 24));
     return this.formatOdooDateTime(expiry);
   }
 
   /**
-   * Submit a new expense
+   * Submit a new expense (THINNED for n8n migration)
+   *
+   * Backend is now a trigger layer only:
+   * 1. Validate required fields
+   * 2. Create hr.expense draft record in Odoo
+   * 3. Upload invoice to ir.attachment if present
+   * 4. Fire n8n webhook (all orchestration happens there)
+   * 5. Return 202
    */
   async submitExpense(employeeId, expenseData, invoiceFile = null) {
     try {
@@ -106,17 +109,8 @@ class ExpenseService {
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
-      // 2. Validate policy
-      const policyCheck = await this.validateExpensePolicy(
-        expenseData.category,
-        expenseData.amount,
-        employeeId
-      );
-
-      // 3. Prepare Odoo expense data
-      // ONLY include writable fields (not readonly)
+      // 2. Create draft expense in Odoo (minimal fields — n8n handles all routing/status)
       const odooExpenseData = {
-        // Core fields (required and writable)
         employee_id: employeeId,
         expense_category: normalizedCategory,
         total_amount: parseFloat(expenseData.amount),
@@ -124,209 +118,161 @@ class ExpenseService {
         date: expenseData.expense_date,
         description: expenseData.description,
         name: expenseData.description,
-        // Manager/HR decision (writable)
-        manager_decision: 'pending',
-        hr_decision: 'not_required',
-        manager_remarks: '',
-        hr_remarks: '',
-        // Approval tokens (writable)
         approval_token: this.generateApprovalToken(),
-        approval_token_expiry: this.getTokenExpiry(),
+        approval_token_expiry: this.getTokenExpiry(2),
         approval_token_type: 'manager',
-        // Rejection fields (writable, but not needed yet)
-        rejection_reason: null,
-        rejection_details: null,
-        // Status
-        workflow_status: policyCheck.passed ? 'pending_manager' : 'rejected'
+        workflow_status: 'draft',
+        submitted_date: this.formatOdooDateTime()
       };
 
-      // Add dates only if policy passed (for successful submission)
-      if (policyCheck.passed) {
-        odooExpenseData.submitted_date = this.formatOdooDateTime();
-      }
+      console.log('[ExpenseService] Creating draft expense in Odoo:', odooExpenseData);
 
-      // Check if escalation needed (> 10k PKR)
-      if (policyCheck.passed && expenseData.amount > 10000) {
-        odooExpenseData.hr_decision = 'pending';
-        odooExpenseData.hr_escalated = true;  // Flag for HR escalation
-      }
-
-      console.log('📝 Creating expense in Odoo:', odooExpenseData);
-
-      // 4. Create expense in Odoo
       const expenseId = await odooAdapter.createExpense(odooExpenseData);
 
       if (!expenseId) {
         throw new Error('Failed to create expense in Odoo');
       }
 
-      console.log('✅ Expense created in Odoo with ID:', expenseId);
+      console.log('[ExpenseService] Expense created with ID:', expenseId);
 
-      // 5. Attach file if provided
+      // 3. Attach invoice file if provided
+      let attachmentId = null;
       if (invoiceFile) {
         try {
-          await odooAdapter.createAttachment(
+          attachmentId = await odooAdapter.createAttachment(
             'hr.expense',
             expenseId,
             invoiceFile.name,
             invoiceFile.data
           );
-          console.log('📎 File attached to expense');
+          console.log('[ExpenseService] Invoice attached, attachment ID:', attachmentId);
         } catch (err) {
-          console.error('⚠️  Warning: Could not attach file:', err.message);
-          // Don't fail if attachment fails
+          console.error('[ExpenseService] Warning: Could not attach file:', err.message);
         }
       }
 
-      // 6. Run fraud detection if invoice file is provided
-      let fraudResult = null;
-      if (invoiceFile && policyCheck.passed) {
+      // 4. Get employee + manager details for n8n payload
+      const employee = await odooAdapter.getEmployee(employeeId);
+      let managerEmail = null;
+      if (employee?.parent_id?.[0]) {
         try {
-          console.log('🔍 Running fraud detection...');
-
-          // Run fraud detection pipeline
-          fraudResult = await fraudDetectionService.runFraudDetection(
-            invoiceFile.data, // Buffer
-            employeeId,
-            parseFloat(expenseData.amount)
-          );
-
-          console.log(`🔍 Fraud detection complete: ${fraudResult.status} (score: ${fraudResult.overallScore.toFixed(3)})`);
-
-          // Update expense with fraud detection results
-          await odooAdapter.updateExpenseWithFraudResult(expenseId, fraudResult);
-
-          // Adjust workflow based on fraud status
-          const workflowUpdates = {};
-
-          if (fraudResult.status === 'fraudulent') {
-            // Fraudulent: Auto-escalate to HR for review (Option A)
-            console.log('⚠️  FRAUDULENT expense detected - escalating to HR');
-            workflowUpdates.hr_escalated = true;
-            workflowUpdates.hr_decision = 'pending';
-            workflowUpdates.workflow_status = 'pending_hr'; // Skip manager, go straight to HR
-            workflowUpdates.approval_token_type = 'hr'; // Token for HR approval
-            // Note: manager_decision stays 'pending' since manager is bypassed
-
-          } else if (fraudResult.status === 'suspicious') {
-            // Suspicious: Flag for HR review but follow normal flow
-            console.log('⚠️  SUSPICIOUS expense detected - flagging for HR review');
-            workflowUpdates.hr_escalated = true;
-            workflowUpdates.hr_decision = 'pending';
-            // Keep workflow_status as 'pending_manager' - manager reviews first, then HR
-          }
-
-          // Apply workflow updates if needed
-          if (Object.keys(workflowUpdates).length > 0) {
-            await odooAdapter.updateExpense(expenseId, workflowUpdates);
-          }
-
-        } catch (fraudError) {
-          console.error('⚠️  Fraud detection failed (non-blocking):', fraudError.message);
-          // Don't fail expense submission if fraud detection fails
-          // Continue with normal workflow
-          fraudResult = {
-            status: 'error',
-            overallScore: 0,
-            recommendation: `Fraud detection unavailable: ${fraudError.message}`,
-            error: true
-          };
+          const manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+          managerEmail = manager.work_email || manager.private_email || null;
+        } catch (err) {
+          console.error('[ExpenseService] Could not fetch manager:', err.message);
         }
-      } else if (!invoiceFile && policyCheck.passed) {
-        console.log('⚠️  No invoice file provided - skipping fraud detection');
       }
 
-      // 7. Get created expense details (after fraud detection updates)
-      const createdExpense = await odooAdapter.getExpense(expenseId);
+      // 5. Fire n8n webhook (fire and forget — all orchestration happens in n8n)
+      const n8nPayload = {
+        expenseId,
+        employeeId,
+        employeeName: employee.name,
+        employeeEmail: employee.work_email || employee.private_email,
+        managerEmail: managerEmail,
+        hrEmail: process.env.HR_EMAIL || 'hr@outfitters.com',
+        amount: parseFloat(expenseData.amount),
+        category: normalizedCategory,
+        approvalToken: odooExpenseData.approval_token,
+        approvalTokenExpiry: odooExpenseData.approval_token_expiry,
+        hasInvoice: !!attachmentId,
+        attachmentId: attachmentId,
+        submittedAt: new Date().toISOString()
+      };
 
-      // 8. Trigger Power Automate flow with fraud detection results
-      try {
-        // Get employee details
-        const employee = await odooAdapter.getEmployee(employeeId);
+      powerAutomateService.triggerExpenseFlow(n8nPayload).catch(err => {
+        console.error('[ExpenseService] n8n webhook fire failed (non-blocking):', err.message);
+      });
 
-        // Get manager details if available
-        let manager = null;
-        if (employee?.parent_id?.[0]) {
-          manager = await odooAdapter.getEmployee(employee.parent_id[0]);
-        }
-
-        // Prepare fraud detection payload
-        const fraudPayload = fraudResult ? {
-          fraudDetected: fraudResult.status !== 'clean',
-          fraudStatus: fraudResult.status, // 'clean', 'suspicious', 'fraudulent', 'error'
-          fraudScore: fraudResult.overallScore,
-          fraudConfidence: fraudResult.confidence || 0,
-          fraudRecommendation: fraudResult.recommendation,
-          fraudLayers: fraudResult.layers ? {
-            md5Match: fraudResult.layers.md5?.matched || false,
-            pHashSimilarity: fraudResult.layers.pHash?.similarity || 0,
-            clipSimilarity: fraudResult.layers.clip?.similarity || 0,
-            florenceFraudScore: fraudResult.layers.florence?.score || 0,
-            anomalyZScore: fraudResult.layers.anomaly?.zScore ?? 0  // Use 0 instead of null to match Power Automate schema
-          } : {
-            // Default values when fraud detection fails (Power Automate expects object, not null)
-            md5Match: false,
-            pHashSimilarity: 0,
-            clipSimilarity: 0,
-            florenceFraudScore: 0,
-            anomalyZScore: 0
-          },
-          fraudProcessingTime: fraudResult.processingTime || 0
-        } : {
-          fraudDetected: false,
-          fraudStatus: invoiceFile ? 'not_run' : 'no_invoice',
-          fraudScore: 0,
-          fraudRecommendation: invoiceFile ? 'Fraud detection not run' : 'No invoice file provided'
-        };
-
-        // Trigger flow (fire and forget)
-        powerAutomateService.triggerExpensePolicyFlow(
-          {
-            expenseId,
-            employeeId,
-            ...expenseData,
-            approval_token: createdExpense.approval_token,
-            workflow_status: createdExpense.workflow_status,
-            hr_escalated: createdExpense.hr_escalated || false,
-            fraud: fraudPayload
-          },
-          policyCheck,
-          employee,
-          manager
-        ).catch(err => {
-          console.error('⚠️  Non-blocking Power Automate error:', err.message);
-        });
-      } catch (err) {
-        console.error('⚠️  Could not trigger Power Automate flow:', err.message);
-      }
-
+      // 6. Return 202 — n8n takes over from here
       return {
         success: true,
         expenseId,
-        expense: createdExpense,
-        policyCheckPassed: policyCheck.passed,
-        policyViolations: policyCheck.violations,
-        escalatedForHR: createdExpense.hr_escalated || false,
-        fraudDetection: fraudResult ? {
-          status: fraudResult.status,
-          score: fraudResult.overallScore,
-          confidence: fraudResult.confidence || 0,
-          recommendation: fraudResult.recommendation,
-          processingTime: fraudResult.processingTime
-        } : null,
-        message: policyCheck.passed
-          ? (fraudResult?.status === 'fraudulent'
-              ? 'Expense submitted but flagged as fraudulent - escalated to HR'
-              : fraudResult?.status === 'suspicious'
-                ? 'Expense submitted but flagged as suspicious - will require HR review'
-                : 'Expense submitted successfully')
-          : 'Expense rejected due to policy violations'
+        status: 'submitted'
       };
     } catch (error) {
       console.error('Expense submission error:', error);
       throw error;
     }
   }
+
+  // [n8n-migration] Original submitExpense with inline fraud detection, policy check,
+  // routing logic, token generation, and Power Automate triggers commented out below.
+  // Preserved for reference during n8n flow construction.
+  /*
+  async submitExpense_ORIGINAL(employeeId, expenseData, invoiceFile = null) {
+    try {
+      const categoryMap = { Medical: 'medical', Petrol: 'petrol', Travel: 'travel', Other: 'other' };
+      const normalizedCategory = categoryMap[expenseData.category] || expenseData.category;
+
+      const requiredFields = ['category', 'amount', 'vendor_name', 'expense_date', 'description'];
+      const missingFields = requiredFields.filter(field => !expenseData[field]);
+      if (missingFields.length > 0) throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+
+      // Policy check (now in n8n)
+      const policyCheck = await this.validateExpensePolicy(expenseData.category, expenseData.amount, employeeId);
+
+      const odooExpenseData = {
+        employee_id: employeeId, expense_category: normalizedCategory,
+        total_amount: parseFloat(expenseData.amount), vendor_name: expenseData.vendor_name,
+        date: expenseData.expense_date, description: expenseData.description, name: expenseData.description,
+        manager_decision: 'pending', hr_decision: 'not_required', manager_remarks: '', hr_remarks: '',
+        approval_token: this.generateApprovalToken(), approval_token_expiry: this.getTokenExpiry(),
+        approval_token_type: 'manager', rejection_reason: null, rejection_details: null,
+        workflow_status: policyCheck.passed ? 'pending_manager' : 'rejected'
+      };
+      if (policyCheck.passed) odooExpenseData.submitted_date = this.formatOdooDateTime();
+      if (policyCheck.passed && expenseData.amount > 10000) {
+        odooExpenseData.hr_decision = 'pending'; odooExpenseData.hr_escalated = true;
+      }
+
+      const expenseId = await odooAdapter.createExpense(odooExpenseData);
+      if (!expenseId) throw new Error('Failed to create expense in Odoo');
+
+      if (invoiceFile) {
+        try { await odooAdapter.createAttachment('hr.expense', expenseId, invoiceFile.name, invoiceFile.data); }
+        catch (err) { console.error('Warning: Could not attach file:', err.message); }
+      }
+
+      // Fraud detection (now in n8n via Modal HTTP call)
+      let fraudResult = null;
+      if (invoiceFile && policyCheck.passed) {
+        try {
+          fraudResult = await fraudDetectionService.runFraudDetection(invoiceFile.data, employeeId, parseFloat(expenseData.amount));
+          await odooAdapter.updateExpenseWithFraudResult(expenseId, fraudResult);
+          const workflowUpdates = {};
+          if (fraudResult.status === 'fraudulent') {
+            workflowUpdates.hr_escalated = true; workflowUpdates.hr_decision = 'pending';
+            workflowUpdates.workflow_status = 'pending_hr'; workflowUpdates.approval_token_type = 'hr';
+          } else if (fraudResult.status === 'suspicious') {
+            workflowUpdates.hr_escalated = true; workflowUpdates.hr_decision = 'pending';
+          }
+          if (Object.keys(workflowUpdates).length > 0) await odooAdapter.updateExpense(expenseId, workflowUpdates);
+        } catch (fraudError) {
+          fraudResult = { status: 'error', overallScore: 0, recommendation: `Fraud detection unavailable: ${fraudError.message}`, error: true };
+        }
+      }
+
+      // Routing + Power Automate trigger (now in n8n)
+      const createdExpense = await odooAdapter.getExpense(expenseId);
+      const employee = await odooAdapter.getEmployee(employeeId);
+      let manager = null;
+      if (employee?.parent_id?.[0]) manager = await odooAdapter.getEmployee(employee.parent_id[0]);
+
+      powerAutomateService.triggerExpensePolicyFlow(
+        { expenseId, employeeId, ...expenseData, approval_token: createdExpense.approval_token,
+          workflow_status: createdExpense.workflow_status, hr_escalated: createdExpense.hr_escalated || false, fraud: fraudPayload },
+        policyCheck, employee, manager
+      ).catch(err => console.error('Non-blocking PA error:', err.message));
+
+      return { success: true, expenseId, expense: createdExpense, policyCheckPassed: policyCheck.passed,
+        policyViolations: policyCheck.violations, escalatedForHR: createdExpense.hr_escalated || false,
+        fraudDetection: fraudResult ? { status: fraudResult.status, score: fraudResult.overallScore } : null,
+        message: policyCheck.passed ? 'Expense submitted successfully' : 'Expense rejected due to policy violations'
+      };
+    } catch (error) { console.error('Expense submission error:', error); throw error; }
+  }
+  */
 
   /**
    * Get expense details
@@ -391,194 +337,78 @@ class ExpenseService {
     }
   }
 
-  /**
-   * Validate approval token
-   */
   async validateApprovalToken(expenseId, token) {
     try {
       const expense = await odooAdapter.getExpense(expenseId);
-
-      if (!expense) {
-        return { valid: false, reason: 'Expense not found' };
-      }
-
-      if (expense.approval_token !== token) {
-        return { valid: false, reason: 'Invalid token' };
-      }
-
-      if (!expense.approval_token_expiry) {
-        return { valid: false, reason: 'Token expiry not set' };
-      }
-
+      if (!expense) return { valid: false, reason: 'Expense not found' };
+      if (expense.approval_token !== token) return { valid: false, reason: 'Invalid token' };
+      if (!expense.approval_token_expiry) return { valid: false, reason: 'Token expiry not set' };
       const expiryDate = new Date(expense.approval_token_expiry);
-      if (expiryDate < new Date()) {
-        return { valid: false, reason: 'Token has expired' };
-      }
-
+      if (expiryDate < new Date()) return { valid: false, reason: 'Token has expired' };
       return { valid: true, expense };
-    } catch (error) {
-      console.error('Token validation error:', error);
-      throw error;
-    }
+    } catch (error) { console.error('Token validation error:', error); throw error; }
   }
 
-  /**
-   * Manager approval/rejection
-   */
-  async handleManagerDecision(expenseId, decision, managerId, remarks = '') {
-    try {
-      const expense = await odooAdapter.getExpense(expenseId);
-
-      if (!expense) {
-        throw new Error('Expense not found');
-      }
-
-      const updateData = {
-        manager_approved: decision === 'approve',
-        manager_approved_by: managerId,
-        manager_approved_date: this.formatOdooDateTime(),
-        manager_remarks: remarks,
-        manager_decision: decision === 'approve' ? 'approved' : 'rejected'
-      };
-
-      if (decision === 'approve') {
-        if (expense.hr_escalated) {
-          // Generate new token for HR approval
-          updateData.approval_token = this.generateApprovalToken();
-          updateData.approval_token_expiry = this.getTokenExpiry();
-          updateData.approval_token_type = 'hr';
-          updateData.workflow_status = 'pending_hr';
-        } else {
-          updateData.workflow_status = 'approved';
-          updateData.completed_date = this.formatOdooDateTime();
-        }
-      } else if (decision === 'reject') {
-        updateData.workflow_status = 'rejected';
-        updateData.completed_date = this.formatOdooDateTime();
-      }
-
-      console.log('📝 Updating expense with manager decision:', updateData);
-      await odooAdapter.updateExpense(expenseId, updateData);
-
-      const updatedExpense = await odooAdapter.getExpense(expenseId);
-      return {
-        success: true,
-        expense: updatedExpense,
-        nextAction: updatedExpense.workflow_status === 'pending_hr' ? 'hr_approval' : 'none'
-      };
-    } catch (error) {
-      console.error('Manager decision error:', error);
-      throw error;
-    }
+  async consumeApprovalToken(expenseId) {
+    await odooAdapter.updateExpense(expenseId, {
+      approval_token: null,
+      approval_token_expiry: null,
+      approval_token_type: null
+    });
   }
 
-  /**
-   * HR approval/rejection
-   */
-  async handleHRDecision(expenseId, decision, hrUserId, remarks = '') {
-    try {
-      const expense = await odooAdapter.getExpense(expenseId);
-
-      if (!expense) {
-        throw new Error('Expense not found');
-      }
-
-      const updateData = {
-        hr_approved: decision === 'approve',
-        hr_approved_by: hrUserId,
-        hr_approved_date: this.formatOdooDateTime(),
-        hr_remarks: remarks,
-        hr_decision: decision === 'approve' ? 'approved' : 'rejected',
-        workflow_status: decision === 'approve' ? 'approved' : 'rejected',
-        completed_date: this.formatOdooDateTime()
-      };
-
-      console.log('📝 Updating expense with HR decision:', updateData);
-      await odooAdapter.updateExpense(expenseId, updateData);
-
-      const updatedExpense = await odooAdapter.getExpense(expenseId);
-      return {
-        success: true,
-        expense: updatedExpense
-      };
-    } catch (error) {
-      console.error('HR decision error:', error);
-      throw error;
-    }
+  async rotateApprovalTokenForHR(expenseId) {
+    await odooAdapter.updateExpense(expenseId, {
+      approval_token: this.generateApprovalToken(),
+      approval_token_expiry: this.getTokenExpiry(2),
+      approval_token_type: 'hr'
+    });
   }
 
-  /**
-   * Escalate fraudulent expense to manager after HR approval
-   * (2-step approval: HR approves first, then manager must approve)
-   */
-  async escalateToManagerAfterHRApproval(expenseId, hrApprovalToken) {
+  async handleManagerDecision(expenseId, decision, remarks = '', approvalToken = null) {
     try {
-      const expense = await odooAdapter.getExpense(expenseId);
+      const action = decision === 'approve' ? 'approve' : 'reject';
+      const triggerOk = await powerAutomateService.triggerExpenseManagerDecision({
+        expenseId,
+        action,
+        reason: remarks || (action === 'approve' ? 'Approved by manager' : 'Rejected by manager'),
+        token: approvalToken
+      });
 
-      if (!expense) {
-        throw new Error('Expense not found');
+      if (!triggerOk) {
+        throw new Error('Failed to trigger manager decision workflow');
       }
 
-      // Verify this was a fraudulent expense
-      if (expense.fraud_detection_status !== 'fraudulent') {
-        throw new Error('This endpoint is only for fraudulent expenses');
+      // Manager's one-time token is spent. On approve, Flow 2 may escalate to HR — mint a fresh
+      // HR-scoped token so the HR dashboard can act on it. On reject, the workflow is terminal.
+      if (action === 'approve') {
+        await this.rotateApprovalTokenForHR(expenseId);
+      } else {
+        await this.consumeApprovalToken(expenseId);
       }
 
-      // Verify HR approval token matches
-      if (expense.approval_token !== hrApprovalToken) {
-        throw new Error('Invalid HR approval token');
+      return { success: true };
+    } catch (error) { console.error('Manager decision error:', error); throw error; }
+  }
+
+  async handleHRDecision(expenseId, decision, remarks = '', approvalToken = null) {
+    try {
+      const action = decision === 'approve' ? 'approve' : 'reject';
+      const triggerOk = await powerAutomateService.triggerExpenseHRDecision({
+        expenseId,
+        action,
+        reason: remarks || (action === 'approve' ? 'Approved by HR' : 'Rejected by HR'),
+        token: approvalToken
+      });
+
+      if (!triggerOk) {
+        throw new Error('Failed to trigger HR decision workflow');
       }
 
-      // Verify expense is in pending_hr state
-      if (expense.workflow_status !== 'pending_hr') {
-        throw new Error(`Expense is in ${expense.workflow_status} state, cannot escalate to manager`);
-      }
+      await this.consumeApprovalToken(expenseId);
 
-      console.log(`📝 Escalating fraudulent expense ${expenseId} to manager after HR approval`);
-
-      // Get employee and manager details
-      const employee = await odooAdapter.getEmployee(expense.employee_id[0]);
-
-      if (!employee.parent_id || !employee.parent_id[0]) {
-        throw new Error('Employee has no manager assigned');
-      }
-
-      const manager = await odooAdapter.getEmployee(employee.parent_id[0]);
-
-      // Generate new approval token for manager
-      const newApprovalToken = this.generateApprovalToken();
-      const tokenExpiry = this.getTokenExpiry();
-
-      // Update expense: change workflow to pending_manager, update token
-      const updateData = {
-        workflow_status: 'pending_manager',
-        approval_token: newApprovalToken,
-        approval_token_expiry: tokenExpiry,
-        approval_token_type: 'manager',
-        hr_approved: true, // Mark HR as approved
-        hr_approved_date: this.formatOdooDateTime(),
-        hr_decision: 'approved',
-        manager_decision: 'pending' // Reset manager decision
-      };
-
-      await odooAdapter.updateExpense(expenseId, updateData);
-
-      console.log('✅ Expense escalated to manager successfully');
-
-      return {
-        success: true,
-        newApprovalToken,
-        managerEmail: manager.work_email || manager.private_email,
-        managerName: manager.name,
-        employeeName: employee.name,
-        fraudScore: expense.fraud_score,
-        fraudStatus: expense.fraud_detection_status
-      };
-
-    } catch (error) {
-      console.error('Escalate to manager error:', error);
-      throw error;
-    }
+      return { success: true };
+    } catch (error) { console.error('HR decision error:', error); throw error; }
   }
 
   /**

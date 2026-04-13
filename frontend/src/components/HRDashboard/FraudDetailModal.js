@@ -104,6 +104,14 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
     return 'success';
   };
 
+  const layerWeights = fraudDetails?.weights || {
+    md5: 0.35,
+    pHash: 0.20,
+    clip: 0.25,
+    florence: 0.10,
+    anomaly: 0.10
+  };
+
   const handleHRDecision = async (decision) => {
     if (!expense.approval_token) {
       toast.error('No approval token found for this expense');
@@ -215,7 +223,11 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="textSecondary">Processing Time:</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                    {(fraudDetails.processingTime || 0).toLocaleString()}ms
+                    {(
+                      fraudDetails.processingTime
+                      || ((fraudDetails.processing_time_seconds || 0) * 1000)
+                      || 0
+                    ).toLocaleString()}ms
                   </Typography>
                 </Grid>
               </>
@@ -341,6 +353,11 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
           const florenceExtra = (() => {
             const analysis = expenseData.florence_analysis || layers.florence?.analysis;
             const flags = layers.florence?.flags;
+            const verifier = layers.florence?.forensic_vqa || {};
+            const semanticScores = layers.florence?.semantic_scores || {};
+            const topSemantic = Object.entries(semanticScores)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3);
             return (
               <Box>
                 {flags && flags.length > 0 && (
@@ -348,10 +365,36 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                     {flags.map(f => <Chip key={f} label={f} size="small" color="warning" sx={{ mr: 0.5, mb: 0.5 }} />)}
                   </Box>
                 )}
+                {(verifier.top_prompt || verifier.max_fraud_prob !== undefined) && (
+                  <Box sx={{ mb: 1, p: 1, bgcolor: '#f3f6ff', borderRadius: 1, border: '1px solid #c5d4ff' }}>
+                    {verifier.top_prompt && (
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
+                        Semantic top prompt: {verifier.top_prompt}
+                      </Typography>
+                    )}
+                    {verifier.max_fraud_prob !== undefined && (
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
+                        Fraud confidence: {(verifier.max_fraud_prob * 100).toFixed(1)}% | Clean confidence: {((verifier.max_clean_prob || 0) * 100).toFixed(1)}%
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+                {topSemantic.length > 0 && (
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="caption" sx={{ display: 'block', color: '#616161', mb: 0.5 }}>
+                      Top semantic matches:
+                    </Typography>
+                    {topSemantic.map(([label, val]) => (
+                      <Typography key={label} variant="caption" sx={{ display: 'block', color: '#757575' }}>
+                        • {label}: {(Number(val) * 100).toFixed(1)}%
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
                 {analysis && analysis !== 'null' && analysis !== 'false' ? (
                   <Box sx={{ p: 1.5, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
                     <Typography variant="caption" sx={{ fontWeight: 600, color: '#e65100', display: 'block', mb: 0.5 }}>
-                      Florence-2 Full Response:
+                      Semantic Verifier Reasoning:
                     </Typography>
                     <Typography variant="body2" sx={{ color: '#424242', whiteSpace: 'pre-wrap' }}>
                       {analysis}
@@ -384,11 +427,11 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
 
           return (
             <>
-              {renderLayer('🔒', 'Layer 1: MD5 Hash', 35, layers.md5, md5Extra)}
-              {renderLayer('🖼️', 'Layer 2: Perceptual Hash (pHash)', 20, layers.pHash, phashExtra)}
-              {renderLayer('🤖', 'Layer 3: CLIP Visual Similarity', 25, layers.clip, clipExtra)}
-              {renderLayer('🔍', 'Layer 4: Florence-2 Forgery Detection', 10, layers.florence, florenceExtra)}
-              {renderLayer('📊', 'Layer 5: Anomaly Detection', 10, layers.anomaly, anomalyExtra)}
+              {renderLayer('🔒', 'Layer 1: MD5 Hash', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
+              {renderLayer('🖼️', 'Layer 2: Perceptual Hash (pHash)', Math.round((layerWeights.pHash || 0) * 100), layers.pHash, phashExtra)}
+              {renderLayer('🤖', 'Layer 3: CLIP Visual Similarity', Math.round((layerWeights.clip || 0) * 100), layers.clip, clipExtra)}
+              {renderLayer('🧠', 'Layer 4: Semantic Forensic Verifier', Math.round((layerWeights.florence || 0) * 100), layers.florence, florenceExtra)}
+              {renderLayer('📊', 'Layer 5: Anomaly Detection', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
             </>
           );
         })()}
