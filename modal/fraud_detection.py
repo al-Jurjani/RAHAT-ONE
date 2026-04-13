@@ -36,29 +36,14 @@ clip_image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "Pillow",
 )
 
-# Florence-2 Image: Vision-language model for document analysis
-# Note: Uses CUDA development base image for flash-attention compilation
-florence_image = (
-    modal.Image.from_registry("nvidia/cuda:12.1.0-devel-ubuntu22.04", add_python="3.11")
-    .apt_install("git", "clang")  # Added clang for flash_attn compilation
-    .pip_install(
-        "torch",
-        "numpy",  # Required by flash_attn setup
-        "ninja",
-        "packaging",
-        "wheel",
-    )
-    .run_commands(
-        # Try pre-built wheels first, compile only if necessary with reduced parallelism
-        "pip install flash-attn || MAX_JOBS=1 pip install flash-attn --no-build-isolation"
-    )
-    .pip_install(
-        "transformers==4.38.2",  # Pin to compatible version
-        "Pillow",
-        "accelerate",
-        "einops",  # Required by Florence-2
-        "timm",  # Required by Florence-2
-    )
+# Semantic verifier image: OCR + lightweight vision-language semantic checks.
+semantic_image = modal.Image.debian_slim(python_version="3.11").pip_install(
+    "torch",
+    "torchvision",
+    "open-clip-torch",
+    "easyocr",
+    "numpy",
+    "Pillow",
 )
 
 
@@ -124,12 +109,12 @@ def generate_clip_embedding(image_bytes: bytes) -> List[float]:
     return cast(List[float], embedding_list)
 
 
-# ===== FLORENCE-2 FORGERY DETECTION FUNCTION =====
+# ===== LAYER 4: OCR + SEMANTIC VLM VERIFIER =====
 
 
 @app.function(
     gpu="T4",
-    image=florence_image,
+    image=semantic_image,
     timeout=600,
     secrets=[],
 )
@@ -137,7 +122,7 @@ def detect_forgery_florence(
     image_bytes: bytes, claimed_amount: Optional[float] = None
 ) -> Dict:
     """
-    Analyze invoice for visual inconsistencies using Florence-2 VLM.
+    Analyze invoice tampering with OCR evidence plus lightweight semantic VLM checks.
 
     Args:
         image_bytes: Raw image bytes
@@ -145,196 +130,270 @@ def detect_forgery_florence(
 
     Returns:
         Dict containing:
-            - analysis (str): Detailed description of the document
+            - analysis (str): Semantic reasoning summary
             - fraud_score (float): 0.0-1.0 based on suspicious patterns
             - flags (list): Specific issues detected
 
     Processing time: ~4-6 seconds on T4 GPU
     Use case: Detect Photoshopped amounts, font inconsistencies, copy-paste artifacts
     """
+    import easyocr
+    import numpy as np
+    import open_clip
     import torch
     from PIL import Image
-    from transformers import AutoModelForCausalLM, AutoProcessor
 
-    print("[FLORENCE] Loading model...")
+    print("[L4-SEMANTIC] Loading OCR + CLIP semantic verifier...")
 
-    # Load Florence-2 model
-    model_name = "microsoft/Florence-2-large"
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        trust_remote_code=True,
-        torch_dtype=torch.float16,
-        attn_implementation="sdpa",  # Use PyTorch's attention instead of flash_attn
-    )
-    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+    model_name = "openclip-ViT-B-32-semantic"
 
     # Move to GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
-    model.eval()
+    clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+        "ViT-B-32", pretrained="openai"
+    )
+    clip_model = clip_model.to(device)
+    clip_model.eval()
 
-    print(f"[FLORENCE] Analyzing document on {device}...")
+    reader = easyocr.Reader(["en"], gpu=(device == "cuda"), verbose=False)
+
+    print(f"[L4-SEMANTIC] Analyzing document on {device}...")
 
     # Load image
     image = Image.open(io.BytesIO(image_bytes))
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    def run_task(task_prompt: str, question: Optional[str] = None) -> str:
-        prompt = task_prompt if question is None else f"{task_prompt}{question}"
-        inputs = processor(text=prompt, images=image, return_tensors="pt")
-        inputs = {
-            k: v.to(device, dtype=torch.float16)
-            if v.dtype == torch.float32
-            else v.to(device)
-            for k, v in inputs.items()
+    def _to_builtin(value):
+        """Convert numpy scalars/arrays and nested containers to JSON-safe Python types."""
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return [_to_builtin(v) for v in value.tolist()]
+        if isinstance(value, dict):
+            return {k: _to_builtin(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_to_builtin(v) for v in value]
+        return value
+
+    ocr_results = reader.readtext(np.array(image), detail=1)
+    ocr_tokens = [r[1] for r in ocr_results if len(r) >= 2 and r[1]]
+    ocr_text = " ".join(ocr_tokens)
+    avg_ocr_conf = (
+        sum(float(r[2]) for r in ocr_results if len(r) >= 3) / len(ocr_results)
+        if ocr_results
+        else 0.0
+    )
+    ocr_with_region = [
+        {
+            "bbox": _to_builtin(r[0]),
+            "text": str(r[1]),
+            "confidence": float(r[2]) if len(r) >= 3 else 0.0,
         }
-
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs, max_new_tokens=512, num_beams=3, do_sample=False
-            )
-
-        generated_text = processor.batch_decode(
-            generated_ids, skip_special_tokens=True
-        )[0]
-        return cast(str, generated_text.replace(prompt, "").strip())
-
-    analysis = run_task("<MORE_DETAILED_CAPTION>")
-    ocr_text = run_task("<OCR>")
-    ocr_with_region = run_task("<OCR_WITH_REGION>")
-    forensic_q1 = run_task(
-        "<VQA>",
-        "Does the total amount text look visually different in font, weight, or alignment from nearby numbers? Answer yes or no with one short reason.",
-    )
-    forensic_q2 = run_task(
-        "<VQA>",
-        "Do you see signs of edited, overwritten, pasted, or tampered digits in the total/grand total area? Answer yes or no with one short reason.",
-    )
-    forensic_q3 = run_task(
-        "<VQA>",
-        "Is the grand total internally inconsistent with other fare amounts on this document? Answer yes or no with one short reason.",
-    )
-    forensic_q4 = run_task(
-        "<VQA>",
-        "Read the grand total amount only as digits (no words). If unreadable, answer unreadable.",
-    )
-
-    print(f"[FLORENCE] Caption: {analysis[:120]}...")
-
-    suspicious_keywords = [
-        "inconsistent",
-        "edited",
-        "altered",
-        "mismatch",
-        "artifact",
-        "blur",
-        "different font",
-        "overlay",
-        "pasted",
-        "modified",
-        "compression",
-        "quality difference",
-        "irregular",
-        "misaligned",
-        "tampered",
-        "manipulated",
-        "font change",
-        "text replacement",
-        "pixelated",
-        "cloned",
-        "copy paste",
-        "inpainted",
+        for r in ocr_results
     ]
 
+    def _bbox_metrics(bbox):
+        points = _to_builtin(bbox)
+        try:
+            xs = [float(point[0]) for point in points if len(point) >= 2]
+            ys = [float(point[1]) for point in points if len(point) >= 2]
+        except Exception:
+            return None
+        if not xs or not ys:
+            return None
+        left = min(xs)
+        right = max(xs)
+        top = min(ys)
+        bottom = max(ys)
+        return {
+            "cx": (left + right) / 2.0,
+            "cy": (top + bottom) / 2.0,
+            "width": max(right - left, 0.0),
+            "height": max(bottom - top, 0.0),
+        }
+
+    def _extract_total_candidate(results):
+        total_keywords = (
+            "grand total",
+            "total amount",
+            "amount due",
+            "balance due",
+            "invoice total",
+            "net total",
+            "total",
+            "fare",
+        )
+        amount_pattern = re.compile(r"\d{1,3}(?:[,.\s]\d{3})*(?:\.\d+)?|\d+\.\d+")
+        candidates = []
+        for index, result in enumerate(results):
+            bbox = _bbox_metrics(result[0])
+            text = str(result[1] or "")
+            confidence = float(result[2]) if len(result) >= 3 else 0.0
+            if bbox is None:
+                continue
+            normalized = text.lower().replace("\n", " ").strip()
+            if not normalized:
+                continue
+            has_keyword = any(keyword in normalized for keyword in total_keywords)
+            numbers = []
+            for raw in amount_pattern.findall(normalized):
+                compact = raw.replace(",", "").replace(" ", "")
+                try:
+                    value = float(compact)
+                except ValueError:
+                    continue
+                if value > 0:
+                    numbers.append(value)
+            if not numbers:
+                continue
+            for value in numbers:
+                candidates.append(
+                    {
+                        "value": value,
+                        "confidence": confidence,
+                        "keyword_match": has_keyword,
+                        "bbox": bbox,
+                        "text": text,
+                        "index": index,
+                    }
+                )
+        candidates.sort(
+            key=lambda item: (
+                1 if item["keyword_match"] else 0,
+                item["confidence"],
+                item["bbox"]["width"],
+            ),
+            reverse=True,
+        )
+        return candidates
+
+    total_candidates = _extract_total_candidate(ocr_results)
+
+    semantic_prompts = {
+        "fraud": [
+            "a tampered receipt with edited total amount",
+            "a receipt with overwritten or manipulated digits",
+            "a forged invoice where total text style differs",
+            "a suspicious altered travel receipt",
+        ],
+        "clean": [
+            "a clean unedited travel receipt",
+            "a legitimate invoice with consistent text style",
+            "an authentic receipt document",
+        ],
+    }
+
+    image_tensor = clip_preprocess(image).unsqueeze(0).to(device)
+    all_prompts = semantic_prompts["fraud"] + semantic_prompts["clean"]
+
+    with torch.no_grad():
+        image_features = clip_model.encode_image(image_tensor)
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        text_tokens = open_clip.tokenize(all_prompts).to(device)
+        text_features = clip_model.encode_text(text_tokens)
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        logits = (100.0 * image_features @ text_features.T).squeeze(0)
+        probs = torch.softmax(logits, dim=0).detach().cpu().numpy()
+
+    fraud_probs = probs[: len(semantic_prompts["fraud"])]
+    clean_probs = probs[len(semantic_prompts["fraud"]) :]
+    max_fraud_prob = float(np.max(fraud_probs)) if len(fraud_probs) else 0.0
+    max_clean_prob = float(np.max(clean_probs)) if len(clean_probs) else 0.0
+
+    top_idx = int(np.argmax(probs)) if len(probs) else 0
+    top_prompt = all_prompts[top_idx] if all_prompts else "n/a"
+
     detected_flags = []
-    analysis_lower = analysis.lower()
+    analysis_lines = []
     ocr_lower = ocr_text.lower()
 
-    for keyword in suspicious_keywords:
-        if keyword in analysis_lower:
-            detected_flags.append(f"caption:{keyword}")
-
     amount_mismatch = False
+    total_line_font_variation = False
     amount_delta_pct = None
     ocr_amount = None
-    amount_matches = re.findall(r"\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?|\d+\.\d+", ocr_lower)
-    numeric_amounts = []
-    for raw in amount_matches:
-        compact = raw.replace(",", "").replace(" ", "")
-        try:
-            value = float(compact)
-            if value > 0:
-                numeric_amounts.append(value)
-        except ValueError:
-            continue
-
-    if numeric_amounts and claimed_amount is not None and claimed_amount > 0:
-        ocr_amount = max(numeric_amounts)
+    if total_candidates and claimed_amount is not None and claimed_amount > 0:
+        best_total = total_candidates[0]
+        ocr_amount = best_total["value"]
         amount_delta_pct = abs(ocr_amount - claimed_amount) / claimed_amount
-        if amount_delta_pct > 0.15:
-            amount_mismatch = True
-            detected_flags.append("ocr_amount_mismatch")
 
-    q1_lower = forensic_q1.lower()
-    q2_lower = forensic_q2.lower()
-    q3_lower = forensic_q3.lower()
-    q4_lower = forensic_q4.lower()
+        if best_total["keyword_match"] and best_total["confidence"] >= 0.55:
+            if amount_delta_pct > 0.15:
+                amount_mismatch = True
+                detected_flags.append("ocr_amount_mismatch")
 
-    if "yes" in q1_lower:
-        detected_flags.append("vqa_font_style_mismatch")
-    if "yes" in q2_lower:
-        detected_flags.append("vqa_tamper_detected")
-    if "yes" in q3_lower:
-        detected_flags.append("vqa_total_inconsistent")
-    if "unreadable" in q4_lower:
-        detected_flags.append("vqa_total_unreadable")
+        bbox_heights = []
+        for result in ocr_results:
+            metrics = _bbox_metrics(result[0])
+            if metrics is not None:
+                bbox_heights.append(metrics["height"])
+        if bbox_heights:
+            median_height = sorted(bbox_heights)[len(bbox_heights) // 2]
+            candidate_height = best_total["bbox"]["height"]
+            if (
+                median_height > 0
+                and abs(candidate_height - median_height) / median_height > 0.35
+            ):
+                total_line_font_variation = True
+                detected_flags.append("total_line_font_variation")
 
-    # Florence sometimes hallucinates giant repeated flight lists; treat this as a reliability red flag.
-    if analysis_lower.count("flight ") >= 40:
-        detected_flags.append("caption_repetitive_hallucination")
+    if max_fraud_prob > max_clean_prob:
+        detected_flags.append("semantic_fraud_prompt_match")
+    if max_fraud_prob >= 0.45:
+        detected_flags.append("semantic_high_fraud_confidence")
+    if avg_ocr_conf < 0.45:
+        detected_flags.append("low_ocr_confidence")
 
     if len(ocr_lower.strip()) < 20:
         detected_flags.append("ocr_text_too_short")
 
-    if len(analysis_lower.strip()) < 50:
-        detected_flags.append("caption_too_vague")
-
     unique_flags = list(dict.fromkeys(detected_flags))
 
-    # Multi-signal scoring with high emphasis on explicit forensic VQA signals.
+    # Multi-signal scoring with OCR evidence + semantic verifier confidence.
     score = 0.0
-    keyword_hits = len([f for f in unique_flags if f.startswith("caption:")])
-    score += min(keyword_hits * 0.04, 0.20)
+    score += min(max_fraud_prob * 0.65, 0.65)
     if amount_mismatch:
-        score += 0.30
-    if "vqa_font_style_mismatch" in unique_flags:
-        score += 0.35
-    if "vqa_tamper_detected" in unique_flags:
-        score += 0.45
-    if "vqa_total_inconsistent" in unique_flags:
         score += 0.25
-    if "vqa_total_unreadable" in unique_flags:
+    if total_line_font_variation:
+        score += 0.20
+    if "semantic_high_fraud_confidence" in unique_flags:
         score += 0.10
-    if "caption_repetitive_hallucination" in unique_flags:
-        score += 0.12
+    if "low_ocr_confidence" in unique_flags:
+        score += 0.05
     if "ocr_text_too_short" in unique_flags:
-        score += 0.10
-    if "caption_too_vague" in unique_flags:
         score += 0.05
     fraud_score = min(score, 1.0)
 
-    print(f"[FLORENCE] Detected flags: {unique_flags}, Score: {fraud_score}")
+    analysis_lines.append(
+        f"Top semantic prompt: '{top_prompt}' (fraud_conf={max_fraud_prob:.2f}, clean_conf={max_clean_prob:.2f})"
+    )
+    if amount_mismatch and ocr_amount is not None and claimed_amount is not None:
+        analysis_lines.append(
+            f"OCR amount mismatch: extracted={ocr_amount:.2f}, claimed={claimed_amount:.2f}, delta={amount_delta_pct:.2%}"
+        )
+    if total_line_font_variation:
+        analysis_lines.append(
+            "Total-line bounding box differs from the document median, suggesting a pasted or replaced amount area"
+        )
+    analysis_lines.append(
+        f"OCR confidence: {avg_ocr_conf:.2f}, OCR token count: {len(ocr_tokens)}"
+    )
+    analysis = "\n".join(analysis_lines)
+
+    print(f"[L4-SEMANTIC] Flags: {unique_flags}, Score: {fraud_score}")
 
     return {
         "analysis": analysis,
         "ocr_text": ocr_text,
         "ocr_with_region": ocr_with_region,
         "forensic_vqa": {
-            "font_style_check": forensic_q1,
-            "tamper_check": forensic_q2,
-            "total_consistency_check": forensic_q3,
-            "grand_total_read": forensic_q4,
+            "top_prompt": top_prompt,
+            "max_fraud_prob": max_fraud_prob,
+            "max_clean_prob": max_clean_prob,
+            "avg_ocr_confidence": avg_ocr_conf,
+        },
+        "semantic_scores": {
+            prompt: float(prob) for prompt, prob in zip(all_prompts, probs.tolist())
         },
         "fraud_score": fraud_score,
         "flags": unique_flags,
@@ -372,6 +431,23 @@ def fastapi_app():
     from pydantic import BaseModel
 
     web_app = FastAPI()
+
+    def to_json_safe(value):
+        """Recursively convert numpy values (e.g., int32) to JSON-native Python types."""
+        try:
+            import numpy as np
+        except Exception:
+            np = None
+
+        if np is not None and isinstance(value, np.generic):
+            return value.item()
+        if np is not None and isinstance(value, np.ndarray):
+            return [to_json_safe(v) for v in value.tolist()]
+        if isinstance(value, dict):
+            return {k: to_json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [to_json_safe(v) for v in value]
+        return value
 
     # ===== THRESHOLDS & WEIGHTS (ported from fraudDetectionService.js) =====
 
@@ -621,6 +697,9 @@ def fastapi_app():
             "details": detail,
             "analysis": florence_result.get("analysis", ""),
             "ocr_text": florence_result.get("ocr_text", ""),
+            "ocr_with_region": florence_result.get("ocr_with_region", []),
+            "forensic_vqa": florence_result.get("forensic_vqa", {}),
+            "semantic_scores": florence_result.get("semantic_scores", {}),
         }
 
     def run_anomaly_layer(amount: float, stats: Optional[dict]) -> dict:
@@ -661,29 +740,14 @@ def fastapi_app():
         # Weighted score
         overall = sum(layers[k]["score"] * WEIGHTS[k] for k in WEIGHTS)
 
-        p_hash_similarity = layers["pHash"].get("similarity", 0.0) or 0.0
-        clip_similarity = layers["clip"].get("similarity", 0.0) or 0.0
-        florence_flags = set(layers["florence"].get("flags", []))
-
         template_plus_anomaly = layers["anomaly"].get("score", 0) >= 0.80 and (
             layers["pHash"].get("likelyTemplateOnly") is True
             or layers["clip"].get("likelyTemplateOnly") is True
         )
-        likely_tampered_duplicate = (
-            p_hash_similarity >= 0.995
-            and clip_similarity >= 0.995
-            and layers["anomaly"].get("score", 0) < 0.20
-            and (
-                "vqa_total_unreadable" in florence_flags
-                or "caption_repetitive_hallucination" in florence_flags
-            )
-        )
-        florence_strong = layers["florence"].get("score", 0) >= 0.70
+        florence_strong = layers["florence"].get("score", 0) >= 0.65
 
         # Status
         if layers["md5"]["matched"]:
-            status = "fraudulent"
-        elif likely_tampered_duplicate:
             status = "fraudulent"
         elif florence_strong:
             status = "fraudulent"
@@ -707,8 +771,6 @@ def fastapi_app():
         if status == "fraudulent":
             if layers["md5"]["matched"]:
                 rec = "REJECT - Exact duplicate file detected"
-            elif likely_tampered_duplicate:
-                rec = "REJECT - Likely tampered duplicate template with unreadable/edited total area"
             elif layers["pHash"]["matched"] and layers["clip"]["matched"]:
                 rec = "REJECT - Multiple duplicate detection methods confirm fraud"
             else:
@@ -876,16 +938,21 @@ def fastapi_app():
                 }
                 overall, status, confidence, rec = aggregate(layers)
                 return JSONResponse(
-                    content={
-                        "success": True,
-                        "status": status,
-                        "overallScore": overall,
-                        "confidence": confidence,
-                        "recommendation": rec,
-                        "layers": layers,
-                        "processing_time_seconds": round(time.time() - start_time, 2),
-                        "earlyExit": True,
-                    }
+                    content=to_json_safe(
+                        {
+                            "success": True,
+                            "status": status,
+                            "overallScore": overall,
+                            "confidence": confidence,
+                            "recommendation": rec,
+                            "layers": layers,
+                            "weights": WEIGHTS,
+                            "processing_time_seconds": round(
+                                time.time() - start_time, 2
+                            ),
+                            "earlyExit": True,
+                        }
+                    )
                 )
 
             # ===== PHASE 2: GPU LAYERS (CLIP + Florence in parallel) =====
@@ -921,15 +988,18 @@ def fastapi_app():
             )
 
             return JSONResponse(
-                content={
-                    "success": True,
-                    "status": status,
-                    "overallScore": overall,
-                    "confidence": confidence,
-                    "recommendation": rec,
-                    "layers": layers,
-                    "processing_time_seconds": processing_time,
-                }
+                content=to_json_safe(
+                    {
+                        "success": True,
+                        "status": status,
+                        "overallScore": overall,
+                        "confidence": confidence,
+                        "recommendation": rec,
+                        "layers": layers,
+                        "weights": WEIGHTS,
+                        "processing_time_seconds": processing_time,
+                    }
+                )
             )
 
         except HTTPException:
@@ -954,12 +1024,14 @@ def fastapi_app():
             clip_embedding = clip_task.get()
             florence_result = florence_task.get()
             return JSONResponse(
-                content={
-                    "success": True,
-                    "clip_embedding": clip_embedding,
-                    "florence_analysis": florence_result,
-                    "processing_time_seconds": round(time.time() - start_time, 2),
-                }
+                content=to_json_safe(
+                    {
+                        "success": True,
+                        "clip_embedding": clip_embedding,
+                        "florence_analysis": florence_result,
+                        "processing_time_seconds": round(time.time() - start_time, 2),
+                    }
+                )
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
