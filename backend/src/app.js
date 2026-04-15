@@ -79,6 +79,7 @@ const leaveRoutes = require('./routes/leavesRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const hrRoutes = require('./routes/hrRoutes');
+const auditRoutes = require('./routes/auditRoutes');
 
 // DEBUG: Check what we imported
 console.log('onboardingRoutes:', typeof onboardingRoutes);
@@ -90,6 +91,7 @@ console.log('leaveRoutes:', typeof leaveRoutes);
 console.log('expenseRoutes:', typeof expenseRoutes);
 console.log('employeeRoutes:', typeof employeeRoutes);
 console.log('hrRoutes:', typeof hrRoutes);
+console.log('auditRoutes:', typeof auditRoutes);
 
 
 // Register routes
@@ -102,6 +104,7 @@ app.use('/api/leaves', leaveRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/hr', hrRoutes);
+app.use('/api/audit', auditRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
