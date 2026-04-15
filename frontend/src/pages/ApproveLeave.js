@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -26,11 +26,7 @@ const ApproveLeave = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    fetchLeaveDetails();
-  }, []);
-
-  const fetchLeaveDetails = async () => {
+  const fetchLeaveDetails = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/leaves/public/${leaveId}`);
       setLeave(response.data);
@@ -39,7 +35,11 @@ const ApproveLeave = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [leaveId]);
+
+  useEffect(() => {
+    fetchLeaveDetails();
+  }, [fetchLeaveDetails]);
 
   const handleDecision = async (decision) => {
     try {
@@ -68,16 +68,19 @@ const ApproveLeave = () => {
 
   if (loading) {
     return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress />
-      </Container>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', display: 'flex', alignItems: 'center' }}>
+        <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <CircularProgress />
+        </Container>
+      </Box>
     );
   }
 
   if (result) {
     return (
-      <Container maxWidth="sm" sx={{ mt: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 8 }}>
+      <Container maxWidth="sm">
+        <Paper sx={{ p: 4, textAlign: 'center', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
           {result.decision === 'approved' ? (
             <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
           ) : (
@@ -91,13 +94,15 @@ const ApproveLeave = () => {
           </Typography>
         </Paper>
       </Container>
+      </Box>
     );
   }
 
   if (error || !leave) {
     return (
-      <Container maxWidth="sm" sx={{ mt: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 8 }}>
+      <Container maxWidth="sm">
+        <Paper sx={{ p: 4, textAlign: 'center', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
           <CancelIcon sx={{ fontSize: 60, color: 'error.main', mb: 2 }} />
           <Typography variant="h6" color="error" gutterBottom>
             {error || 'Leave request not found'}
@@ -107,17 +112,19 @@ const ApproveLeave = () => {
           </Typography>
         </Paper>
       </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 8 }}>
-      <Paper sx={{ p: 4 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 8 }}>
+    <Container maxWidth="sm">
+      <Paper sx={{ p: 4, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
         <Typography variant="h4" gutterBottom align="center" color="primary">
           Leave Approval Request
         </Typography>
 
-        <Box sx={{ my: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Box sx={{ my: 3, p: 2, bgcolor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
           <Typography variant="h6" gutterBottom>
             {leave.employeeName}
           </Typography>
@@ -174,6 +181,7 @@ const ApproveLeave = () => {
         </Box>
       </Paper>
     </Container>
+    </Box>
   );
 };
 

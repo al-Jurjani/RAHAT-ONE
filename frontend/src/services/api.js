@@ -107,6 +107,29 @@ export const hrAPI = {
 };
 
 /* =========================
+   HR Dashboard APIs
+========================= */
+
+export const hrDashboardAPI = {
+  getSummary: () => api.get('/hr/dashboard-summary'),
+};
+
+/* =========================
+   Employee APIs
+========================= */
+
+export const employeeAPI = {
+  getProfile: (employeeId) => api.get(`/employee/profile/${employeeId}`),
+  updateProfile: (employeeId, data) => api.patch(`/employee/profile/${employeeId}`, data),
+  uploadProfilePhoto: (employeeId, formData) =>
+    api.post(`/employee/profile/${employeeId}/photo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  getLeaveSummary: (employeeId) => api.get(`/employee/leave-summary/${employeeId}`),
+  getExpenseSummary: (employeeId) => api.get(`/employee/expense-summary/${employeeId}`),
+};
+
+/* =========================
    Onboarding APIs
 ========================= */
 

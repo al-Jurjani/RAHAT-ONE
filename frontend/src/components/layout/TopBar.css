@@ -1,0 +1,89 @@
+.topbar {
+  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-surface);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  gap: var(--space-4);
+}
+
+.topbar-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.topbar-bell {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  position: relative;
+}
+.topbar-bell:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.topbar-theme-toggle {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+}
+
+.topbar-theme-toggle:hover {
+  background: var(--bg-overlay) !important;
+  color: var(--accent-primary) !important;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.topbar-username {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 var(--space-4);
+  }
+  .topbar-username {
+    display: none;
+  }
+}

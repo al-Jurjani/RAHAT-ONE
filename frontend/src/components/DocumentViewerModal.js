@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -18,20 +18,7 @@ function DocumentViewerModal({ open, onClose, documentId, documentName, document
   const [error, setError] = useState(null);
   const [documentUrl, setDocumentUrl] = useState(null);
 
-  useEffect(() => {
-    if (open && documentId) {
-      loadDocument();
-    }
-
-    // Cleanup: revoke object URL when modal closes
-    return () => {
-      if (documentUrl) {
-        URL.revokeObjectURL(documentUrl);
-      }
-    };
-  }, [open, documentId]);
-
-  const loadDocument = async () => {
+  const loadDocument = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -52,7 +39,20 @@ function DocumentViewerModal({ open, onClose, documentId, documentName, document
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentId]);
+
+  useEffect(() => {
+    if (open && documentId) {
+      loadDocument();
+    }
+
+    // Cleanup: revoke object URL when modal closes
+    return () => {
+      if (documentUrl) {
+        URL.revokeObjectURL(documentUrl);
+      }
+    };
+  }, [open, documentId, loadDocument, documentUrl]);
 
   const handleDownload = () => {
     const link = document.createElement('a');

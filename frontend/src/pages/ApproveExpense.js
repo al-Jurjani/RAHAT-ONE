@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -20,8 +20,6 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DescriptionIcon from '@mui/icons-material/Description';
-import ImageIcon from '@mui/icons-material/Image';
-import { expenseAPI } from '../services/api';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -41,16 +39,7 @@ const ApproveExpense = () => {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (!token) {
-      setError('Approval token is missing from the link');
-      setLoading(false);
-      return;
-    }
-    fetchExpenseDetails();
-  }, [expenseId, token]);
-
-  const fetchExpenseDetails = async () => {
+  const fetchExpenseDetails = useCallback(async () => {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/api/expenses/public/${expenseId}`,
@@ -66,7 +55,16 @@ const ApproveExpense = () => {
       setError(err.response?.data?.message || 'Invalid or expired link');
       setLoading(false);
     }
-  };
+  }, [expenseId, token]);
+
+  useEffect(() => {
+    if (!token) {
+      setError('Approval token is missing from the link');
+      setLoading(false);
+      return;
+    }
+    fetchExpenseDetails();
+  }, [token, fetchExpenseDetails]);
 
   const loadInvoicePreview = async () => {
     try {
@@ -139,16 +137,19 @@ const ApproveExpense = () => {
 
   if (loading) {
     return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress />
-      </Container>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', display: 'flex', alignItems: 'center' }}>
+        <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <CircularProgress />
+        </Container>
+      </Box>
     );
   }
 
   if (result) {
     return (
-      <Container maxWidth="sm" sx={{ mt: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 8 }}>
+      <Container maxWidth="sm">
+        <Paper sx={{ p: 4, textAlign: 'center', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
           {result.decision === 'approve' ? (
             <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
           ) : (
@@ -171,13 +172,15 @@ const ApproveExpense = () => {
           )}
         </Paper>
       </Container>
+      </Box>
     );
   }
 
   if (error || !expense || !employee) {
     return (
-      <Container maxWidth="sm" sx={{ mt: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 8 }}>
+      <Container maxWidth="sm">
+        <Paper sx={{ p: 4, textAlign: 'center', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
           <CancelIcon sx={{ fontSize: 60, color: 'error.main', mb: 2 }} />
           <Typography variant="h6" color="error" gutterBottom>
             {error || 'Expense request not found'}
@@ -187,6 +190,7 @@ const ApproveExpense = () => {
           </Typography>
         </Paper>
       </Container>
+      </Box>
     );
   }
 
@@ -194,13 +198,14 @@ const ApproveExpense = () => {
   const isHighAmount = expense.total_amount > thresholdAmount;
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 8, mb: 4 }}>
-      <Paper sx={{ p: 4 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 8 }}>
+    <Container maxWidth="sm" sx={{ mb: 4 }}>
+      <Paper sx={{ p: 4, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
         <Typography variant="h4" gutterBottom align="center" color="primary">
           Expense Approval Request
         </Typography>
 
-        <Box sx={{ my: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Box sx={{ my: 3, p: 2, bgcolor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
           {/* Employee Name */}
           <Typography variant="h6" gutterBottom>
             {employee.name}
@@ -237,7 +242,7 @@ const ApproveExpense = () => {
           </Typography>
 
           {/* Invoice Preview Button */}
-          <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #ddd' }}>
+          <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid var(--border-subtle)' }}>
             <Button
               fullWidth
               variant="outlined"
@@ -336,6 +341,7 @@ const ApproveExpense = () => {
         </Box>
       </Paper>
     </Container>
+    </Box>
   );
 };
 

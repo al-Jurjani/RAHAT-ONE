@@ -145,7 +145,7 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
 
   return (
     <>
-      <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+      <Box sx={{ mb: 3, p: 2, bgcolor: 'var(--bg-elevated)', borderRadius: 1 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
           <FilterListIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 18 }} />
           Filters
@@ -178,7 +178,7 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow sx={{ backgroundColor: '#e8f5e9' }}>
+            <TableRow sx={{ backgroundColor: 'var(--status-success-bg)' }}>
               <TableCell>
                 <TableSortLabel active={sortField === 'employee'} direction={sortField === 'employee' ? sortDirection : 'asc'} onClick={() => handleSortChange('employee')}>
                   <strong>Employee</strong>
@@ -210,7 +210,7 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
           </TableHead>
           <TableBody>
             {pagedExpenses.map((expense) => (
-              <TableRow key={expense.id} hover sx={{ backgroundColor: '#f9fbe7' }}>
+              <TableRow key={expense.id} hover sx={{ backgroundColor: 'var(--status-success-bg)' }}>
                 <TableCell>
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>{getEmployeeName(expense)}</Typography>
                   <Typography variant="caption" color="textSecondary">#{expense.id}</Typography>

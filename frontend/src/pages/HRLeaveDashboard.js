@@ -1,15 +1,9 @@
 import React, { useState } from 'react';
-import {
-  Container,
-  Typography,
-  Box,
-  Tabs,
-  Tab,
-  Paper,
-  Button
-} from '@mui/material';
-import { ArrowBack } from '@mui/icons-material';
+import { Tabs, Tab, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import AppShell from '../components/layout/AppShell';
+import { Button } from '../components/ui';
+import { ArrowBack } from '@mui/icons-material';
 import PendingLeavesTable from '../components/HRDashboard/PendingLeavesTable';
 import AllLeavesTable from '../components/HRDashboard/AllLeavesTable';
 import AllocationManagement from '../components/HRDashboard/AllocationManagement';
@@ -24,21 +18,20 @@ const HRLeaveDashboard = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button
-          startIcon={<ArrowBack />}
-          onClick={() => navigate('/hr')}
-          sx={{ mr: 2 }}
-        >
+    <AppShell pageTitle="Leave Management">
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <Button variant="ghost" onClick={() => navigate('/hr')} size="sm">
+          <ArrowBack fontSize="small" style={{ marginRight: 'var(--space-1)' }} />
           Back to HR Portal
         </Button>
-        <Typography variant="h4">
-          Leave Management Dashboard
-        </Typography>
-      </Box>
+      </div>
 
-      <Paper sx={{ mt: 3 }}>
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden',
+      }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab label="Pending Approvals" />
           <Tab label="All Leaves" />
@@ -47,19 +40,13 @@ const HRLeaveDashboard = () => {
         </Tabs>
 
         <Box sx={{ p: 3 }}>
-          {activeTab === 0 && (
-            <PendingLeavesTable
-              onActionComplete={() => {
-                // Optionally refresh data or show success message
-              }}
-            />
-          )}
+          {activeTab === 0 && <PendingLeavesTable onActionComplete={() => {}} />}
           {activeTab === 1 && <AllLeavesTable />}
           {activeTab === 2 && <AllocationManagement />}
           {activeTab === 3 && <BlackoutDatesManagement />}
         </Box>
-      </Paper>
-    </Container>
+      </div>
+    </AppShell>
   );
 };
 

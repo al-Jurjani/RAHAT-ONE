@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -32,19 +32,7 @@ function CNICViewerModal({
   const [documentUrl, setDocumentUrl] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (open && documentId) {
-      loadDocument();
-    }
-
-    return () => {
-      if (documentUrl) {
-        URL.revokeObjectURL(documentUrl);
-      }
-    };
-  }, [open, documentId]);
-
-  const loadDocument = async () => {
+  const loadDocument = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -65,7 +53,19 @@ function CNICViewerModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentId]);
+
+  useEffect(() => {
+    if (open && documentId) {
+      loadDocument();
+    }
+
+    return () => {
+      if (documentUrl) {
+        URL.revokeObjectURL(documentUrl);
+      }
+    };
+  }, [open, documentId, loadDocument, documentUrl]);
 
   const renderComparisonRow = (label, enteredValue, extractedValue, matchInfo) => (
     <TableRow>
@@ -130,7 +130,7 @@ function CNICViewerModal({
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  bgcolor: 'grey.100',
+                  bgcolor: 'var(--bg-elevated)',
                   p: 2,
                   borderRadius: 1
                 }}
@@ -162,7 +162,7 @@ function CNICViewerModal({
 
               <Table size="small">
                 <TableBody>
-                  <TableRow sx={{ bgcolor: 'grey.100' }}>
+                  <TableRow sx={{ bgcolor: 'var(--bg-elevated)' }}>
                     <TableCell><strong>Field</strong></TableCell>
                     <TableCell><strong>Entered by Candidate</strong></TableCell>
                     <TableCell><strong>Extracted from CNIC</strong></TableCell>

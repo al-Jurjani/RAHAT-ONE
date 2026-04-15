@@ -35,7 +35,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showFullClipEmbedding, setShowFullClipEmbedding] = useState(false);
-  // Full expense details (includes clip_embedding, florence_analysis — fetched separately due to size)
+  // Full expense details (includes clip_embedding, florence_analysis â€” fetched separately due to size)
   const [fullExpense, setFullExpense] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
@@ -121,7 +121,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
     try {
       setActionLoading(true);
 
-      const response = await axios.post(
+      await axios.post(
         `${API_BASE_URL}/expenses/${expense.id}/hr-decision`,
         {
           token: expense.approval_token,
@@ -180,7 +180,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
           </Box>
         )}
         {/* Overall Summary */}
-        <Paper sx={{ p: 2, mb: 3, bgcolor: '#f5f5f5' }}>
+        <Paper sx={{ p: 2, mb: 3, bgcolor: 'var(--bg-elevated)' }}>
           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
             Overall Assessment
           </Typography>
@@ -256,7 +256,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
             const score = isLegacyString ? null : (layerData?.score ?? null);
             const details = isLegacyString
               ? layerData
-              : (layerData?.details || (fraudDetails ? 'No data available' : 'Not fetched — re-submit expense to generate analysis'));
+              : (layerData?.details || (fraudDetails ? 'No data available' : 'Not fetched â€” re-submit expense to generate analysis'));
             const skipped = details?.includes('Skipped') || details?.includes('unavailable');
             const hasError = layerData?.error;
             return (
@@ -287,7 +287,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
           const md5Extra = expenseData.document_hash && (
             <Typography variant="caption" sx={{ display: 'block', fontFamily: 'monospace', color: '#616161', wordBreak: 'break-all' }}>
               MD5: {expenseData.document_hash}
-              {layers.md5?.matchedExpenseId && ` → duplicate of Expense #${layers.md5.matchedExpenseId}`}
+              {layers.md5?.matchedExpenseId && ` â†’ duplicate of Expense #${layers.md5.matchedExpenseId}`}
             </Typography>
           );
 
@@ -320,7 +320,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                   const preview = emb.slice(0, 5).map(v => v.toFixed(4)).join(', ');
                   const rest = emb.slice(5).map(v => v.toFixed(4)).join(', ');
                   embeddingEl = (
-                    <Box sx={{ mt: 1, p: 1.5, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                    <Box sx={{ mt: 1, p: 1.5, bgcolor: 'var(--bg-elevated)', borderRadius: 1 }}>
                       <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#616161', wordBreak: 'break-all' }}>
                         <strong>512-dim Embedding (first 5):</strong> [{preview}
                         {!showFullClipEmbedding ? '...' : `, ${rest}`}]
@@ -386,7 +386,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                     </Typography>
                     {topSemantic.map(([label, val]) => (
                       <Typography key={label} variant="caption" sx={{ display: 'block', color: '#757575' }}>
-                        • {label}: {(Number(val) * 100).toFixed(1)}%
+                        â€¢ {label}: {(Number(val) * 100).toFixed(1)}%
                       </Typography>
                     ))}
                   </Box>
@@ -414,7 +414,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
             <Box>
               {layers.anomaly?.zScore !== null && layers.anomaly?.zScore !== undefined && (
                 <Typography variant="caption" sx={{ display: 'block', color: '#616161' }}>
-                  Z-score: {layers.anomaly.zScore?.toFixed(2)} {layers.anomaly.isAnomaly ? '⚠️ Statistical anomaly' : '✓ Within normal range'}
+                  Z-score: {layers.anomaly.zScore?.toFixed(2)} {layers.anomaly.isAnomaly ? 'âš ï¸ Statistical anomaly' : 'âœ“ Within normal range'}
                 </Typography>
               )}
               {expenseData.anomaly_confidence !== null && expenseData.anomaly_confidence !== undefined && (
@@ -427,11 +427,11 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
 
           return (
             <>
-              {renderLayer('🔒', 'Layer 1: MD5 Hash', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
-              {renderLayer('🖼️', 'Layer 2: Perceptual Hash (pHash)', Math.round((layerWeights.pHash || 0) * 100), layers.pHash, phashExtra)}
-              {renderLayer('🤖', 'Layer 3: CLIP Visual Similarity', Math.round((layerWeights.clip || 0) * 100), layers.clip, clipExtra)}
-              {renderLayer('🧠', 'Layer 4: Semantic Forensic Verifier', Math.round((layerWeights.florence || 0) * 100), layers.florence, florenceExtra)}
-              {renderLayer('📊', 'Layer 5: Anomaly Detection', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
+              {renderLayer('ðŸ”’', 'Layer 1: MD5 Hash', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
+              {renderLayer('ðŸ–¼ï¸', 'Layer 2: Perceptual Hash (pHash)', Math.round((layerWeights.pHash || 0) * 100), layers.pHash, phashExtra)}
+              {renderLayer('ðŸ¤–', 'Layer 3: CLIP Visual Similarity', Math.round((layerWeights.clip || 0) * 100), layers.clip, clipExtra)}
+              {renderLayer('ðŸ§ ', 'Layer 4: Semantic Forensic Verifier', Math.round((layerWeights.florence || 0) * 100), layers.florence, florenceExtra)}
+              {renderLayer('ðŸ“Š', 'Layer 5: Anomaly Detection', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
             </>
           );
         })()}

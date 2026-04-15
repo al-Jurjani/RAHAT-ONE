@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Container,
   Box,
@@ -64,8 +64,6 @@ function RegistrationPage() {
     degree: null,
     medical: null
   });
-
-  const [workEmail, setWorkEmail] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -171,7 +169,7 @@ function RegistrationPage() {
       if (files.degree) submitData.append('degree', files.degree);
       if (files.medical) submitData.append('medical', files.medical);
 
-      const response = await registrationAPI.complete(submitData);
+      await registrationAPI.complete(submitData);
 
       toast.success('Registration completed! You will receive an email once verified.');
       setActiveStep(steps.length); // Move to success screen
@@ -466,9 +464,10 @@ function RegistrationPage() {
 
   if (activeStep === steps.length) {
     return (
+      <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 6 }}>
       <Container maxWidth="md">
-        <Box sx={{ mt: 8, mb: 4 }}>
-          <Paper elevation={3} sx={{ p: 4 }}>
+        <Box>
+          <Paper elevation={0} sx={{ p: 4, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
             <Typography variant="h4" gutterBottom color="success.main">
               Registration Successful!
             </Typography>
@@ -481,12 +480,14 @@ function RegistrationPage() {
           </Paper>
         </Box>
       </Container>
+      </Box>
     );
   }
 
   return (
+    <Box sx={{ minHeight: '100vh', bgcolor: 'var(--bg-base)', py: 6 }}>
     <Container maxWidth="md">
-      <Box sx={{ mt: 8, mb: 4 }}>
+      <Box>
         <Typography variant="h3" component="h1" gutterBottom align="center">
           Employee Registration
         </Typography>
@@ -494,7 +495,7 @@ function RegistrationPage() {
           Complete all steps to register for onboarding
         </Typography>
 
-        <Paper elevation={3} sx={{ p: 4, mt: 4 }}>
+        <Paper elevation={0} sx={{ p: 4, mt: 4, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
           <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
             {steps.map((label) => (
               <Step key={label}>
@@ -529,6 +530,7 @@ function RegistrationPage() {
         </Paper>
       </Box>
     </Container>
+    </Box>
   );
 }
 

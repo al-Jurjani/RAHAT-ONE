@@ -243,7 +243,7 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   </Typography>
 
                   {/* Expandable section */}
-                  <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #eee' }}>
+                  <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid var(--border-subtle)' }}>
                     <Button
                       fullWidth
                       size="small"
@@ -393,7 +393,7 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+            <TableRow sx={{ backgroundColor: 'var(--bg-elevated)' }}>
               <TableCell><strong>Employee</strong></TableCell>
               <TableCell><strong>Category</strong></TableCell>
               <TableCell align="right"><strong>Amount (PKR)</strong></TableCell>

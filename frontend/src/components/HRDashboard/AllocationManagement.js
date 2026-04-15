@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -21,11 +21,9 @@ import {
   Select,
   MenuItem,
   Box,
-  Chip,
   IconButton,
   Collapse,
-  Grid,
-  Divider
+  Grid
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -40,7 +38,7 @@ const EmployeeRow = ({ employee, leaveTypes, onAllocate, onRefresh }) => {
   const [allocations, setAllocations] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchAllocations = async () => {
+  const fetchAllocations = useCallback(async () => {
     if (!open) return;
 
     try {
@@ -90,13 +88,13 @@ const EmployeeRow = ({ employee, leaveTypes, onAllocate, onRefresh }) => {
     } finally {
         setLoading(false);
     }
-    };
+    }, [open, employee.id, leaveTypes]);
 
   useEffect(() => {
     if (open) {
       fetchAllocations();
     }
-  }, [open]);
+  }, [open, fetchAllocations]);
 
   return (
     <>
