@@ -19,9 +19,10 @@ const STATUS_MAP = {
   pending_hr_approval:      { cls: 'info',    label: 'HR Review' },
 };
 
-function StatusChip({ status, label: labelOverride, className = '' }) {
+function StatusChip({ status, label: labelOverride, tone, className = '' }) {
   const key = (status || '').toLowerCase().replace(/ /g, '_');
-  const { cls, label } = STATUS_MAP[key] || { cls: 'neutral', label: status || 'Unknown' };
+  const { cls: mappedCls, label } = STATUS_MAP[key] || { cls: 'neutral', label: status || 'Unknown' };
+  const cls = tone || mappedCls;
 
   return (
     <span className={`status-chip status-chip--${cls} ${className}`}>
