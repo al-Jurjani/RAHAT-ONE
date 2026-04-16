@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -9,8 +10,8 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import AppShell from '../components/layout/AppShell';
-import { Card, StatCard, StatusChip, LoadingSpinner } from '../components/ui';
-import { employeeAPI, leaveAPI, expenseAPI } from '../services/api';
+import { Card, StatCard, StatusChip, LoadingSpinner, Button } from '../components/ui';
+import { employeeAPI, auditAPI } from '../services/api';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -23,8 +24,72 @@ function getGreeting() {
   return 'evening';
 }
 
-function parseDate(value) {
-  return value ? new Date(value) : new Date(0);
+function formatTitle(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function getRelativeTime(value) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.round(diffMs / 60000));
+
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  if (diffHours < 48) return 'Yesterday';
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return format(date, 'd MMM yyyy');
+}
+
+function moduleDotColor(module) {
+  if (module === 'expense') return 'var(--status-info)';
+  if (module === 'leave') return 'var(--status-success)';
+  if (module === 'onboarding') return 'var(--status-warning)';
+  return 'var(--status-neutral)';
+}
+
+function actionMeta(action) {
+  const normalized = String(action || '').toLowerCase();
+
+  switch (normalized) {
+    case 'submitted':
+      return { status: 'initiated', label: 'Submitted' };
+    case 'fraud_clean':
+      return { status: 'approved', label: 'Clean' };
+    case 'auto_approved':
+      return { status: 'auto_approved', label: 'Approved' };
+    case 'manager_approved':
+    case 'hr_approved':
+      return { status: 'approved', label: 'Approved' };
+    case 'manager_rejected':
+    case 'hr_rejected':
+      return { status: 'rejected', label: 'Rejected' };
+    case 'fraud_overridden_by_hr':
+      return { status: 'under_review', label: 'Reviewed' };
+    case 'documents_uploaded':
+      return { status: 'in_progress', label: 'Uploaded' };
+    case 'cnic_verified':
+      return { status: 'approved', label: 'Verified' };
+    case 'cnic_failed':
+      return { status: 'rejected', label: 'Failed' };
+    case 'record_created_in_odoo':
+      return { status: 'activated', label: 'Created' };
+    case 'onboarding_complete':
+      return { status: 'activated', label: 'Complete' };
+    case 'welcome_email_sent':
+      return { status: 'initiated', label: 'Email Sent' };
+    default:
+      return { status: 'pending', label: formatTitle(action) };
+  }
 }
 
 function EmployeeDashboard() {
@@ -49,44 +114,16 @@ function EmployeeDashboard() {
 
       setLoading(true);
       try {
-        const [leaveSummaryRes, expenseSummaryRes, leavesRes, expensesRes] = await Promise.all([
+        const [leaveSummaryRes, expenseSummaryRes, activityRes] = await Promise.allSettled([
           employeeAPI.getLeaveSummary(employeeId),
           employeeAPI.getExpenseSummary(employeeId),
-          leaveAPI.getMyLeaves(),
-          expenseAPI.list({})
+          auditAPI.getEmployeeLogs(employeeId, { limit: 10, offset: 0 })
         ]);
 
-        const leaveSummary = leaveSummaryRes.data?.data || {};
-        const expenseSummary = expenseSummaryRes.data?.data || {};
-
-        const recentLeaves = (Array.isArray(leavesRes.data) ? leavesRes.data : [])
-          .sort((a, b) => parseDate(b.create_date) - parseDate(a.create_date))
-          .slice(0, 3)
-          .map((leave) => ({
-            id: `leave-${leave.id}`,
-            type: 'Leave',
-            title: `${leave.holiday_status_id?.[1] || 'Leave'} request`,
-            subtitle: `${leave.request_date_from || '-'} to ${leave.request_date_to || '-'}`,
-            status: leave.state || 'pending',
-            date: leave.create_date || leave.request_date_from
-          }));
-
-        const expenseItems = expensesRes.data?.data?.expenses || [];
-        const recentExpenses = expenseItems
-          .sort((a, b) => parseDate(b.create_date) - parseDate(a.create_date))
-          .slice(0, 2)
-          .map((expense) => ({
-            id: `expense-${expense.id}`,
-            type: 'Expense',
-            title: `${expense.expense_category || 'Expense'} claim`,
-            subtitle: `PKR ${expense.total_amount || 0}`,
-            status: expense.workflow_status || 'pending',
-            date: expense.create_date || expense.date
-          }));
-
-        const mergedActivities = [...recentLeaves, ...recentExpenses]
-          .sort((a, b) => parseDate(b.date) - parseDate(a.date))
-          .slice(0, 5);
+        const leaveSummary = leaveSummaryRes.status === 'fulfilled' ? (leaveSummaryRes.value.data?.data || {}) : {};
+        const expenseSummary = expenseSummaryRes.status === 'fulfilled' ? (expenseSummaryRes.value.data?.data || {}) : {};
+        const activityPayload = activityRes.status === 'fulfilled' ? (activityRes.value.data || {}) : {};
+        const recentActivity = Array.isArray(activityPayload.logs) ? activityPayload.logs : [];
 
         setStats({
           leaveBalance: leaveSummary.leaveBalance || 0,
@@ -94,7 +131,15 @@ function EmployeeDashboard() {
           leavesTakenThisYear: leaveSummary.leavesTakenThisYear || 0
         });
 
-        setActivities(mergedActivities);
+        setActivities(recentActivity.map((item) => ({
+          ...item,
+          actionMeta: actionMeta(item.action),
+          timeLabel: getRelativeTime(item.createdAt)
+        })));
+
+        if (leaveSummaryRes.status === 'rejected' || expenseSummaryRes.status === 'rejected' || activityRes.status === 'rejected') {
+          console.warn('Some employee home sections failed to load; showing partial data.');
+        }
       } catch (error) {
         console.error('Failed to load employee home data:', error);
         toast.error('Unable to load employee home data');
@@ -146,7 +191,15 @@ function EmployeeDashboard() {
         <StatCard icon={<AccessTimeIcon />} value={stats.leavesTakenThisYear} label="Leaves Taken This Year" />
       </div>
 
-      <Card header="Recent Activity" style={{ marginBottom: 'var(--space-6)' }}>
+      <Card
+        header="Recent Activity"
+        headerRight={(
+          <Button variant="ghost" onClick={() => navigate('/employee/activity')}>
+            View All Activity
+          </Button>
+        )}
+        style={{ marginBottom: 'var(--space-6)' }}
+      >
         {activities.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
             No recent activity found.
@@ -157,24 +210,41 @@ function EmployeeDashboard() {
               <div
                 key={activity.id}
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
+                  display: 'grid',
+                  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+                  gap: 'var(--space-4)',
                   alignItems: 'center',
+                  padding: 'var(--space-4)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: 'var(--space-3) var(--space-4)',
+                  borderRadius: 'var(--radius-lg)',
                   background: 'var(--bg-elevated)'
                 }}
               >
-                <div>
-                  <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--text-sm)' }}>
-                    [{activity.type}] {activity.title}
+                <div
+                  aria-hidden="true"
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: moduleDotColor(activity.module)
+                  }}
+                />
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--space-1)' }}>
+                    {formatTitle(activity.module)}
                   </div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-1)' }}>
-                    {activity.subtitle}
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.5 }}>
+                    {activity.humanMessage || formatTitle(activity.action)}
                   </div>
                 </div>
-                <StatusChip status={activity.status} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-2)' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                    {activity.timeLabel}
+                  </div>
+                  <StatusChip status={activity.actionMeta.status} label={activity.actionMeta.label} />
+                </div>
               </div>
             ))}
           </div>

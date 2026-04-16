@@ -13,6 +13,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import EventIcon from '@mui/icons-material/Event';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PersonIcon from '@mui/icons-material/Person';
+import HistoryIcon from '@mui/icons-material/History';
 import LogoutIcon from '@mui/icons-material/Logout';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 
@@ -21,6 +22,7 @@ const HR_NAV = [
   { to: '/hr/verification',       icon: <PersonAddIcon fontSize="small" />,               label: 'Onboarding' },
   { to: '/hr/leave-dashboard',    icon: <EventNoteIcon fontSize="small" />,               label: 'Leave Management' },
   { to: '/hr/expense-dashboard',  icon: <ReceiptIcon fontSize="small" />,                 label: 'Expense Management' },
+  { to: '/hr/audit-log',          icon: <HistoryIcon fontSize="small" />,                label: 'Audit Log' },
   { to: '/hr/config',             icon: <SettingsIcon fontSize="small" />,                label: 'Configuration', disabled: true },
 ];
 

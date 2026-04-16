@@ -199,4 +199,13 @@ export const expenseAPI = {
     api.get(`/expenses/${expenseId}/attachment`, { responseType: 'blob' }),
 };
 
+/* =========================
+   Audit APIs
+========================= */
+
+export const auditAPI = {
+  getHrLogs: (params = {}) => api.get('/audit/hr', { params }),
+  getEmployeeLogs: (employeeId, params = {}) => api.get(`/audit/employee/${employeeId}`, { params }),
+};
+
 export default api;

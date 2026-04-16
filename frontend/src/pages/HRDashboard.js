@@ -17,6 +17,7 @@ import { hrAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/layout/AppShell';
 import { StatCard, LoadingSpinner } from '../components/ui';
+import InitiateOnboardingModal from '../components/InitiateOnboardingModal';
 
 function HRDashboard() {
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ function HRDashboard() {
   const [autoApprovedList, setAutoApprovedList] = useState([]);
   const [rejectedList, setRejectedList] = useState([]);
   const [currentTab, setCurrentTab] = useState(0);
+  const [initiateDialogOpen, setInitiateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -93,12 +95,18 @@ function HRDashboard() {
   return (
     <AppShell pageTitle="HR Verification">
       <div style={{ marginBottom: 'var(--space-4)' }}>
-        <button
-          onClick={() => navigate('/hr')}
-          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-sm)', padding: 0 }}
-        >
-          <ArrowBack fontSize="small" /> Back to HR Portal
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => navigate('/hr')}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-sm)', padding: 0 }}
+          >
+            <ArrowBack fontSize="small" /> Back to HR Portal
+          </button>
+
+          <Button variant="contained" size="small" onClick={() => setInitiateDialogOpen(true)}>
+            Initiate Onboarding
+          </Button>
+        </div>
       </div>
 
       {/* Summary stat cards */}
@@ -190,6 +198,12 @@ function HRDashboard() {
           </Table>
         </TableContainer>
       </div>
+
+      <InitiateOnboardingModal
+        open={initiateDialogOpen}
+        onClose={() => setInitiateDialogOpen(false)}
+        onSuccess={loadAllData}
+      />
     </AppShell>
   );
 }

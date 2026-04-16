@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import './DataTable.css';
 
-function DataTable({ columns = [], data = [], loading = false, emptyText = 'No records found' }) {
+function DataTable({ columns = [], data = [], loading = false, emptyText = 'No records found', onRowClick }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
@@ -69,7 +69,19 @@ function DataTable({ columns = [], data = [], loading = false, emptyText = 'No r
             </tr>
           ) : (
             sorted.map((row, i) => (
-              <tr key={row.id ?? i}>
+              <tr
+                key={row.id ?? i}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={onRowClick ? (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onRowClick(row);
+                  }
+                } : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? 'button' : undefined}
+                style={onRowClick ? { cursor: 'pointer' } : undefined}
+              >
                 {columns.map(col => (
                   <td key={col.key || col.label}>
                     {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}

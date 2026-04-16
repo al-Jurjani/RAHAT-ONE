@@ -20,8 +20,10 @@ import HRVerificationDetails from './pages/HRVerificationDetails';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeProfile from './pages/EmployeeProfile';
 import EmployeeLeavePage from './pages/EmployeeLeavePage';
+import EmployeeActivityPage from './pages/EmployeeActivityPage';
 import HRLeaveDashboard from './pages/HRLeaveDashboard';
 import HRExpenseDashboard from './pages/HRExpenseDashboard';
+import AuditLogPage from './pages/AuditLogPage';
 import ExpenseSubmission from './pages/ExpenseSubmission';
 import ExpenseHistory from './pages/ExpenseHistory';
 import { ThemeModeProvider } from './contexts/ThemeModeContext';
@@ -301,9 +303,11 @@ function App() {
             <Route path="/hr/verification/:employeeId" element={<ProtectedRoute allowedRoles={['hr']}><HRVerificationDetails /></ProtectedRoute>} />
             <Route path="/hr/leave-dashboard" element={<ProtectedRoute allowedRoles={['hr']}><HRLeaveDashboard /></ProtectedRoute>} />
             <Route path="/hr/expense-dashboard" element={<ProtectedRoute allowedRoles={['hr']}><HRExpenseDashboard /></ProtectedRoute>} />
+            <Route path="/hr/audit-log" element={<ProtectedRoute allowedRoles={['hr']}><AuditLogPage /></ProtectedRoute>} />
 
             {/* Protected Employee Routes */}
             <Route path="/employee/dashboard" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />
+            <Route path="/employee/activity" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeActivityPage /></ProtectedRoute>} />
             <Route path="/employee/profile" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeProfile /></ProtectedRoute>} />
             <Route path="/expenses/submit" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseSubmission /></ProtectedRoute>} />
             <Route path="/expenses/history" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseHistory /></ProtectedRoute>} />
