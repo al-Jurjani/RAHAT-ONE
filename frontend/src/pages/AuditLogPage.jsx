@@ -44,6 +44,39 @@ function safeDetails(value) {
   return value;
 }
 
+function prettifyKey(key) {
+  const overrides = {
+    odooId: 'Odoo ID',
+    odooLeaveId: 'Odoo Leave ID',
+    odooEmployeeId: 'Odoo Employee ID',
+    sentTo: 'Sent To',
+    leaveType: 'Leave Type',
+    startDate: 'Start Date',
+    endDate: 'End Date',
+    fraudScore: 'Fraud Score',
+    joiningDate: 'Joining Date',
+    managerEmail: 'Manager Email'
+  };
+
+  if (overrides[key]) return overrides[key];
+  return formatTitle(key);
+}
+
+function isDateKey(key) {
+  return /(date)$/i.test(key);
+}
+
+function parseDateLike(value) {
+  if (typeof value !== 'string') return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatPKR(amount) {
+  return `PKR ${Number(amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`;
+}
+
 function summarizeDetails(details) {
   if (!details || typeof details !== 'object' || Array.isArray(details)) {
     return details ? String(details) : 'Open details';
@@ -93,38 +126,66 @@ function renderDetailValue(value) {
   return String(value);
 }
 
-function renderDetailsList(details, depth = 0) {
+function formatDetailValueByKey(key, value) {
+  if (value === null || value === undefined || value === '') return '—';
+
+  if (typeof value === 'number') {
+    if (key.toLowerCase().includes('amount')) {
+      return formatPKR(value);
+    }
+    if (value >= 0 && value <= 1) {
+      return `${Math.round(value * 100)}%`;
+    }
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+
+  if (isDateKey(key)) {
+    const parsed = parseDateLike(value);
+    if (parsed) return format(parsed, 'd MMM yyyy');
+  }
+
+  return renderDetailValue(value);
+}
+
+function renderDetailsList(details) {
   if (!details || typeof details !== 'object' || Array.isArray(details)) {
     return (
       <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
-        {renderDetailValue(details)}
+        No additional details
+      </div>
+    );
+  }
+
+  const entries = Object.entries(details).filter(([, value]) => value !== undefined && value !== null && value !== '');
+
+  if (!entries.length) {
+    return (
+      <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+        No additional details
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      {Object.entries(details).map(([key, value]) => (
+    <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+      {entries.map(([key, value]) => (
         <div
-          key={`${depth}-${key}`}
+          key={key}
           style={{
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-3)',
-            background: 'var(--bg-surface)',
-            marginLeft: depth ? 'var(--space-4)' : 0
+            display: 'grid',
+            gridTemplateColumns: 'minmax(180px, 220px) 1fr',
+            gap: 'var(--space-3)',
+            alignItems: 'start',
+            borderBottom: '1px solid var(--border-subtle)',
+            paddingBottom: 'var(--space-2)'
           }}
         >
-          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--space-1)' }}>
-            {formatTitle(key)}
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {prettifyKey(key)}
           </div>
-          {value && typeof value === 'object' && !Array.isArray(value) ? (
-            renderDetailsList(value, depth + 1)
-          ) : (
-            <div style={{ color: 'var(--text-primary)', fontSize: 'var(--text-sm)', whiteSpace: 'pre-wrap' }}>
-              {renderDetailValue(value)}
-            </div>
-          )}
+          <div style={{ color: 'var(--text-primary)', fontSize: 'var(--text-sm)', whiteSpace: 'pre-wrap' }}>
+            {formatDetailValueByKey(key, value)}
+          </div>
         </div>
       ))}
     </div>
