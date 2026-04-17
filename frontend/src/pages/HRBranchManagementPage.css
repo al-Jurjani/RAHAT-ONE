@@ -1,0 +1,183 @@
+.hr-branch-page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.hr-branch-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hr-branch-page__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--text-primary);
+}
+
+.hr-branch-page__grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hr-branch-page__card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.hr-branch-page__card-content {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.hr-branch-page__branch-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.hr-branch-page__address {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.hr-branch-page__coords {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.hr-branch-page__meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.hr-branch-page__employee-count {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.hr-branch-page__card-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.hr-branch-page__shift-section {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.hr-branch-page__shift-add {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.hr-branch-page__shift-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.hr-branch-page__icon-btn {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hr-branch-page__icon-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.hr-branch-page__icon-btn--danger {
+  color: var(--status-danger);
+  border-color: var(--status-danger-bg);
+}
+
+.hr-branch-page__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.hr-branch-page__helper-text {
+  margin: var(--space-2) 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.hr-branch-page__days-block {
+  margin-top: var(--space-3);
+}
+
+.hr-branch-page__days-label {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-2);
+}
+
+.hr-branch-page__days-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.hr-branch-page__day-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.hr-branch-page__confirm-text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 1200px) {
+  .hr-branch-page__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .hr-branch-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hr-branch-page__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-branch-page__form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-branch-page__days-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
