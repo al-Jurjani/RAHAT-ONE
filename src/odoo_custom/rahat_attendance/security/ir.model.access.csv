@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_rahat_branch_hr,rahat.branch.hr,model_rahat_branch,hr.group_hr_user,1,1,1,1
+access_rahat_branch_employee,rahat.branch.employee,model_rahat_branch,base.group_user,1,0,0,0
+access_rahat_shift_hr,rahat.shift.hr,model_rahat_shift,hr.group_hr_user,1,1,1,1
+access_rahat_shift_employee,rahat.shift.employee,model_rahat_shift,base.group_user,1,0,0,0
+access_rahat_attendance_hr,rahat.attendance.hr,model_rahat_attendance,hr.group_hr_user,1,1,1,1
+access_rahat_attendance_employee,rahat.attendance.employee,model_rahat_attendance,base.group_user,1,1,1,0
