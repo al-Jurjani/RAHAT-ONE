@@ -77,7 +77,7 @@ class AttendanceController {
 
       const employees = await odooAdapter.execute('hr.employee', 'search_read', [[
         ['id', '=', employeeIdInt]
-      ], ['id', 'name', 'branch_id', 'shift_id']]);
+      ], ['id', 'name', 'work_email', 'branch_id', 'shift_id']]);
 
       const employee = employees[0];
       if (!employee) {
@@ -203,6 +203,23 @@ class AttendanceController {
           ? 'Checked in late'
           : (rejectionReason || 'Check-in rejected');
 
+      // Fire and forget — don't await, don't let it block the response
+      fetch(process.env.N8N_ATTENDANCE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'checkin',
+          employeeId: employeeIdInt,
+          employeeName: employee.name,
+          employeeEmail: employee.work_email || 'noemail@company.com',
+          branchName: branch.name,
+          status,
+          checkIn: checkInTime.toISOString(),
+          distanceFromBranch: distanceRounded,
+          rejectionReason: rejectionReason || null
+        })
+      }).catch(() => {}); // silently ignore webhook failures
+
       return res.status(200).json({
         success: true,
         status,
@@ -280,6 +297,29 @@ class AttendanceController {
       }
 
       const workedHours = (checkoutTime.getTime() - new Date(active.check_in).getTime()) / (1000 * 60 * 60);
+
+      // Fetch employee data for webhook
+      const employees = await odooAdapter.execute('hr.employee', 'search_read', [[
+        ['id', '=', employeeIdInt]
+      ], ['id', 'name', 'work_email']]);
+      const employee = employees && employees.length ? employees[0] : null;
+      const branchName = branch && Array.isArray(branch.name) ? branch.name : (branch?.name || 'Unknown Branch');
+
+      // Fire and forget — don't await, don't let it block the response
+      fetch(process.env.N8N_ATTENDANCE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'checkout',
+          employeeId: employeeIdInt,
+          employeeName: employee?.name || 'Unknown',
+          employeeEmail: employee?.work_email || 'noemail@company.com',
+          branchName: branchName,
+          checkOut: checkoutTime.toISOString(),
+          workedHours: Number(workedHours.toFixed(2)),
+          distanceFromBranch: Math.round(distance)
+        })
+      }).catch(() => {}); // silently ignore webhook failures
 
       return res.status(200).json({
         success: true,
