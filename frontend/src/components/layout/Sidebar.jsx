@@ -14,16 +14,30 @@ import EventIcon from '@mui/icons-material/Event';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PersonIcon from '@mui/icons-material/Person';
 import HistoryIcon from '@mui/icons-material/History';
+import ApartmentIcon from '@mui/icons-material/Apartment';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import LogoutIcon from '@mui/icons-material/Logout';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 
-const HR_NAV = [
-  { to: '/hr',                    icon: <HomeIcon fontSize="small" />,                   label: 'Home' },
-  { to: '/hr/verification',       icon: <PersonAddIcon fontSize="small" />,               label: 'Onboarding' },
-  { to: '/hr/leave-dashboard',    icon: <EventNoteIcon fontSize="small" />,               label: 'Leave Management' },
-  { to: '/hr/expense-dashboard',  icon: <ReceiptIcon fontSize="small" />,                 label: 'Expense Management' },
-  { to: '/hr/audit-log',          icon: <HistoryIcon fontSize="small" />,                label: 'Audit Log' },
-  { to: '/hr/config',             icon: <SettingsIcon fontSize="small" />,                label: 'Configuration', disabled: true },
+const HR_NAV_SECTIONS = [
+  {
+    title: 'HR Tools',
+    items: [
+      { to: '/hr',                    icon: <HomeIcon fontSize="small" />,                   label: 'Home' },
+      { to: '/hr/verification',       icon: <PersonAddIcon fontSize="small" />,               label: 'Onboarding' },
+      { to: '/hr/leave-dashboard',    icon: <EventNoteIcon fontSize="small" />,               label: 'Leave Management' },
+      { to: '/hr/expense-dashboard',  icon: <ReceiptIcon fontSize="small" />,                 label: 'Expense Management' },
+      { to: '/hr/audit-log',          icon: <HistoryIcon fontSize="small" />,                 label: 'Audit Log' },
+      { to: '/hr/config',             icon: <SettingsIcon fontSize="small" />,                label: 'Configuration', disabled: true },
+    ]
+  },
+  {
+    title: 'Attendance',
+    items: [
+      { to: '/hr/branches',          icon: <ApartmentIcon fontSize="small" />,               label: 'Branch Management' },
+      { to: '/hr/attendance',        icon: <FactCheckIcon fontSize="small" />,               label: 'Attendance Overview' },
+    ]
+  }
 ];
 
 const EMPLOYEE_NAV = [
@@ -36,7 +50,9 @@ const EMPLOYEE_NAV = [
 function Sidebar({ collapsed, onToggle }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const nav = user?.role === 'hr' ? HR_NAV : EMPLOYEE_NAV;
+  const nav = user?.role === 'hr'
+    ? HR_NAV_SECTIONS.flatMap((section) => section.items)
+    : EMPLOYEE_NAV;
 
   const handleLogout = () => {
     logout();
@@ -59,39 +75,60 @@ function Sidebar({ collapsed, onToggle }) {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {!collapsed && (
-          <span className="sidebar-section-label">
-            {user?.role === 'hr' ? 'HR Tools' : 'Employee'}
-          </span>
+        {user?.role === 'hr' ? (
+          HR_NAV_SECTIONS.map((section) => (
+            <React.Fragment key={section.title}>
+              {!collapsed && <span className="sidebar-section-label">{section.title}</span>}
+              {section.items.map((item) => (
+                item.disabled ? (
+                  <span
+                    key={item.to}
+                    className="sidebar-link"
+                    style={{ opacity: 0.4, cursor: 'not-allowed' }}
+                    data-tooltip={item.label}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <span className="sidebar-link__icon">{item.icon}</span>
+                    <span className="sidebar-link__label">{item.label}</span>
+                  </span>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/hr'}
+                    className={({ isActive }) =>
+                      `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                    }
+                    data-tooltip={item.label}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <span className="sidebar-link__icon">{item.icon}</span>
+                    <span className="sidebar-link__label">{item.label}</span>
+                  </NavLink>
+                )
+              ))}
+            </React.Fragment>
+          ))
+        ) : (
+          <>
+            {!collapsed && <span className="sidebar-section-label">Employee</span>}
+            {nav.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/employee/dashboard'}
+                className={({ isActive }) =>
+                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                }
+                data-tooltip={item.label}
+                title={collapsed ? item.label : undefined}
+              >
+                <span className="sidebar-link__icon">{item.icon}</span>
+                <span className="sidebar-link__label">{item.label}</span>
+              </NavLink>
+            ))}
+          </>
         )}
-        {nav.map(item => (
-          item.disabled ? (
-            <span
-              key={item.to}
-              className="sidebar-link"
-              style={{ opacity: 0.4, cursor: 'not-allowed' }}
-              data-tooltip={item.label}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="sidebar-link__icon">{item.icon}</span>
-              <span className="sidebar-link__label">{item.label}</span>
-            </span>
-          ) : (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/hr' || item.to === '/employee/dashboard'}
-              className={({ isActive }) =>
-                `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-              }
-              data-tooltip={item.label}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="sidebar-link__icon">{item.icon}</span>
-              <span className="sidebar-link__label">{item.label}</span>
-            </NavLink>
-          )
-        ))}
       </nav>
 
       {/* Footer */}
