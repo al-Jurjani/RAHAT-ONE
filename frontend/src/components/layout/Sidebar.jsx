@@ -14,6 +14,8 @@ import EventIcon from '@mui/icons-material/Event';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PersonIcon from '@mui/icons-material/Person';
 import HistoryIcon from '@mui/icons-material/History';
+import FmdGoodIcon from '@mui/icons-material/FmdGood';
+import ChecklistIcon from '@mui/icons-material/Checklist';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -40,11 +42,23 @@ const HR_NAV_SECTIONS = [
   }
 ];
 
-const EMPLOYEE_NAV = [
-  { to: '/employee/dashboard',    icon: <HomeIcon fontSize="small" />,                   label: 'Home' },
-  { to: '/employee/leaves',       icon: <EventIcon fontSize="small" />,                  label: 'My Leaves' },
-  { to: '/expenses/submit',       icon: <AccountBalanceWalletIcon fontSize="small" />,   label: 'My Expenses' },
-  { to: '/employee/profile',      icon: <PersonIcon fontSize="small" />,                 label: 'Profile' },
+const EMPLOYEE_NAV_SECTIONS = [
+  {
+    title: 'Employee',
+    items: [
+      { to: '/employee/dashboard',    icon: <HomeIcon fontSize="small" />,                   label: 'Home' },
+      { to: '/employee/leaves',       icon: <EventIcon fontSize="small" />,                  label: 'My Leaves' },
+      { to: '/expenses/submit',       icon: <AccountBalanceWalletIcon fontSize="small" />,   label: 'My Expenses' },
+      { to: '/employee/profile',      icon: <PersonIcon fontSize="small" />,                 label: 'Profile' },
+    ]
+  },
+  {
+    title: 'Attendance',
+    items: [
+      { to: '/employee/attendance',          icon: <FmdGoodIcon fontSize="small" />,         label: 'Check In / Out' },
+      { to: '/employee/attendance/history',  icon: <ChecklistIcon fontSize="small" />,       label: 'Attendance History' },
+    ]
+  }
 ];
 
 function Sidebar({ collapsed, onToggle }) {
@@ -52,7 +66,7 @@ function Sidebar({ collapsed, onToggle }) {
   const navigate = useNavigate();
   const nav = user?.role === 'hr'
     ? HR_NAV_SECTIONS.flatMap((section) => section.items)
-    : EMPLOYEE_NAV;
+    : EMPLOYEE_NAV_SECTIONS.flatMap((section) => section.items);
 
   const handleLogout = () => {
     logout();
@@ -110,24 +124,26 @@ function Sidebar({ collapsed, onToggle }) {
             </React.Fragment>
           ))
         ) : (
-          <>
-            {!collapsed && <span className="sidebar-section-label">Employee</span>}
-            {nav.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/employee/dashboard'}
-                className={({ isActive }) =>
-                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                }
-                data-tooltip={item.label}
-                title={collapsed ? item.label : undefined}
-              >
-                <span className="sidebar-link__icon">{item.icon}</span>
-                <span className="sidebar-link__label">{item.label}</span>
-              </NavLink>
-            ))}
-          </>
+          EMPLOYEE_NAV_SECTIONS.map((section) => (
+            <React.Fragment key={section.title}>
+              {!collapsed && <span className="sidebar-section-label">{section.title}</span>}
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/employee/dashboard'}
+                  className={({ isActive }) =>
+                    `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                  }
+                  data-tooltip={item.label}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <span className="sidebar-link__icon">{item.icon}</span>
+                  <span className="sidebar-link__label">{item.label}</span>
+                </NavLink>
+              ))}
+            </React.Fragment>
+          ))
         )}
       </nav>
 

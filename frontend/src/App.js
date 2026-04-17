@@ -21,6 +21,8 @@ import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeProfile from './pages/EmployeeProfile';
 import EmployeeLeavePage from './pages/EmployeeLeavePage';
 import EmployeeActivityPage from './pages/EmployeeActivityPage';
+import EmployeeAttendancePage from './pages/EmployeeAttendancePage';
+import EmployeeAttendanceHistoryPage from './pages/EmployeeAttendanceHistoryPage';
 import HRLeaveDashboard from './pages/HRLeaveDashboard';
 import HRExpenseDashboard from './pages/HRExpenseDashboard';
 import AuditLogPage from './pages/AuditLogPage';
@@ -313,6 +315,8 @@ function App() {
             <Route path="/employee/dashboard" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />
             <Route path="/employee/activity" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeActivityPage /></ProtectedRoute>} />
             <Route path="/employee/profile" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeProfile /></ProtectedRoute>} />
+            <Route path="/employee/attendance" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeAttendancePage /></ProtectedRoute>} />
+            <Route path="/employee/attendance/history" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeAttendanceHistoryPage /></ProtectedRoute>} />
             <Route path="/expenses/submit" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseSubmission /></ProtectedRoute>} />
             <Route path="/expenses/history" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseHistory /></ProtectedRoute>} />
             <Route path="/employee/leaves" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeLeavePage /></ProtectedRoute>} />
