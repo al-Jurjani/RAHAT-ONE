@@ -30,6 +30,7 @@ import HRBranchManagementPage from './pages/HRBranchManagementPage';
 import HRAttendanceOverviewPage from './pages/HRAttendanceOverviewPage';
 import ExpenseSubmission from './pages/ExpenseSubmission';
 import ExpenseHistory from './pages/ExpenseHistory';
+import PWAGuard from './components/PWAGuard';
 import { ThemeModeProvider } from './contexts/ThemeModeContext';
 
 const createAppTheme = (mode) => {
@@ -294,36 +295,40 @@ function App() {
       <ThemeModeProvider value={{ mode, toggleTheme }}>
         <Router>
           <AuthProvider>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<RegistrationPage />} />
-            <Route path="/approve-leave/:leaveId" element={<ApproveLeave />} />
-            <Route path="/approve-expense/:expenseId" element={<ApproveExpense />} />
+            <PWAGuard>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<RegistrationPage />} />
+                <Route path="/approve-leave/:leaveId" element={<ApproveLeave />} />
+                <Route path="/approve-expense/:expenseId" element={<ApproveExpense />} />
 
-            {/* Protected HR Routes */}
-            <Route path="/hr" element={<ProtectedRoute allowedRoles={['hr']}><HRMainPage /></ProtectedRoute>} />
-            <Route path="/hr/verification" element={<ProtectedRoute allowedRoles={['hr']}><HRDashboard /></ProtectedRoute>} />
-            <Route path="/hr/verification/:employeeId" element={<ProtectedRoute allowedRoles={['hr']}><HRVerificationDetails /></ProtectedRoute>} />
-            <Route path="/hr/leave-dashboard" element={<ProtectedRoute allowedRoles={['hr']}><HRLeaveDashboard /></ProtectedRoute>} />
-            <Route path="/hr/expense-dashboard" element={<ProtectedRoute allowedRoles={['hr']}><HRExpenseDashboard /></ProtectedRoute>} />
-            <Route path="/hr/audit-log" element={<ProtectedRoute allowedRoles={['hr']}><AuditLogPage /></ProtectedRoute>} />
-            <Route path="/hr/branches" element={<ProtectedRoute allowedRoles={['hr']}><HRBranchManagementPage /></ProtectedRoute>} />
-            <Route path="/hr/attendance" element={<ProtectedRoute allowedRoles={['hr']}><HRAttendanceOverviewPage /></ProtectedRoute>} />
+                {/* Protected HR Routes */}
+                <Route path="/hr" element={<ProtectedRoute allowedRoles={['hr']}><HRMainPage /></ProtectedRoute>} />
+                <Route path="/hr/verification" element={<ProtectedRoute allowedRoles={['hr']}><HRDashboard /></ProtectedRoute>} />
+                <Route path="/hr/verification/:employeeId" element={<ProtectedRoute allowedRoles={['hr']}><HRVerificationDetails /></ProtectedRoute>} />
+                <Route path="/hr/leave-dashboard" element={<ProtectedRoute allowedRoles={['hr']}><HRLeaveDashboard /></ProtectedRoute>} />
+                <Route path="/hr/expense-dashboard" element={<ProtectedRoute allowedRoles={['hr']}><HRExpenseDashboard /></ProtectedRoute>} />
+                <Route path="/hr/audit-log" element={<ProtectedRoute allowedRoles={['hr']}><AuditLogPage /></ProtectedRoute>} />
+                <Route path="/hr/branches" element={<ProtectedRoute allowedRoles={['hr']}><HRBranchManagementPage /></ProtectedRoute>} />
+                <Route path="/hr/attendance" element={<ProtectedRoute allowedRoles={['hr']}><HRAttendanceOverviewPage /></ProtectedRoute>} />
 
-            {/* Protected Employee Routes */}
-            <Route path="/employee/dashboard" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />
-            <Route path="/employee/activity" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeActivityPage /></ProtectedRoute>} />
-            <Route path="/employee/profile" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeProfile /></ProtectedRoute>} />
-            <Route path="/employee/attendance" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeAttendancePage /></ProtectedRoute>} />
-            <Route path="/employee/attendance/history" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeAttendanceHistoryPage /></ProtectedRoute>} />
-            <Route path="/expenses/submit" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseSubmission /></ProtectedRoute>} />
-            <Route path="/expenses/history" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseHistory /></ProtectedRoute>} />
-            <Route path="/employee/leaves" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeLeavePage /></ProtectedRoute>} />
+                {/* Protected Employee Routes */}
+                <Route path="/employee/home" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />
+                <Route path="/employee/dashboard" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />
+                <Route path="/employee/activity" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeActivityPage /></ProtectedRoute>} />
+                <Route path="/employee/profile" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeProfile /></ProtectedRoute>} />
+                <Route path="/employee/attendance" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeAttendancePage /></ProtectedRoute>} />
+                <Route path="/employee/attendance/history" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeAttendanceHistoryPage /></ProtectedRoute>} />
+                <Route path="/employee/expenses" element={<ProtectedRoute allowedRoles={['employee']}><Navigate to="/expenses/submit" replace /></ProtectedRoute>} />
+                <Route path="/expenses/submit" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseSubmission /></ProtectedRoute>} />
+                <Route path="/expenses/history" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseHistory /></ProtectedRoute>} />
+                <Route path="/employee/leaves" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeLeavePage /></ProtectedRoute>} />
 
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              </Routes>
+            </PWAGuard>
             <ToastContainer position="top-right" autoClose={3000} theme={mode === 'dark' ? 'dark' : 'light'} />
           </AuthProvider>
         </Router>
