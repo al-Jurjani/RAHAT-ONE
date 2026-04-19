@@ -28,6 +28,8 @@ import HRExpenseDashboard from './pages/HRExpenseDashboard';
 import AuditLogPage from './pages/AuditLogPage';
 import HRBranchManagementPage from './pages/HRBranchManagementPage';
 import HRAttendanceOverviewPage from './pages/HRAttendanceOverviewPage';
+import HREmployeeDirectoryPage from './pages/HREmployeeDirectoryPage';
+import HRDepartmentManagementPage from './pages/HRDepartmentManagementPage';
 import ExpenseSubmission from './pages/ExpenseSubmission';
 import ExpenseHistory from './pages/ExpenseHistory';
 import PWAGuard from './components/PWAGuard';
@@ -312,6 +314,8 @@ function App() {
                 <Route path="/hr/audit-log" element={<ProtectedRoute allowedRoles={['hr']}><AuditLogPage /></ProtectedRoute>} />
                 <Route path="/hr/branches" element={<ProtectedRoute allowedRoles={['hr']}><HRBranchManagementPage /></ProtectedRoute>} />
                 <Route path="/hr/attendance" element={<ProtectedRoute allowedRoles={['hr']}><HRAttendanceOverviewPage /></ProtectedRoute>} />
+                <Route path="/hr/employees" element={<ProtectedRoute allowedRoles={['hr']}><HREmployeeDirectoryPage /></ProtectedRoute>} />
+                <Route path="/hr/departments" element={<ProtectedRoute allowedRoles={['hr']}><HRDepartmentManagementPage /></ProtectedRoute>} />
 
                 {/* Protected Employee Routes */}
                 <Route path="/employee/home" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeDashboard /></ProtectedRoute>} />

@@ -40,7 +40,183 @@ function fieldValue(record, field) {
   return record && Object.prototype.hasOwnProperty.call(record, field) ? record[field] : null;
 }
 
+function parseStatus(status) {
+  if (!status) return true;
+  return String(status).toLowerCase() !== 'inactive';
+}
+
 class EmployeeController {
+  async listEmployees(req, res) {
+    try {
+      const {
+        department,
+        jobTitle,
+        search,
+        status = 'active',
+        branchId,
+        limit = '50',
+        offset = '0'
+      } = req.query;
+
+      const parsedLimit = Math.max(1, Math.min(toInt(limit) || 50, 200));
+      const parsedOffset = Math.max(0, toInt(offset) || 0);
+      const parsedDepartment = toInt(department);
+      const parsedBranchId = toInt(branchId);
+
+      const domain = [
+        ['active', '=', parseStatus(status)]
+      ];
+
+      if (parsedDepartment) {
+        domain.push(['department_id', '=', parsedDepartment]);
+      }
+
+      if (jobTitle) {
+        domain.push(['job_title', 'ilike', String(jobTitle)]);
+      }
+
+      if (search) {
+        domain.push(['name', 'ilike', String(search)]);
+      }
+
+      if (parsedBranchId) {
+        domain.push(['branch_id', '=', parsedBranchId]);
+      }
+
+      const fields = [
+        'id',
+        'name',
+        'job_title',
+        'department_id',
+        'parent_id',
+        'work_email',
+        'mobile_phone',
+        'image_128',
+        'active',
+        'branch_id',
+        'shift_id',
+        'create_date'
+      ];
+
+      const [employees, total] = await Promise.all([
+        odooAdapter.execute('hr.employee', 'search_read', [domain, fields, parsedOffset, parsedLimit, 'id desc']),
+        odooAdapter.execute('hr.employee', 'search_count', [domain])
+      ]);
+
+      return res.status(200).json({
+        employees: employees || [],
+        total: total || 0,
+        limit: parsedLimit,
+        offset: parsedOffset
+      });
+    } catch (error) {
+      console.error('listEmployees error:', error);
+      return respondError(res, 'Failed to fetch employees', 500);
+    }
+  }
+
+  async getEmployeeById(req, res) {
+    try {
+      const employeeId = toInt(req.params.employeeId);
+      if (!employeeId) {
+        return respondError(res, 'Invalid employee ID', 400);
+      }
+
+      const fields = [
+        'id',
+        'name',
+        'job_title',
+        'department_id',
+        'parent_id',
+        'work_email',
+        'mobile_phone',
+        'image_128',
+        'active',
+        'branch_id',
+        'shift_id',
+        'create_date',
+        'image_512',
+        'private_email',
+        'emergency_contact',
+        'emergency_phone',
+        'gender',
+        'birthday',
+        'country_id',
+        'employee_type',
+        'company_id'
+      ];
+
+      const records = await odooAdapter.execute('hr.employee', 'search_read', [
+        [['id', '=', employeeId]],
+        fields,
+        0,
+        1,
+        'id desc'
+      ]);
+
+      if (!records || records.length === 0) {
+        return respondError(res, 'Employee not found', 404);
+      }
+
+      return res.status(200).json(records[0]);
+    } catch (error) {
+      console.error('getEmployeeById error:', error);
+      return respondError(res, 'Failed to fetch employee profile', 500);
+    }
+  }
+
+  async updateEmployeeBranch(req, res) {
+    try {
+      const employeeId = toInt(req.params.employeeId);
+      const branchId = toInt(req.body.branchId);
+      const shiftId = req.body.shiftId !== undefined && req.body.shiftId !== null
+        ? toInt(req.body.shiftId)
+        : null;
+
+      if (!employeeId) {
+        return respondError(res, 'Invalid employee ID', 400);
+      }
+
+      if (!branchId) {
+        return respondError(res, 'branchId is required', 400);
+      }
+
+      await odooAdapter.execute('hr.employee', 'write', [[employeeId], {
+        branch_id: branchId,
+        shift_id: shiftId || false
+      }]);
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('updateEmployeeBranch error:', error);
+      return respondError(res, 'Failed to update employee branch', 500);
+    }
+  }
+
+  async updateEmployeeManager(req, res) {
+    try {
+      const employeeId = toInt(req.params.employeeId);
+      const managerId = toInt(req.body.managerId);
+
+      if (!employeeId) {
+        return respondError(res, 'Invalid employee ID', 400);
+      }
+
+      if (!managerId) {
+        return respondError(res, 'managerId is required', 400);
+      }
+
+      await odooAdapter.execute('hr.employee', 'write', [[employeeId], {
+        parent_id: managerId
+      }]);
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('updateEmployeeManager error:', error);
+      return respondError(res, 'Failed to update employee manager', 500);
+    }
+  }
+
   async getProfile(req, res) {
     try {
       const employeeId = toInt(req.params.employeeId);

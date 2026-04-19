@@ -29,6 +29,8 @@ const HR_NAV_SECTIONS = [
       { to: '/hr/verification',       icon: <PersonAddIcon fontSize="small" />,               label: 'Onboarding' },
       { to: '/hr/leave-dashboard',    icon: <EventNoteIcon fontSize="small" />,               label: 'Leave Management' },
       { to: '/hr/expense-dashboard',  icon: <ReceiptIcon fontSize="small" />,                 label: 'Expense Management' },
+      { to: '/hr/employees',          icon: <PersonIcon fontSize="small" />,                  label: 'Employee Directory' },
+      { to: '/hr/departments',        icon: <ApartmentIcon fontSize="small" />,               label: 'Department Management' },
       { to: '/hr/audit-log',          icon: <HistoryIcon fontSize="small" />,                 label: 'Audit Log' },
       { to: '/hr/config',             icon: <SettingsIcon fontSize="small" />,                label: 'Configuration', disabled: true },
     ]
