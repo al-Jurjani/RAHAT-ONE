@@ -8,18 +8,19 @@ import {
   Button,
   MenuItem,
   CircularProgress,
-  Box
+  Box,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import { onboardingAPI, lookupAPI } from '../services/api';
 
 function InitiateOnboardingModal({ open, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
-    name: '',
     email: '',
-    phone: '',
     departmentId: '',
-    jobId: ''
+    jobId: '',
+    manualReviewRequired: false
   });
 
   const [departments, setDepartments] = useState([]);
@@ -65,11 +66,10 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
 
   const resetForm = () => {
     setFormData({
-      name: '',
       email: '',
-      phone: '',
       departmentId: '',
-      jobId: ''
+      jobId: '',
+      manualReviewRequired: false
     });
     setErrors({});
   };
@@ -77,14 +77,18 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-    }
-
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
+    }
+
+    if (!formData.departmentId) {
+      newErrors.departmentId = 'Department is required';
+    }
+
+    if (!formData.jobId) {
+      newErrors.jobId = 'Position is required';
     }
 
     setErrors(newErrors);
@@ -109,24 +113,22 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
     setLoading(true);
     try {
       const payload = {
-        name: formData.name.trim(),
         email: formData.email.trim(),
-        ...(formData.phone && { phone: formData.phone.trim() }),
-        ...(formData.departmentId && { departmentId: parseInt(formData.departmentId) }),
-        ...(formData.jobId && { jobId: parseInt(formData.jobId) })
+        departmentId: parseInt(formData.departmentId),
+        jobId: parseInt(formData.jobId),
+        manualReviewRequired: formData.manualReviewRequired
       };
 
       const response = await onboardingAPI.initiate(payload);
 
       if (response.data.success) {
-        const employeeData = response.data.data;
         toast.success(
-          `Onboarding initiated successfully! Employee ID: ${employeeData.employeeId}. An email has been sent to ${employeeData.email}`
+          `Onboarding initiated! An invitation email will be sent to ${formData.email.trim()}`
         );
         resetForm();
         onClose();
         if (onSuccess) {
-          onSuccess(employeeData);
+          onSuccess();
         }
       }
     } catch (error) {
@@ -146,44 +148,28 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
           <TextField
             fullWidth
             required
-            label="Full Name"
-            value={formData.name}
-            onChange={handleChange('name')}
-            error={!!errors.name}
-            helperText={errors.name}
+            type="email"
+            label="Candidate's Personal Email"
+            value={formData.email}
+            onChange={handleChange('email')}
+            error={!!errors.email}
+            helperText={errors.email || 'An invitation link will be sent to this address'}
             disabled={loading}
           />
 
           <TextField
             fullWidth
             required
-            type="email"
-            label="Personal Email Address"
-            value={formData.email}
-            onChange={handleChange('email')}
-            error={!!errors.email}
-            helperText={errors.email || 'An email will be sent to this address'}
-            disabled={loading}
-          />
-
-          <TextField
-            fullWidth
-            label="Phone Number"
-            value={formData.phone}
-            onChange={handleChange('phone')}
-            disabled={loading}
-          />
-
-          <TextField
-            fullWidth
             select
             label="Department"
             value={formData.departmentId}
             onChange={handleChange('departmentId')}
+            error={!!errors.departmentId}
+            helperText={errors.departmentId}
             disabled={loading}
           >
             <MenuItem value="">
-              <em>Select Department (Optional)</em>
+              <em>Select Department</em>
             </MenuItem>
             {departments.map((dept) => (
               <MenuItem key={dept.id} value={dept.id}>
@@ -194,15 +180,17 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
 
           <TextField
             fullWidth
+            required
             select
             label="Position"
             value={formData.jobId}
             onChange={handleChange('jobId')}
+            error={!!errors.jobId}
+            helperText={errors.jobId || (!formData.departmentId ? 'Select a department first' : '')}
             disabled={loading || !formData.departmentId}
-            helperText={!formData.departmentId ? 'Select a department first' : ''}
           >
             <MenuItem value="">
-              <em>Select Position (Optional)</em>
+              <em>Select Position</em>
             </MenuItem>
             {positions.map((pos) => (
               <MenuItem key={pos.id} value={pos.id}>
@@ -210,6 +198,17 @@ function InitiateOnboardingModal({ open, onClose, onSuccess }) {
               </MenuItem>
             ))}
           </TextField>
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={formData.manualReviewRequired}
+                onChange={(e) => setFormData(prev => ({ ...prev, manualReviewRequired: e.target.checked }))}
+                disabled={loading}
+              />
+            }
+            label="Require manual approval (skip auto-approve even if all checks pass)"
+          />
         </Box>
       </DialogContent>
 

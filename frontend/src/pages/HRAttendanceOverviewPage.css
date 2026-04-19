@@ -1,0 +1,71 @@
+.hr-attendance-page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.hr-attendance-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hr-attendance-page__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--text-primary);
+}
+
+.hr-attendance-page__filters {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hr-attendance-page__stats {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.hr-attendance-page__table-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+}
+
+.hr-attendance-page__updated-at {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.hr-attendance-page__distance {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 1024px) {
+  .hr-attendance-page__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hr-attendance-page__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .hr-attendance-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hr-attendance-page__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-attendance-page__stats {
+    grid-template-columns: 1fr;
+  }
+}

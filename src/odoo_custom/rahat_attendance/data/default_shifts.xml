@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="rahat_branch_default" model="rahat.branch">
+            <field name="name">Default Branch</field>
+            <field name="address">Default address for initial attendance setup</field>
+            <field name="latitude">24.860734</field>
+            <field name="longitude">67.001137</field>
+            <field name="radius_meters">200</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="rahat_shift_morning" model="rahat.shift">
+            <field name="branch_id" ref="rahat_branch_default"/>
+            <field name="name">Morning Shift</field>
+            <field name="start_time">9.0</field>
+            <field name="end_time">17.0</field>
+            <field name="grace_minutes">15</field>
+            <field name="days_of_week">0,1,2,3,4</field>
+        </record>
+
+        <record id="rahat_shift_evening" model="rahat.shift">
+            <field name="branch_id" ref="rahat_branch_default"/>
+            <field name="name">Evening Shift</field>
+            <field name="start_time">14.0</field>
+            <field name="end_time">22.0</field>
+            <field name="grace_minutes">15</field>
+            <field name="days_of_week">0,1,2,3,4</field>
+        </record>
+    </data>
+</odoo>

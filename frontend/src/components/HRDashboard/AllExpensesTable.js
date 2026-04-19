@@ -244,7 +244,7 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
     return (
       <>
         {/* Filters */}
-        <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+        <Box sx={{ mb: 3, p: 2, bgcolor: 'var(--bg-elevated)', borderRadius: 1 }}>
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
             <FilterListIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 18 }} />
             Filters
@@ -326,7 +326,7 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                       <strong>Date:</strong> {new Date(expense.expense_date || expense.create_date).toLocaleDateString('en-PK')}
                     </Typography>
 
-                    <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #eee' }}>
+                    <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid var(--border-subtle)' }}>
                       <Button
                         fullWidth
                         size="small"
@@ -374,7 +374,7 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
   return (
     <>
       {/* Filters */}
-      <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+      <Box sx={{ mb: 3, p: 2, bgcolor: 'var(--bg-elevated)', borderRadius: 1 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
           <FilterListIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 18 }} />
           Filters
@@ -431,7 +431,7 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+            <TableRow sx={{ backgroundColor: 'var(--bg-elevated)' }}>
               <TableCell>
                 <TableSortLabel
                   active={sortField === 'employee'}

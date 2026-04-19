@@ -153,147 +153,31 @@ async function getVerificationDetails(req, res) {
 }
 
 /**
- * HR approves candidate
+ * HR approves candidate — thinned to fire n8n Flow B webhook
+ * n8n handles: user provisioning, work email, leave allocation, Odoo updates, emails
  */
 async function approveCandidate(req, res) {
   try {
     const employeeId = parseInt(req.params.employeeId);
     const { notes } = req.body;
 
-    console.log('📥 Received approval request for employee:', employeeId);
-    console.log('📝 Notes:', notes);
-
     if (!employeeId) {
       return respondError(res, 'Employee ID is required', 400);
     }
 
-    console.log('✅ Approving candidate:', employeeId);
+    console.log('✅ Approving candidate (via n8n):', employeeId);
 
-    // Get employee details including password hash
-    const employee = await odooAdapter.execute('hr.employee', 'read', [
-      [employeeId],
-      [
-        'name',
-        'work_email',
-        'private_email',
-        'registration_password_hash',
-        'department_id',
-        'job_id'
-      ]
-    ]);
-
-    if (!employee || employee.length === 0) {
-      return respondError(res, 'Employee not found', 404);
-    }
-
-    const emp = employee[0];
-
-    // Update HR verification status to approved
-    await odooAdapter.updateEmployee(employeeId, {
-      hr_verification_status: 'approved',
-      hr_verification_notes: notes || '',
-      hr_verified_by: 2, // Admin user ID
-      hr_verified_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      onboarding_status: 'verified'
+    // Fire n8n Flow B — all provisioning handled there
+    await powerAutomateService.triggerOnboardingFlow('decision', {
+      employeeId,
+      decision: 'approve',
+      notes: notes || ''
     });
-
-    console.log('✅ Employee verified in Odoo');
-
-    // CREATE LOGIN ACCOUNT
-    try {
-      const existingUsers = await odooAdapter.execute('res.users', 'search_read', [
-        [['employee_id', '=', employeeId]],
-        ['id']
-      ]);
-
-      if (existingUsers.length === 0 && emp.registration_password_hash && emp.work_email) {
-        console.log('🔐 Creating login account for:', emp.work_email);
-
-        const userId = await odooAdapter.execute('res.users', 'create', [
-          {
-            name: emp.name,
-            login: emp.work_email,
-            email: emp.work_email,
-            rahatone_role: 'employee',
-            is_rahatone_user: true,
-            employee_id: employeeId,
-            account_status: 'active',
-            password_hash: emp.registration_password_hash
-          }
-        ]);
-
-        console.log('✅ Login account created! User ID:', userId);
-
-        // 🆕 LINK USER TO EMPLOYEE RECORD
-        try {
-          await odooAdapter.execute('hr.employee', 'write', [
-            [parseInt(employeeId)],
-            {
-              user_id: userId,
-              work_email: emp.work_email
-            }
-          ]);
-          console.log('✅ Employee record linked to user account');
-        } catch (linkError) {
-          console.error('⚠️ Warning: Failed to link user to employee:', linkError.message);
-          // Don't fail the entire approval if linking fails
-        }
-
-      } else {
-        console.log('ℹ️  User account already exists or missing data');
-      }
-    } catch (userError) {
-      console.error('⚠️  Failed to create user account:', userError.message);
-    }
-
-    // 🆕 ALLOCATE INITIAL LEAVES
-    let leaveAllocations = [];
-    try {
-      console.log('🎯 Starting leave allocation...');
-      const onboardingService = require('../services/onboardingService');
-      const allocationResult = await onboardingService.allocateInitialLeaves(employeeId);
-      leaveAllocations = allocationResult.allocations;
-      console.log('✅ Leave allocation successful:', leaveAllocations);
-    } catch (leaveError) {
-      console.error('⚠️  Leave allocation failed:', leaveError.message);
-      // Don't fail the approval if leave allocation fails
-      // HR can manually allocate later
-    }
-
-    // Extract department and position names
-    const departmentName = emp.department_id ? emp.department_id[1] : 'N/A';
-    const positionName = emp.job_id ? emp.job_id[1] : 'N/A';
-
-    // Prepare leave balances for email
-    const leaveBalances = {};
-    leaveAllocations.forEach(allocation => {
-      leaveBalances[allocation.leaveType] = allocation.days;
-    });
-
-    // Trigger Power Automate approval email
-    console.log('🔔 Attempting to send approval email...');
-    powerAutomateService.sendApprovalEmail({
-      id: employeeId,
-      name: emp.name,
-      personalEmail: emp.private_email,
-      workEmail: emp.work_email,
-      department: departmentName || 'N/A',
-      position: positionName || 'N/A',
-      leaveBalances: leaveBalances // 🆕 Add leave balances to payload
-    }, notes || '')
-      .then(() => console.log('✅ Approval email sent'))
-      .catch(err => {
-        console.error('❌ Approval email error:');
-        console.error('   Message:', err.message);
-        console.error('   Response:', err.response?.data);
-      });
 
     return respondSuccess(res, {
       employeeId,
-      status: 'approved',
-      userAccountCreated: true,
-      leaveAllocations: leaveAllocations // 🆕 Return allocation info
-    }, 'Candidate approved successfully');
+      status: 'approved'
+    }, 'Candidate approved — provisioning in progress');
 
   } catch (error) {
     console.error('❌ Approval error:', error);
@@ -301,8 +185,14 @@ async function approveCandidate(req, res) {
   }
 }
 
+/* --- ORIGINAL approveCandidate (pre-n8n) — kept for reference ---
+ * Did: Odoo status update, res.users creation, leave allocation, Power Automate email
+ * Now handled by: n8n Flow B (onboarding-decision webhook, approve path)
+ */
+
 /**
- * HR rejects candidate
+ * HR rejects candidate — thinned to fire n8n Flow B webhook
+ * n8n handles: Odoo status update, deactivation, rejection + HR confirmation emails
  */
 async function rejectCandidate(req, res) {
   try {
@@ -311,32 +201,22 @@ async function rejectCandidate(req, res) {
 
     const id = parseInt(employeeId);
 
-    // Get employee data first
-    const employee = await odooAdapter.getEmployee(id);
+    if (!id) {
+      return respondError(res, 'Employee ID is required', 400);
+    }
 
-    // Update in Odoo
-    await odooAdapter.updateEmployee(id, {
-      hr_verification_status: 'rejected',
-      rejection_reason: reason,
-      rejection_details: details || '',
-      rejection_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      onboarding_status: 'rejected',
-      active: false
+    console.log('❌ Rejecting candidate (via n8n):', id);
+
+    // Fire n8n Flow B — all Odoo updates and emails handled there
+    await powerAutomateService.triggerOnboardingFlow('decision', {
+      employeeId: id,
+      decision: 'reject',
+      reason: reason || '',
+      details: details || ''
     });
 
-    // Trigger Power Automate rejection email
-    await powerAutomateService.sendRejectionEmail({
-      id: employee.id,
-      name: employee.name,
-      personalEmail: employee.private_email,
-      department: employee.department_id?.[1] || 'N/A',
-      position: employee.job_id?.[1] || 'N/A'
-    }, reason, details);
-
-    console.log('✅ Employee rejected successfully');
-
     return respondSuccess(res, {
-      message: 'Employee rejected successfully',
+      message: 'Employee rejected — processing in progress',
       employeeId: id
     });
 
@@ -346,22 +226,27 @@ async function rejectCandidate(req, res) {
   }
 }
 
+/* --- ORIGINAL rejectCandidate (pre-n8n) — kept for reference ---
+ * Did: Odoo status/active update, Power Automate rejection email
+ * Now handled by: n8n Flow B (onboarding-decision webhook, reject path)
+ */
+
 /**
- * Get recently approved employees
+ * Get recently approved employees (HR-approved, not auto-approved)
  */
 async function getApprovedEmployees(req, res) {
   try {
-    console.log('📋 Fetching approved employees...');
+    console.log('📋 Fetching HR-approved employees...');
 
     const employees = await odooAdapter.searchAndReadEmployees([
       ['hr_verification_status', '=', 'approved'],
-      ['hr_verified_date', '!=', false]
+      ['auto_approved', '!=', true]
     ], {
       order: 'hr_verified_date desc',
       limit: 50
     });
 
-    console.log(`✅ Found ${employees.length} approved employees`);
+    console.log(`✅ Found ${employees.length} HR-approved employees`);
 
     const formattedList = employees.map(emp => ({
       id: emp.id,
@@ -373,6 +258,7 @@ async function getApprovedEmployees(req, res) {
       onboardingStatus: emp.onboarding_status,
       aiVerificationStatus: emp.ai_verification_status,
       hrVerificationStatus: emp.hr_verification_status,
+      cnicVerified: emp.cnic_verified || false,
       submittedAt: emp.onboarding_initiated_date,
       approvedAt: emp.hr_verified_date
     }));
@@ -382,6 +268,45 @@ async function getApprovedEmployees(req, res) {
   } catch (error) {
     console.error('❌ Get approved employees error:', error.message);
     return respondError(res, error.message || 'Failed to get approved employees', 500);
+  }
+}
+
+/**
+ * Get auto-approved employees (approved by n8n Flow A without HR review)
+ */
+async function getAutoApprovedEmployees(req, res) {
+  try {
+    console.log('📋 Fetching auto-approved employees...');
+
+    const employees = await odooAdapter.searchAndReadEmployees([
+      ['auto_approved', '=', true]
+    ], {
+      order: 'onboarding_completed_date desc',
+      limit: 50
+    });
+
+    console.log(`✅ Found ${employees.length} auto-approved employees`);
+
+    const formattedList = employees.map(emp => ({
+      id: emp.id,
+      name: emp.name,
+      personalEmail: emp.private_email,
+      workEmail: emp.work_email,
+      department: emp.department_id ? emp.department_id[1] : 'N/A',
+      position: emp.job_id ? emp.job_id[1] : 'N/A',
+      onboardingStatus: emp.onboarding_status,
+      aiVerificationStatus: emp.ai_verification_status,
+      cnicVerified: emp.cnic_verified || false,
+      autoApproved: true,
+      submittedAt: emp.onboarding_initiated_date,
+      approvedAt: emp.onboarding_completed_date
+    }));
+
+    return respondSuccess(res, formattedList);
+
+  } catch (error) {
+    console.error('❌ Get auto-approved employees error:', error.message);
+    return respondError(res, error.message || 'Failed to get auto-approved employees', 500);
   }
 }
 
@@ -480,71 +405,15 @@ async function getDocument(req, res) {
   }
 }
 
-/**
- * Override candidate's department/position selection with HR's original assignment
- * PUT /api/hr/verification/:employeeId/override-assignment
- */
-async function overrideAssignment(req, res) {
-  try {
-    const { employeeId } = req.params;
-    const { useHRAssignment } = req.body; // true = use HR's, false = keep candidate's
-
-    const id = parseInt(employeeId);
-
-    console.log('🔄 Override assignment request:', { employeeId: id, useHRAssignment });
-
-    // Get employee data
-    const employee = await odooAdapter.getEmployee(id);
-
-    if (!employee) {
-      return respondError(res, 'Employee not found', 404);
-    }
-
-    let updateData = {};
-
-    if (useHRAssignment) {
-      // Override with HR's original assignment
-      if (employee.hr_assigned_department_id) {
-        updateData.department_id = employee.hr_assigned_department_id[0];
-        console.log('   Setting department to HR assigned:', employee.hr_assigned_department_id);
-      }
-      if (employee.hr_assigned_job_id) {
-        updateData.job_id = employee.hr_assigned_job_id[0];
-        console.log('   Setting position to HR assigned:', employee.hr_assigned_job_id);
-      }
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      return respondError(res, 'No HR assignment found to override', 400);
-    }
-
-    // Update employee record
-    await odooAdapter.updateEmployee(id, updateData);
-
-    console.log('✅ Assignment overridden successfully');
-
-    return respondSuccess(res, {
-      employeeId: id,
-      message: useHRAssignment
-        ? 'Assignment overridden with HR values'
-        : 'Candidate selection accepted',
-      updatedFields: updateData
-    });
-
-  } catch (error) {
-    console.error('❌ Override assignment error:', error);
-    return respondError(res, 'Failed to override assignment', 500);
-  }
-}
-
+/* overrideAssignment removed — HR sets dept/position at initiation (Flow C), they're final */
 
 module.exports = {
   getPendingRegistrations,
   getApprovedEmployees,
+  getAutoApprovedEmployees,
   getRejectedEmployees,
   getVerificationDetails,
   getDocument,
   approveCandidate,
-  rejectCandidate,
-  overrideAssignment
+  rejectCandidate
 };

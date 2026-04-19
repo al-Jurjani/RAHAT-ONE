@@ -1,29 +1,36 @@
 const onboardingService = require('../services/onboardingService');
+const powerAutomateService = require('../services/powerAutomateService');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
 
 class OnboardingController {
   /**
    * POST /api/onboarding/initiate
-   * Initiate onboarding for new employee
+   * Thin trigger — validates input, fires n8n Flow C which handles
+   * Odoo record creation, employee type determination, and invitation email.
    */
   async initiateOnboarding(req, res) {
     try {
-      const { name, email, phone, departmentId, jobId } = req.body;
+      const { email, departmentId, jobId, manualReviewRequired } = req.body;
 
-      // Basic validation
-      if (!name || !email) {
-        return respondError(res, 'Name and email are required', 400);
+      if (!email) {
+        return respondError(res, 'Email is required', 400);
+      }
+      if (!departmentId || !jobId) {
+        return respondError(res, 'Department and position are required', 400);
       }
 
-      const result = await onboardingService.initiateOnboarding({
-        name,
-        email,
-        phone,
-        departmentId,
-        jobId
+      // Fire n8n webhook — all work happens in the flow
+      await powerAutomateService.triggerOnboardingFlow('initiate', {
+        email: email.trim(),
+        departmentId: parseInt(departmentId),
+        jobId: parseInt(jobId),
+        manualReviewRequired: manualReviewRequired || false
       });
 
-      return respondSuccess(res, result, 'Onboarding initiated successfully', 201);
+      return respondSuccess(res, {
+        email: email.trim(),
+        status: 'initiated'
+      }, 'Onboarding initiated successfully', 201);
     } catch (error) {
       console.error('Controller Error:', error);
       return respondError(res, 'Failed to initiate onboarding', 500, error);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -15,21 +15,22 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Box
+  Box,
+  IconButton,
+  Tooltip
 } from '@mui/material';
+import { Notes as NotesIcon } from '@mui/icons-material';
 import axios from 'axios';
+import LeaveMessagesDialog from '../leave/LeaveMessagesDialog';
 
 const AllLeavesTable = () => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedLeaveId, setSelectedLeaveId] = useState(null);
 
-  useEffect(() => {
-    fetchLeaves();
-  }, [statusFilter]);
-
-  const fetchLeaves = async () => {
+  const fetchLeaves = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('accessToken');
@@ -51,31 +52,29 @@ const AllLeavesTable = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchLeaves();
+  }, [fetchLeaves]);
 
   const getStatusColor = (state) => {
     switch (state) {
-      case 'validate':
-        return 'success';
-      case 'refuse':
-        return 'error';
-      case 'confirm':
-        return 'warning';
-      default:
-        return 'default';
+      case 'validate':  return 'success';
+      case 'validate1': return 'info';
+      case 'refuse':    return 'error';
+      case 'confirm':   return 'warning';
+      default:          return 'default';
     }
   };
 
   const getStatusLabel = (state) => {
     switch (state) {
-      case 'validate':
-        return 'Approved';
-      case 'refuse':
-        return 'Rejected';
-      case 'confirm':
-        return 'Pending';
-      default:
-        return state;
+      case 'validate':  return 'Approved';
+      case 'validate1': return 'Pending HR';
+      case 'refuse':    return 'Rejected';
+      case 'confirm':   return 'Pending';
+      default:          return state;
     }
   };
 
@@ -100,7 +99,8 @@ const AllLeavesTable = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <MenuItem value="all">All Leaves</MenuItem>
-            <MenuItem value="confirm">Pending</MenuItem>
+            <MenuItem value="confirm">Pending Manager</MenuItem>
+            <MenuItem value="validate1">Pending HR</MenuItem>
             <MenuItem value="validate">Approved</MenuItem>
             <MenuItem value="refuse">Rejected</MenuItem>
           </Select>
@@ -112,39 +112,29 @@ const AllLeavesTable = () => {
           <TableHead>
             <TableRow>
               <TableCell><strong>Employee</strong></TableCell>
-              <TableCell><strong>Email</strong></TableCell>
               <TableCell><strong>Leave Type</strong></TableCell>
               <TableCell><strong>From</strong></TableCell>
               <TableCell><strong>To</strong></TableCell>
               <TableCell><strong>Days</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
-              <TableCell><strong>Remarks</strong></TableCell>
               <TableCell><strong>Submitted</strong></TableCell>
+              <TableCell align="center"><strong>Log</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {leaves.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">
+                <TableCell colSpan={8} align="center">
                   <Typography color="textSecondary">No leaves found</Typography>
                 </TableCell>
               </TableRow>
             ) : (
               leaves.map((leave) => (
-                              <TableRow key={leave.id}>
-                                <TableCell>{leave.employee_id[1]}</TableCell>
-                                <TableCell>
-                                  <Typography variant="body2" color="textSecondary">
-                                    {leave.employee_email || 'N/A'}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    label={leave.holiday_status_id[1]}
-                                    size="small"
-                                    color="primary"
-                                  />
-                                </TableCell>
+                <TableRow key={leave.id} hover>
+                  <TableCell>{leave.employee_id[1]}</TableCell>
+                  <TableCell>
+                    <Chip label={leave.holiday_status_id[1]} size="small" color="primary" />
+                  </TableCell>
                   <TableCell>{leave.request_date_from}</TableCell>
                   <TableCell>{leave.request_date_to}</TableCell>
                   <TableCell>{leave.number_of_days}</TableCell>
@@ -155,9 +145,15 @@ const AllLeavesTable = () => {
                       color={getStatusColor(leave.state)}
                     />
                   </TableCell>
-                  <TableCell>{leave.name}</TableCell>
                   <TableCell>
                     {new Date(leave.create_date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell align="center">
+                    <Tooltip title="View decision log">
+                      <IconButton size="small" onClick={() => setSelectedLeaveId(leave.id)}>
+                        <NotesIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))
@@ -165,6 +161,12 @@ const AllLeavesTable = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <LeaveMessagesDialog
+        leaveId={selectedLeaveId}
+        open={!!selectedLeaveId}
+        onClose={() => setSelectedLeaveId(null)}
+      />
     </>
   );
 };

@@ -1,26 +1,17 @@
 import React from 'react';
-import { Box, Button, Container, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import AppShell from '../components/layout/AppShell';
 import ExpenseHistoryTable from '../components/expense/ExpenseHistoryTable';
 
 const ExpenseHistory = () => {
-  const navigate = useNavigate();
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Button variant="text" onClick={() => navigate('/employee/dashboard')} sx={{ mb: 2 }}>
-        ← Back to Dashboard
-      </Button>
-
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Expense History
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
+    <AppShell pageTitle="Expense History">
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: 'var(--text-sm)' }}>
           Review your expense submissions, track approvals, and view attached invoices.
-        </Typography>
-      </Box>
+        </p>
+      </div>
       <ExpenseHistoryTable showTitle={false} />
-    </Container>
+    </AppShell>
   );
 };
 

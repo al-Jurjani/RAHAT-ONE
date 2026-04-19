@@ -324,7 +324,8 @@ async getEmployeeDocuments(employeeId) {
         'hr_verification_status', 'onboarding_initiated_date',
         'hr_verified_date', 'rejection_date', 'rejection_reason',
         'cnic_uploaded', 'degree_uploaded', 'medical_uploaded',
-        'entered_cnic_number', 'entered_father_name', 'active'
+        'entered_cnic_number', 'entered_father_name', 'active',
+        'cnic_verified', 'auto_approved', 'onboarding_completed_date'
       ];
 
       // If we need to include inactive records, modify the domain
@@ -914,6 +915,8 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'workflow_status',
           'document_hash',
           'perceptual_hash',
+          'clip_embedding',
+          'florence_analysis',
           'fraud_score',
           'fraud_detection_details',
           'fraud_detection_status',
@@ -1021,6 +1024,8 @@ async getLeaveBalance(employeeId, leaveTypeId = null) {
           'hr_approved_date',
           'policy_check_passed',
           'approval_token',
+          'rejection_reason',
+          'rejection_details',
           'create_date'
         ]
       ]);

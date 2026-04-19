@@ -13,7 +13,6 @@ import {
 import axios from 'axios';
 
 const LeaveBalanceCard = () => {
-  const [leaveTypes, setLeaveTypes] = useState([]);
   const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -69,16 +68,6 @@ const LeaveBalanceCard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getColorForType = (name) => {
-    const colors = {
-      'Annual Leave': 'primary',
-      'Sick Leave': 'warning',
-      'Emergency Leave': 'error',
-      'Unpaid Leave': 'default'
-    };
-    return colors[name] || 'info';
   };
 
   const calculatePercentage = (used, total) => {

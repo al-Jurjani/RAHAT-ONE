@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
-import {
-  Container,
-  Typography,
-  Box,
-  Tabs,
-  Tab,
-  Paper,
-  Button
-} from '@mui/material';
+import { Tabs, Tab, Box } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import AppShell from '../components/layout/AppShell';
+import { Button } from '../components/ui';
 import PendingExpensesTable from '../components/HRDashboard/PendingExpensesTable';
 import AllExpensesTable from '../components/HRDashboard/AllExpensesTable';
 import FlaggedExpensesTable from '../components/HRDashboard/FlaggedExpensesTable';
+import AutoApprovedExpensesTable from '../components/HRDashboard/AutoApprovedExpensesTable';
+import AutoRejectedExpensesTable from '../components/HRDashboard/AutoRejectedExpensesTable';
 
 const HRExpenseDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -28,49 +24,37 @@ const HRExpenseDashboard = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button
-          startIcon={<ArrowBack />}
-          onClick={() => navigate('/hr')}
-          sx={{ mr: 2 }}
-        >
+    <AppShell pageTitle="Expense Management">
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <Button variant="ghost" onClick={() => navigate('/hr')} size="sm">
+          <ArrowBack fontSize="small" style={{ marginRight: 'var(--space-1)' }} />
           Back to HR Portal
         </Button>
-        <Typography variant="h4">
-          Expense Management Dashboard
-        </Typography>
-      </Box>
+      </div>
 
-      <Paper sx={{ mt: 3 }}>
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden',
+      }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab label="All Expenses" />
           <Tab label="Pending HR Approval" />
           <Tab label="Flagged (Fraud Detection)" />
+          <Tab label="Auto-Approved" />
+          <Tab label="Auto-Rejected" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
-          {activeTab === 0 && (
-            <AllExpensesTable
-              refreshTrigger={refreshTrigger}
-              onActionComplete={handleActionComplete}
-            />
-          )}
-          {activeTab === 1 && (
-            <PendingExpensesTable
-              refreshTrigger={refreshTrigger}
-              onActionComplete={handleActionComplete}
-            />
-          )}
-          {activeTab === 2 && (
-            <FlaggedExpensesTable
-              refreshTrigger={refreshTrigger}
-              onActionComplete={handleActionComplete}
-            />
-          )}
+          {activeTab === 0 && <AllExpensesTable refreshTrigger={refreshTrigger} onActionComplete={handleActionComplete} />}
+          {activeTab === 1 && <PendingExpensesTable refreshTrigger={refreshTrigger} onActionComplete={handleActionComplete} />}
+          {activeTab === 2 && <FlaggedExpensesTable refreshTrigger={refreshTrigger} onActionComplete={handleActionComplete} />}
+          {activeTab === 3 && <AutoApprovedExpensesTable refreshTrigger={refreshTrigger} />}
+          {activeTab === 4 && <AutoRejectedExpensesTable refreshTrigger={refreshTrigger} />}
         </Box>
-      </Paper>
-    </Container>
+      </div>
+    </AppShell>
   );
 };
 

@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Box,
-  Typography,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -12,24 +8,25 @@ import {
   TableRow,
   Chip,
   Button,
-  CircularProgress,
-  Alert,
-  Card,
-  CardContent,
-  Grid
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
-import { CheckCircle, Cancel, Pending, Visibility, ArrowBack } from '@mui/icons-material';
+import { CheckCircle, Cancel, ArrowBack } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { hrAPI } from '../services/api';
-import { Tabs, Tab} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import AppShell from '../components/layout/AppShell';
+import { StatCard, LoadingSpinner } from '../components/ui';
+import InitiateOnboardingModal from '../components/InitiateOnboardingModal';
 
 function HRDashboard() {
   const [loading, setLoading] = useState(true);
   const [pendingList, setPendingList] = useState([]);
   const [approvedList, setApprovedList] = useState([]);
+  const [autoApprovedList, setAutoApprovedList] = useState([]);
   const [rejectedList, setRejectedList] = useState([]);
-  const [currentTab, setCurrentTab] = useState(0); // 0=Pending, 1=Approved, 2=Rejected
+  const [currentTab, setCurrentTab] = useState(0);
+  const [initiateDialogOpen, setInitiateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -39,14 +36,14 @@ function HRDashboard() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // Load all three lists
-      const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
+      const [pendingRes, autoApprovedRes, approvedRes, rejectedRes] = await Promise.all([
         hrAPI.getPending(),
-        hrAPI.getApproved(), // We'll create this
-        hrAPI.getRejected()  // We'll create this
+        hrAPI.getAutoApproved(),
+        hrAPI.getApproved(),
+        hrAPI.getRejected(),
       ]);
-
       setPendingList(pendingRes.data.data || []);
+      setAutoApprovedList(autoApprovedRes.data.data || []);
       setApprovedList(approvedRes.data.data || []);
       setRejectedList(rejectedRes.data.data || []);
     } catch (error) {
@@ -63,20 +60,24 @@ function HRDashboard() {
 
   const getStatusChip = (status) => {
     const statusConfig = {
-      pending: { label: 'PENDING', color: 'warning' },
-      approved: { label: 'APPROVED', color: 'success' },
-      rejected: { label: 'REJECTED', color: 'error' }
+      pending:              { label: 'PENDING',              color: 'warning' },
+      approved:             { label: 'APPROVED',             color: 'success' },
+      rejected:             { label: 'REJECTED',             color: 'error' },
+      activated:            { label: 'ACTIVATED',            color: 'success' },
+      verification_pending: { label: 'VERIFICATION PENDING', color: 'warning' },
+      initiated:            { label: 'INITIATED',            color: 'info' },
+      expired:              { label: 'EXPIRED',              color: 'default' },
     };
     const config = statusConfig[status] || statusConfig.pending;
     return <Chip label={config.label} color={config.color} size="small" />;
   };
 
-  // Get current list based on tab
   const getCurrentList = () => {
-    switch(currentTab) {
+    switch (currentTab) {
       case 0: return pendingList;
-      case 1: return approvedList;
-      case 2: return rejectedList;
+      case 1: return autoApprovedList;
+      case 2: return approvedList;
+      case 3: return rejectedList;
       default: return pendingList;
     }
   };
@@ -85,106 +86,74 @@ function HRDashboard() {
 
   if (loading) {
     return (
-      <Container maxWidth="xl">
-        <Box sx={{ mt: 8, display: 'flex', justifyContent: 'center' }}>
-          <CircularProgress />
-        </Box>
-      </Container>
+      <AppShell pageTitle="HR Verification">
+        <LoadingSpinner />
+      </AppShell>
     );
   }
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ mt: 8, mb: 4 }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-          <Button
-            startIcon={<ArrowBack />}
+    <AppShell pageTitle="HR Verification">
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+          <button
             onClick={() => navigate('/hr')}
-            sx={{ mr: 2 }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-sm)', padding: 0 }}
           >
-            Back to HR Portal
+            <ArrowBack fontSize="small" /> Back to HR Portal
+          </button>
+
+          <Button variant="contained" size="small" onClick={() => setInitiateDialogOpen(true)}>
+            Initiate Onboarding
           </Button>
-          <Typography variant="h4" component="h1">
-            HR Verification Dashboard
-          </Typography>
-        </Box>
+        </div>
+      </div>
 
-        {/* Summary Cards */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  Pending Verification
-                </Typography>
-                <Typography variant="h3" color="warning.main">
-                  {pendingList.length}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  Recently Approved
-                </Typography>
-                <Typography variant="h3" color="success.main">
-                  {approvedList.length}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  Recently Rejected
-                </Typography>
-                <Typography variant="h3" color="error.main">
-                  {rejectedList.length}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+      {/* Summary stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+        <StatCard value={pendingList.length}      label="Pending Verification" />
+        <StatCard value={autoApprovedList.length} label="Auto-Approved" />
+        <StatCard value={approvedList.length}     label="HR Approved" />
+        <StatCard value={rejectedList.length}     label="Rejected" />
+      </div>
 
-        {/* Tabs */}
-        <Paper sx={{ mb: 2 }}>
-          <Tabs value={currentTab} onChange={handleTabChange}>
-            <Tab label={`Pending (${pendingList.length})`} />
-            <Tab label={`Approved (${approvedList.length})`} />
-            <Tab label={`Rejected (${rejectedList.length})`} />
-          </Tabs>
-        </Paper>
+      {/* Tabs + Table */}
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+        <Tabs value={currentTab} onChange={handleTabChange}>
+          <Tab label={`Pending (${pendingList.length})`} />
+          <Tab label={`Auto-Approved (${autoApprovedList.length})`} />
+          <Tab label={`HR Approved (${approvedList.length})`} />
+          <Tab label={`Rejected (${rejectedList.length})`} />
+        </Tabs>
 
-        {/* Table */}
-        <TableContainer component={Paper}>
+        <TableContainer>
           <Table>
-            <TableHead sx={{ bgcolor: 'primary.main' }}>
+            <TableHead>
               <TableRow>
-                <TableCell sx={{ color: 'white' }}>Name</TableCell>
-                <TableCell sx={{ color: 'white' }}>Email (Work)</TableCell>
-                <TableCell sx={{ color: 'white' }}>Email (Personal)</TableCell>
-                <TableCell sx={{ color: 'white' }}>Department</TableCell>
-                <TableCell sx={{ color: 'white' }}>Position</TableCell>
-                <TableCell sx={{ color: 'white' }}>Status</TableCell>
-                <TableCell sx={{ color: 'white' }}>AI Verification</TableCell>
-                <TableCell sx={{ color: 'white' }}>HR Status</TableCell>
-                <TableCell sx={{ color: 'white' }}>Submitted</TableCell>
-                <TableCell sx={{ color: 'white' }}>Actions</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Email (Work)</TableCell>
+                <TableCell>Email (Personal)</TableCell>
+                <TableCell>Department</TableCell>
+                <TableCell>Position</TableCell>
+                <TableCell>Status</TableCell>
+                {currentTab === 1 ? (
+                  <TableCell>CNIC Verified</TableCell>
+                ) : (
+                  <TableCell>AI Verification</TableCell>
+                )}
+                {currentTab !== 1 && <TableCell>HR Status</TableCell>}
+                <TableCell>{currentTab === 1 ? 'Auto-Approved' : 'Submitted'}</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {currentList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center">
-                    <Typography variant="body1" color="text.secondary" sx={{ py: 4 }}>
-                      {currentTab === 0 && 'No pending verifications'}
-                      {currentTab === 1 && 'No approved candidates yet'}
-                      {currentTab === 2 && 'No rejected candidates yet'}
-                    </Typography>
+                  <TableCell colSpan={10} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                    {currentTab === 0 && 'No pending verifications'}
+                    {currentTab === 1 && 'No auto-approved candidates yet'}
+                    {currentTab === 2 && 'No HR-approved candidates yet'}
+                    {currentTab === 3 && 'No rejected candidates yet'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -196,29 +165,29 @@ function HRDashboard() {
                     <TableCell>{emp.department || 'N/A'}</TableCell>
                     <TableCell>{emp.position || 'N/A'}</TableCell>
                     <TableCell>{getStatusChip(emp.onboardingStatus)}</TableCell>
+                    {currentTab === 1 ? (
+                      <TableCell>
+                        {emp.cnicVerified
+                          ? <Chip icon={<CheckCircle />} label="VERIFIED"     color="success" size="small" />
+                          : <Chip icon={<Cancel />}      label="NOT VERIFIED" color="error"   size="small" />}
+                      </TableCell>
+                    ) : (
+                      <TableCell>
+                        {emp.aiVerificationStatus === 'passed' && <Chip icon={<CheckCircle />} label="PASSED"  color="success" size="small" />}
+                        {emp.aiVerificationStatus === 'failed' && <Chip icon={<Cancel />}      label="FAILED"  color="error"   size="small" />}
+                        {emp.aiVerificationStatus === 'pending' && <Chip label="PENDING" color="warning" size="small" />}
+                      </TableCell>
+                    )}
+                    {currentTab !== 1 && <TableCell>{getStatusChip(emp.hrVerificationStatus)}</TableCell>}
                     <TableCell>
-                      {emp.aiVerificationStatus === 'passed' && (
-                        <Chip icon={<CheckCircle />} label="PASSED" color="success" size="small" />
-                      )}
-                      {emp.aiVerificationStatus === 'failed' && (
-                        <Chip icon={<Cancel />} label="FAILED" color="error" size="small" />
-                      )}
-                      {emp.aiVerificationStatus === 'pending' && (
-                        <Chip label="PENDING" color="warning" size="small" />
-                      )}
+                      {emp.approvedAt
+                        ? new Date(emp.approvedAt).toLocaleDateString()
+                        : emp.submittedAt
+                          ? new Date(emp.submittedAt).toLocaleDateString()
+                          : 'N/A'}
                     </TableCell>
                     <TableCell>
-                      {getStatusChip(emp.hrVerificationStatus)}
-                    </TableCell>
-                    <TableCell>
-                      {emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString() : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => navigate(`/hr/verification/${emp.id}`)}
-                      >
+                      <Button variant="contained" size="small" onClick={() => navigate(`/hr/verification/${emp.id}`)}>
                         {currentTab === 0 ? 'Review' : 'View'}
                       </Button>
                     </TableCell>
@@ -228,8 +197,14 @@ function HRDashboard() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Box>
-    </Container>
+      </div>
+
+      <InitiateOnboardingModal
+        open={initiateDialogOpen}
+        onClose={() => setInitiateDialogOpen(false)}
+        onSuccess={loadAllData}
+      />
+    </AppShell>
   );
 }
 
