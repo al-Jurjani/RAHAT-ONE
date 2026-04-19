@@ -21,11 +21,36 @@ const getFieldId = (field) => {
 
 const getAvatarSrc = (imageData) => {
   if (!imageData || imageData === false) return null;
-  if (typeof imageData === 'string' && imageData.startsWith('data:')) return imageData;
-  if (typeof imageData === 'string' && imageData.length > 0) {
-    return `data:image/png;base64,${imageData}`;
+  if (typeof imageData !== 'string') return null;
+
+  const cleaned = imageData.trim();
+  if (!cleaned) return null;
+
+  const lowered = cleaned.toLowerCase();
+  if (lowered === 'false' || lowered === 'null' || lowered === 'none' || lowered === 'undefined') {
+    return null;
   }
-  return null;
+
+  const dataUrlPrefix = /^data:image\/[a-zA-Z0-9+.-]+;base64,/;
+  const base64Payload = dataUrlPrefix.test(cleaned)
+    ? cleaned.replace(dataUrlPrefix, '')
+    : cleaned;
+
+  // Skip very short or malformed payloads to prevent broken-image rendering.
+  if (base64Payload.length <= 100) return null;
+  if (!/^[A-Za-z0-9+/=\r\n]+$/.test(base64Payload)) return null;
+
+  const normalizedPayload = base64Payload.replace(/[\r\n]/g, '');
+  const hasKnownImageSignature = (
+    normalizedPayload.startsWith('iVBORw0KGgo') || // PNG
+    normalizedPayload.startsWith('/9j/') || // JPEG
+    normalizedPayload.startsWith('R0lGOD') || // GIF
+    normalizedPayload.startsWith('UklGR') // WEBP container
+  );
+  if (!hasKnownImageSignature) return null;
+
+  if (dataUrlPrefix.test(cleaned)) return cleaned;
+  return `data:image/png;base64,${base64Payload}`;
 };
 
 function formatJoinDate(value) {

@@ -415,11 +415,22 @@ class AttendanceController {
         'check_in desc'
       ]);
 
+      console.log('[AttendanceSummary] Sample record:', JSON.stringify(records[0]));
+
+      const resolveEmployeeName = (employeeId) => {
+        if (Array.isArray(employeeId)) return employeeId[1];
+        if (typeof employeeId === 'string') return employeeId;
+        if (typeof employeeId === 'number') return `Employee #${employeeId}`;
+        return 'Unknown';
+      };
+
       const summary = records.map((record) => ({
         id: record.id,
         employee_id: record.employee_id,
+        employee_id_raw: record.employee_id,
         employeeId: Array.isArray(record.employee_id) ? record.employee_id[0] : null,
-        employeeName: Array.isArray(record.employee_id) ? record.employee_id[1] : null,
+        employee_name: resolveEmployeeName(record.employee_id),
+        employeeName: resolveEmployeeName(record.employee_id),
         branchId: Array.isArray(record.branch_id) ? record.branch_id[0] : null,
         branchName: Array.isArray(record.branch_id) ? record.branch_id[1] : null,
         status: record.status,

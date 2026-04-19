@@ -165,10 +165,10 @@ class DepartmentController {
           triggeredBy: req.user?.name || 'HR'
         };
 
-        console.log('[Department] Firing n8n webhook to:', process.env.N8N_WEBHOOK_BASE_URL + '/department-manager-cascade');
+        console.log('[Department] Firing n8n webhook to:', process.env.N8N_WEBHOOK_BASE_URL);
         console.log('[Department] Webhook payload:', JSON.stringify(payload));
 
-        fetch(`${webhookBase}/department-manager-cascade`, {
+        fetch(`${webhookBase}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)

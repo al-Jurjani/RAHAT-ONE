@@ -161,7 +161,7 @@ function HRAttendanceOverviewPage() {
   const mappedRecords = useMemo(() => {
     const list = records.map((record) => ({
       id: record.id,
-      employeeName: record.employee_name || record.employeeName || getFieldName(record.employee_id),
+      employeeName: record.employee_name || getFieldName(record.employee_id_raw) || 'Unknown',
       branchName: record.branchName || '—',
       shiftName: record.shiftName || '—',
       checkIn: record.check_in,

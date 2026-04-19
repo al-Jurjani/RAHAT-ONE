@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import './Avatar.css';
 
 const PALETTE = [
@@ -21,18 +21,48 @@ function initials(name = '') {
 }
 
 function Avatar({ name = '', src, size = 'md', className = '' }) {
-  const hasImage = typeof src === 'string' && src.trim().length > 0;
+  const [imgError, setImgError] = useState(false);
+  const hasValidSrc = src && typeof src === 'string' && src.trim().length > 100 && !imgError;
+  const showImage = hasValidSrc;
+
+  const handleImageError = (event) => {
+    if (event?.currentTarget) {
+      event.currentTarget.style.display = 'none';
+    }
+    setImgError(true);
+  };
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
+  const initialsStyle = {
+    background: nameToColor(name),
+    color: '#fff'
+  };
 
   return (
     <div
       className={`avatar avatar--${size} ${className}`}
-      style={!hasImage ? { background: nameToColor(name) } : undefined}
+      style={initialsStyle}
       title={name}
     >
-      {hasImage ? (
-        <img src={src} alt={name} />
+      {showImage ? (
+        <img
+          src={src}
+          alt=""
+          onError={handleImageError}
+          onErrorCapture={handleImageError}
+          className="avatar-image"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+        />
       ) : (
-        <span style={{ color: '#fff' }}>{initials(name) || '?'}</span>
+        <div
+          className="avatar-initials"
+          style={{ width: '100%', height: '100%', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {initials(name) || '?'}
+        </div>
       )}
     </div>
   );
