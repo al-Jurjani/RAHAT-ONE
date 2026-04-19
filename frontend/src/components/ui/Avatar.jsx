@@ -21,13 +21,15 @@ function initials(name = '') {
 }
 
 function Avatar({ name = '', src, size = 'md', className = '' }) {
+  const hasImage = typeof src === 'string' && src.trim().length > 0;
+
   return (
     <div
       className={`avatar avatar--${size} ${className}`}
-      style={!src ? { background: nameToColor(name) } : undefined}
+      style={!hasImage ? { background: nameToColor(name) } : undefined}
       title={name}
     >
-      {src ? (
+      {hasImage ? (
         <img src={src} alt={name} />
       ) : (
         <span style={{ color: '#fff' }}>{initials(name) || '?'}</span>

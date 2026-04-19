@@ -19,6 +19,15 @@ const getFieldId = (field) => {
   return null;
 };
 
+const getAvatarSrc = (imageData) => {
+  if (!imageData || imageData === false) return null;
+  if (typeof imageData === 'string' && imageData.startsWith('data:')) return imageData;
+  if (typeof imageData === 'string' && imageData.length > 0) {
+    return `data:image/png;base64,${imageData}`;
+  }
+  return null;
+};
+
 function formatJoinDate(value) {
   if (!value) return '—';
   const parsed = new Date(String(value).replace(' ', 'T'));
@@ -301,7 +310,7 @@ function HREmployeeDirectoryPage() {
         <div className="hr-employee-directory__employee-cell">
           <Avatar
             name={row.name || 'Employee'}
-            src={row.image_128 ? `data:image/png;base64,${row.image_128}` : undefined}
+            src={getAvatarSrc(row.image_128)}
             size="md"
           />
           <div className="hr-employee-directory__employee-meta">
@@ -564,7 +573,7 @@ function HREmployeeDirectoryPage() {
                 <div className="hr-employee-directory__panel-top">
                   <Avatar
                     name={profileData.name || 'Employee'}
-                    src={profileData.image_512 ? `data:image/png;base64,${profileData.image_512}` : undefined}
+                    src={getAvatarSrc(profileData.image_512)}
                     size="lg"
                     className="hr-employee-directory__panel-avatar"
                   />

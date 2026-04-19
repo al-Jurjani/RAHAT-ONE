@@ -157,17 +157,28 @@ class DepartmentController {
 
       const webhookBase = process.env.N8N_WEBHOOK_BASE_URL;
       if (webhookBase) {
+        const payload = {
+          departmentId,
+          departmentName: departmentName || '',
+          managerId,
+          managerName: managerName || '',
+          triggeredBy: req.user?.name || 'HR'
+        };
+
+        console.log('[Department] Firing n8n webhook to:', process.env.N8N_WEBHOOK_BASE_URL + '/department-manager-cascade');
+        console.log('[Department] Webhook payload:', JSON.stringify(payload));
+
         fetch(`${webhookBase}/department-manager-cascade`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            departmentId,
-            departmentName: departmentName || '',
-            managerId,
-            managerName: managerName || '',
-            triggeredBy: req.user?.name || 'HR'
+          body: JSON.stringify(payload)
+        })
+          .then((response) => {
+            console.log('[Department] n8n webhook response status:', response.status);
           })
-        }).catch(() => {});
+          .catch((err) => {
+            console.error('[Department] n8n webhook failed:', err.message);
+          });
       }
 
       return res.status(200).json({

@@ -417,6 +417,7 @@ class AttendanceController {
 
       const summary = records.map((record) => ({
         id: record.id,
+        employee_id: record.employee_id,
         employeeId: Array.isArray(record.employee_id) ? record.employee_id[0] : null,
         employeeName: Array.isArray(record.employee_id) ? record.employee_id[1] : null,
         branchId: Array.isArray(record.branch_id) ? record.branch_id[0] : null,

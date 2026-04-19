@@ -8,12 +8,18 @@ import { Button, Card, DataTable, FormField, StatCard, StatusChip } from '../com
 import './HRAttendanceOverviewPage.css';
 
 const STATUS_OPTIONS = [
-  { value: 'all', label: 'All' },
+  { value: '', label: 'All Statuses' },
   { value: 'present', label: 'Present' },
   { value: 'late', label: 'Late' },
   { value: 'rejected', label: 'Rejected' },
-  { value: 'no_record', label: 'No Record' }
+  { value: 'no_record', label: 'Not Checked In' }
 ];
+
+const getFieldName = (field) => {
+  if (Array.isArray(field)) return field[1];
+  if (typeof field === 'string' && field.length > 0) return field;
+  return 'Unknown';
+};
 
 function todayString() {
   const now = new Date();
@@ -81,7 +87,7 @@ function HRAttendanceOverviewPage() {
 
   const [selectedDate, setSelectedDate] = useState(todayString());
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -155,7 +161,7 @@ function HRAttendanceOverviewPage() {
   const mappedRecords = useMemo(() => {
     const list = records.map((record) => ({
       id: record.id,
-      employeeName: record.employeeName || '—',
+      employeeName: record.employee_name || record.employeeName || getFieldName(record.employee_id),
       branchName: record.branchName || '—',
       shiftName: record.shiftName || '—',
       checkIn: record.check_in,
@@ -185,8 +191,9 @@ function HRAttendanceOverviewPage() {
   }, [records, selectedDate, stats.notCheckedIn, selectedBranch, branches]);
 
   const filteredRows = useMemo(() => {
-    if (statusFilter === 'all') return mappedRecords;
-    return mappedRecords.filter((row) => row.status === statusFilter);
+    if (statusFilter === '') return mappedRecords;
+    if (statusFilter === 'no_record') return mappedRecords.filter((row) => row.status === 'no_record');
+    return mappedRecords.filter((row) => row.status !== 'no_record' && row.status === statusFilter);
   }, [mappedRecords, statusFilter]);
 
   const columns = [

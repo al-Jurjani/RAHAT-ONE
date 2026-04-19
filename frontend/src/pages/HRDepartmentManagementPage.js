@@ -21,6 +21,15 @@ const getFieldId = (field) => {
   return null;
 };
 
+const getAvatarSrc = (imageData) => {
+  if (!imageData || imageData === false) return null;
+  if (typeof imageData === 'string' && imageData.startsWith('data:')) return imageData;
+  if (typeof imageData === 'string' && imageData.length > 0) {
+    return `data:image/png;base64,${imageData}`;
+  }
+  return null;
+};
+
 function HRDepartmentManagementPage() {
   const navigate = useNavigate();
 
@@ -321,7 +330,7 @@ function HRDepartmentManagementPage() {
                             <Avatar
                               key={employee.id || `${department.id}-${index}`}
                               name={employee.name || 'Employee'}
-                              src={employee.image_128 ? `data:image/png;base64,${employee.image_128}` : undefined}
+                              src={getAvatarSrc(employee.image_128)}
                               size="sm"
                               className="hr-department-management__preview-avatar"
                             />
@@ -475,7 +484,7 @@ function HRDepartmentManagementPage() {
                           <div className="hr-department-management__employee-main">
                             <Avatar
                               name={employee.name || 'Employee'}
-                              src={employee.image_128 ? `data:image/png;base64,${employee.image_128}` : undefined}
+                              src={getAvatarSrc(employee.image_128)}
                               size="sm"
                             />
                             <div className="hr-department-management__employee-meta">
