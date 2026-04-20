@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import AppShell from '../components/layout/AppShell';
 import { auditAPI } from '../services/api';
 import { Button, Card, DataTable, FormField, Modal, StatusChip, LoadingSpinner } from '../components/ui';
+import './AuditLogPage.css';
 
 const PAGE_SIZE = 100;
 
@@ -338,8 +339,9 @@ function AuditLogPage() {
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
         <Card>
           <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-3)' }}>
+            <div className="audit-log-filters-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-3)' }}>
               <FormField
+                className="audit-log-filter-field"
                 label="Module"
                 type="select"
                 name="module"
@@ -352,6 +354,7 @@ function AuditLogPage() {
               </FormField>
 
               <FormField
+                className="audit-log-filter-field"
                 label="Actor"
                 type="select"
                 name="actor"
@@ -364,6 +367,7 @@ function AuditLogPage() {
               </FormField>
 
               <FormField
+                className="audit-log-filter-field"
                 label="Start Date"
                 type="date"
                 name="startDate"
@@ -372,6 +376,7 @@ function AuditLogPage() {
               />
 
               <FormField
+                className="audit-log-filter-field"
                 label="End Date"
                 type="date"
                 name="endDate"
@@ -380,6 +385,7 @@ function AuditLogPage() {
               />
 
               <FormField
+                className="audit-log-filter-field"
                 label="Employee Name"
                 type="text"
                 name="employeeName"
@@ -388,7 +394,7 @@ function AuditLogPage() {
                 placeholder="Search loaded results"
               />
 
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <div className="audit-log-filters-action" style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <Button variant="ghost" onClick={handleClearFilters}>
                   Clear Filters
                 </Button>
