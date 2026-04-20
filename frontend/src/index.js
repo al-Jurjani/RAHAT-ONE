@@ -21,10 +21,21 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('/service-worker.js')
       .then((registration) => {
-        console.log('SW registered:', registration.scope);
+        // Force a version check now and every time the tab becomes visible,
+        // so deployments are picked up without waiting the default 24h.
+        registration.update();
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') registration.update();
+        });
       })
       .catch((error) => {
-        console.log('SW registration failed:', error);
+        console.error('SW registration failed:', error);
       });
+  });
+
+  // When a new SW takes control (skipWaiting + clients.claim fired), reload
+  // so the page runs the freshly cached JS/CSS bundles.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
   });
 }

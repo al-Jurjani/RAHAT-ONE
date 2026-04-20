@@ -55,3 +55,5 @@ backend/temp/*
 
 n8n-flows/
 receipts/
+
+temp/
