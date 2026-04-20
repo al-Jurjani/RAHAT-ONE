@@ -36,14 +36,18 @@ clip_image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "Pillow",
 )
 
-# Semantic verifier image: OCR + lightweight vision-language semantic checks.
-semantic_image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "torch",
-    "torchvision",
-    "open-clip-torch",
-    "easyocr",
-    "numpy",
-    "Pillow",
+# Font consistency image: OCR + typographic analysis for tamper detection.
+semantic_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install(
+        "torch",
+        "torchvision",
+        "pytesseract",
+        "opencv-python-headless",
+        "numpy",
+        "Pillow",
+    )
+    .apt_install("tesseract-ocr")
 )
 
 
@@ -109,7 +113,7 @@ def generate_clip_embedding(image_bytes: bytes) -> List[float]:
     return cast(List[float], embedding_list)
 
 
-# ===== LAYER 4: OCR + SEMANTIC VLM VERIFIER =====
+# ===== LAYER 4: FONT CONSISTENCY VERIFIER =====
 
 
 @app.function(
@@ -122,7 +126,7 @@ def detect_forgery_florence(
     image_bytes: bytes, claimed_amount: Optional[float] = None
 ) -> Dict:
     """
-    Analyze invoice tampering with OCR evidence plus lightweight semantic VLM checks.
+    Analyze invoice tampering with typographic consistency checks.
 
     Args:
         image_bytes: Raw image bytes
@@ -130,34 +134,22 @@ def detect_forgery_florence(
 
     Returns:
         Dict containing:
-            - analysis (str): Semantic reasoning summary
-            - fraud_score (float): 0.0-1.0 based on suspicious patterns
-            - flags (list): Specific issues detected
+            - font_consistency_score (float): 0.0-1.0 based on font consistency
+            - flagged_regions (list): Regions with typographic anomalies
+            - is_suspicious (bool): Whether typographic anomalies were detected
 
-    Processing time: ~4-6 seconds on T4 GPU
-    Use case: Detect Photoshopped amounts, font inconsistencies, copy-paste artifacts
+    Processing time: ~3-6 seconds on T4 GPU
+    Use case: Detect inconsistent font rendering, pasted totals, edited numeric fields
     """
-    import easyocr
     import numpy as np
-    import open_clip
+    import pytesseract
     import torch
     from PIL import Image
 
-    print("[L4-SEMANTIC] Loading OCR + CLIP semantic verifier...")
+    print("[L4-FONT] Loading font consistency verifier...")
 
-    model_name = "openclip-ViT-B-32-semantic"
-
-    # Move to GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
-        "ViT-B-32", pretrained="openai"
-    )
-    clip_model = clip_model.to(device)
-    clip_model.eval()
-
-    reader = easyocr.Reader(["en"], gpu=(device == "cuda"), verbose=False)
-
-    print(f"[L4-SEMANTIC] Analyzing document on {device}...")
+    print(f"[L4-FONT] Analyzing document on {device}...")
 
     # Load image
     image = Image.open(io.BytesIO(image_bytes))
@@ -176,232 +168,262 @@ def detect_forgery_florence(
             return [_to_builtin(v) for v in value]
         return value
 
-    ocr_results = reader.readtext(np.array(image), detail=1)
-    ocr_tokens = [r[1] for r in ocr_results if len(r) >= 2 and r[1]]
-    ocr_text = " ".join(ocr_tokens)
-    avg_ocr_conf = (
-        sum(float(r[2]) for r in ocr_results if len(r) >= 3) / len(ocr_results)
-        if ocr_results
-        else 0.0
-    )
-    ocr_with_region = [
-        {
-            "bbox": _to_builtin(r[0]),
-            "text": str(r[1]),
-            "confidence": float(r[2]) if len(r) >= 3 else 0.0,
+    def _build_box_from_tesseract_item(item):
+        x, y, w, h = int(item[6]), int(item[7]), int(item[8]), int(item[9])
+        return {
+            "left": x,
+            "top": y,
+            "width": max(w, 0),
+            "height": max(h, 0),
+            "right": x + max(w, 0),
+            "bottom": y + max(h, 0),
+            "cx": x + max(w, 0) / 2.0,
+            "cy": y + max(h, 0) / 2.0,
         }
-        for r in ocr_results
-    ]
 
-    def _bbox_metrics(bbox):
-        points = _to_builtin(bbox)
+    def _stroke_width_features(binary_region):
+        if binary_region.size == 0:
+            return None
+        foreground = binary_region == 0
+        if not foreground.any():
+            return None
         try:
-            xs = [float(point[0]) for point in points if len(point) >= 2]
-            ys = [float(point[1]) for point in points if len(point) >= 2]
+            import cv2
+
+            dist = cv2.distanceTransform(foreground.astype(np.uint8), cv2.DIST_L2, 5)
         except Exception:
             return None
-        if not xs or not ys:
+        stroke_values = dist[foreground]
+        if stroke_values.size == 0:
             return None
-        left = min(xs)
-        right = max(xs)
-        top = min(ys)
-        bottom = max(ys)
         return {
-            "cx": (left + right) / 2.0,
-            "cy": (top + bottom) / 2.0,
-            "width": max(right - left, 0.0),
-            "height": max(bottom - top, 0.0),
+            "stroke_width": float(np.mean(stroke_values) * 2.0),
+            "stroke_std": float(np.std(stroke_values) * 2.0),
+            "pixel_density": float(np.mean(foreground)),
         }
 
-    def _extract_total_candidate(results):
-        total_keywords = (
-            "grand total",
-            "total amount",
-            "amount due",
-            "balance due",
-            "invoice total",
-            "net total",
-            "total",
-            "fare",
-        )
-        amount_pattern = re.compile(r"\d{1,3}(?:[,.\s]\d{3})*(?:\.\d+)?|\d+\.\d+")
-        candidates = []
-        for index, result in enumerate(results):
-            bbox = _bbox_metrics(result[0])
-            text = str(result[1] or "")
-            confidence = float(result[2]) if len(result) >= 3 else 0.0
-            if bbox is None:
+    def _extract_numeric_region_features(image_array, ocr_data):
+        numeric_rows = []
+        for item in ocr_data:
+            text = str(item[11] or "").strip()
+            confidence = float(item[10]) if len(item) > 10 else 0.0
+            if not text:
                 continue
-            normalized = text.lower().replace("\n", " ").strip()
-            if not normalized:
+            normalized = text.replace(" ", "")
+            if not re.fullmatch(r"[0-9,./:-]+", normalized):
                 continue
-            has_keyword = any(keyword in normalized for keyword in total_keywords)
-            numbers = []
-            for raw in amount_pattern.findall(normalized):
-                compact = raw.replace(",", "").replace(" ", "")
-                try:
-                    value = float(compact)
-                except ValueError:
-                    continue
-                if value > 0:
-                    numbers.append(value)
-            if not numbers:
+            if confidence < 30:
                 continue
-            for value in numbers:
-                candidates.append(
-                    {
-                        "value": value,
-                        "confidence": confidence,
-                        "keyword_match": has_keyword,
-                        "bbox": bbox,
-                        "text": text,
-                        "index": index,
-                    }
+
+            box = _build_box_from_tesseract_item(item)
+            padding = 2
+            left = max(box["left"] - padding, 0)
+            top = max(box["top"] - padding, 0)
+            right = min(box["right"] + padding, image_array.shape[1])
+            bottom = min(box["bottom"] + padding, image_array.shape[0])
+            if right <= left or bottom <= top:
+                continue
+
+            crop = image_array[top:bottom, left:right]
+            if crop.size == 0:
+                continue
+
+            gray = crop if len(crop.shape) == 2 else np.mean(crop, axis=2)
+            gray = gray.astype(np.uint8)
+            try:
+                import cv2
+
+                _, binary = cv2.threshold(
+                    gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
                 )
-        candidates.sort(
-            key=lambda item: (
-                1 if item["keyword_match"] else 0,
-                item["confidence"],
-                item["bbox"]["width"],
-            ),
-            reverse=True,
+            except Exception:
+                binary = np.where(gray < 180, 0, 255).astype(np.uint8)
+
+            font_metrics = _stroke_width_features(binary)
+            if font_metrics is None:
+                continue
+
+            numeric_rows.append(
+                {
+                    "text": text,
+                    "confidence": confidence,
+                    "box": box,
+                    "stroke_width": font_metrics["stroke_width"],
+                    "stroke_std": font_metrics["stroke_std"],
+                    "pixel_density": font_metrics["pixel_density"],
+                }
+            )
+        return numeric_rows
+
+    def _parse_amount(text):
+        normalized = re.sub(r"[^0-9.,]", "", str(text or ""))
+        if not normalized or not re.search(r"\d", normalized):
+            return None
+        normalized = normalized.replace(",", "")
+        try:
+            value = float(normalized)
+            return value if value > 0 else None
+        except Exception:
+            return None
+
+    image_array = np.array(image)
+    tesseract_data = pytesseract.image_to_data(
+        image_array, output_type=pytesseract.Output.DICT, config="--psm 6"
+    )
+    row_count = len(tesseract_data.get("text", []))
+    ocr_rows = []
+    for index in range(row_count):
+        text = str(tesseract_data["text"][index] or "").strip()
+        if not text:
+            continue
+        ocr_rows.append(
+            [
+                tesseract_data["level"][index],
+                tesseract_data["page_num"][index],
+                tesseract_data["block_num"][index],
+                tesseract_data["par_num"][index],
+                tesseract_data["line_num"][index],
+                tesseract_data["word_num"][index],
+                tesseract_data["left"][index],
+                tesseract_data["top"][index],
+                tesseract_data["width"][index],
+                tesseract_data["height"][index],
+                tesseract_data["conf"][index],
+                text,
+            ]
         )
-        return candidates
 
-    total_candidates = _extract_total_candidate(ocr_results)
+    numeric_regions = _extract_numeric_region_features(image_array, ocr_rows)
+    stroke_widths = [region["stroke_width"] for region in numeric_regions]
+    mean_stroke_width = float(np.mean(stroke_widths)) if stroke_widths else 0.0
+    std_stroke_width = float(np.std(stroke_widths)) if stroke_widths else 0.0
+    mean_confidence = (
+        float(np.mean([region["confidence"] for region in numeric_regions]))
+        if numeric_regions
+        else 0.0
+    )
 
-    semantic_prompts = {
-        "fraud": [
-            "a tampered receipt with edited total amount",
-            "a receipt with overwritten or manipulated digits",
-            "a forged invoice where total text style differs",
-            "a suspicious altered travel receipt",
-        ],
-        "clean": [
-            "a clean unedited travel receipt",
-            "a legitimate invoice with consistent text style",
-            "an authentic receipt document",
-        ],
-    }
+    flagged_regions = []
+    is_suspicious = False
+    total_keywords = ("total", "grand total", "amount due", "balance due", "net total")
+    total_candidates = []
+    for region in numeric_regions:
+        label = "numeric"
+        nearby_text = " ".join(
+            row[11].lower()
+            for row in ocr_rows
+            if abs((row[6] + row[8] / 2.0) - region["box"]["cx"]) < 90
+            and abs((row[7] + row[9] / 2.0) - region["box"]["cy"]) < 40
+        )
+        if any(keyword in nearby_text for keyword in total_keywords):
+            label = "total"
 
-    image_tensor = clip_preprocess(image).unsqueeze(0).to(device)
-    all_prompts = semantic_prompts["fraud"] + semantic_prompts["clean"]
+        amount_value = _parse_amount(region["text"])
+        if amount_value is not None:
+            total_candidates.append(
+                {
+                    "value": amount_value,
+                    "label": label,
+                    "confidence": region["confidence"],
+                    "text": region["text"],
+                }
+            )
 
-    with torch.no_grad():
-        image_features = clip_model.encode_image(image_tensor)
-        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        text_tokens = open_clip.tokenize(all_prompts).to(device)
-        text_features = clip_model.encode_text(text_tokens)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-        logits = (100.0 * image_features @ text_features.T).squeeze(0)
-        probs = torch.softmax(logits, dim=0).detach().cpu().numpy()
+        deviation = 0.0
+        if std_stroke_width > 0:
+            deviation = (
+                abs(region["stroke_width"] - mean_stroke_width) / std_stroke_width
+            )
+        if deviation > 2.0 or (label == "total" and deviation > 1.5):
+            flagged_regions.append(
+                {
+                    "text": region["text"],
+                    "region": label,
+                    "stroke_width": round(region["stroke_width"], 3),
+                    "mean_stroke_width": round(mean_stroke_width, 3),
+                    "deviation": round(deviation, 2),
+                    "confidence": round(region["confidence"], 1),
+                }
+            )
 
-    fraud_probs = probs[: len(semantic_prompts["fraud"])]
-    clean_probs = probs[len(semantic_prompts["fraud"]) :]
-    max_fraud_prob = float(np.max(fraud_probs)) if len(fraud_probs) else 0.0
-    max_clean_prob = float(np.max(clean_probs)) if len(clean_probs) else 0.0
+    if flagged_regions:
+        is_suspicious = True
 
-    top_idx = int(np.argmax(probs)) if len(probs) else 0
-    top_prompt = all_prompts[top_idx] if all_prompts else "n/a"
-
-    detected_flags = []
-    analysis_lines = []
-    ocr_lower = ocr_text.lower()
-
+    total_candidates.sort(
+        key=lambda item: (
+            1 if item["label"] == "total" else 0,
+            item["confidence"],
+            item["value"],
+        ),
+        reverse=True,
+    )
+    detected_total_amount = total_candidates[0]["value"] if total_candidates else None
+    amount_delta_ratio = None
     amount_mismatch = False
-    total_line_font_variation = False
-    amount_delta_pct = None
-    ocr_amount = None
-    if total_candidates and claimed_amount is not None and claimed_amount > 0:
-        best_total = total_candidates[0]
-        ocr_amount = best_total["value"]
-        amount_delta_pct = abs(ocr_amount - claimed_amount) / claimed_amount
+    if (
+        detected_total_amount is not None
+        and claimed_amount is not None
+        and claimed_amount > 0
+    ):
+        amount_delta_ratio = abs(detected_total_amount - claimed_amount) / max(
+            detected_total_amount, claimed_amount
+        )
+        if amount_delta_ratio >= 0.18:
+            amount_mismatch = True
+            flagged_regions.append(
+                {
+                    "text": f"claimed={claimed_amount:.2f}, detected={detected_total_amount:.2f}",
+                    "region": "amount_consistency",
+                    "deviation": round(amount_delta_ratio * 10.0, 2),
+                    "confidence": round(mean_confidence, 1),
+                }
+            )
+            is_suspicious = True
 
-        if best_total["keyword_match"] and best_total["confidence"] >= 0.55:
-            if amount_delta_pct > 0.15:
-                amount_mismatch = True
-                detected_flags.append("ocr_amount_mismatch")
-
-        bbox_heights = []
-        for result in ocr_results:
-            metrics = _bbox_metrics(result[0])
-            if metrics is not None:
-                bbox_heights.append(metrics["height"])
-        if bbox_heights:
-            median_height = sorted(bbox_heights)[len(bbox_heights) // 2]
-            candidate_height = best_total["bbox"]["height"]
-            if (
-                median_height > 0
-                and abs(candidate_height - median_height) / median_height > 0.35
-            ):
-                total_line_font_variation = True
-                detected_flags.append("total_line_font_variation")
-
-    if max_fraud_prob > max_clean_prob:
-        detected_flags.append("semantic_fraud_prompt_match")
-    if max_fraud_prob >= 0.45:
-        detected_flags.append("semantic_high_fraud_confidence")
-    if avg_ocr_conf < 0.45:
-        detected_flags.append("low_ocr_confidence")
-
-    if len(ocr_lower.strip()) < 20:
-        detected_flags.append("ocr_text_too_short")
-
-    unique_flags = list(dict.fromkeys(detected_flags))
-
-    # Multi-signal scoring with OCR evidence + semantic verifier confidence.
-    score = 0.0
-    score += min(max_fraud_prob * 0.65, 0.65)
+    font_consistency_score = 1.0
+    if numeric_regions:
+        outlier_ratio = len(flagged_regions) / len(numeric_regions)
+        confidence_penalty = max(0.0, 1.0 - (mean_confidence / 100.0))
+        font_consistency_score = max(
+            0.0, min(1.0, 1.0 - (outlier_ratio * 0.7) - (confidence_penalty * 0.3))
+        )
     if amount_mismatch:
-        score += 0.25
-    if total_line_font_variation:
-        score += 0.20
-    if "semantic_high_fraud_confidence" in unique_flags:
-        score += 0.10
-    if "low_ocr_confidence" in unique_flags:
-        score += 0.05
-    if "ocr_text_too_short" in unique_flags:
-        score += 0.05
-    fraud_score = min(score, 1.0)
+        font_consistency_score = max(0.0, font_consistency_score - 0.25)
 
-    analysis_lines.append(
-        f"Top semantic prompt: '{top_prompt}' (fraud_conf={max_fraud_prob:.2f}, clean_conf={max_clean_prob:.2f})"
-    )
-    if amount_mismatch and ocr_amount is not None and claimed_amount is not None:
-        analysis_lines.append(
-            f"OCR amount mismatch: extracted={ocr_amount:.2f}, claimed={claimed_amount:.2f}, delta={amount_delta_pct:.2%}"
-        )
-    if total_line_font_variation:
-        analysis_lines.append(
-            "Total-line bounding box differs from the document median, suggesting a pasted or replaced amount area"
-        )
-    analysis_lines.append(
-        f"OCR confidence: {avg_ocr_conf:.2f}, OCR token count: {len(ocr_tokens)}"
-    )
-    analysis = "\n".join(analysis_lines)
+    analysis = [
+        f"Numeric regions analyzed: {len(numeric_regions)}",
+        f"Flagged regions: {len(flagged_regions)}",
+        f"Font consistency score: {font_consistency_score:.3f}",
+    ]
+    if detected_total_amount is not None:
+        analysis.append(f"Detected total candidate: {detected_total_amount:.2f}")
+    if claimed_amount is not None and claimed_amount > 0:
+        analysis.append(f"Claimed amount: {claimed_amount:.2f}")
+    if amount_delta_ratio is not None:
+        analysis.append(f"Amount delta ratio: {amount_delta_ratio:.2%}")
 
-    print(f"[L4-SEMANTIC] Flags: {unique_flags}, Score: {fraud_score}")
+    print(
+        f"[L4-FONT] Numeric regions={len(numeric_regions)} | Flagged={len(flagged_regions)} | Score={font_consistency_score:.3f}"
+    )
 
     return {
-        "analysis": analysis,
-        "ocr_text": ocr_text,
-        "ocr_with_region": ocr_with_region,
-        "forensic_vqa": {
-            "top_prompt": top_prompt,
-            "max_fraud_prob": max_fraud_prob,
-            "max_clean_prob": max_clean_prob,
-            "avg_ocr_confidence": avg_ocr_conf,
-        },
-        "semantic_scores": {
-            prompt: float(prob) for prompt, prob in zip(all_prompts, probs.tolist())
-        },
-        "fraud_score": fraud_score,
-        "flags": unique_flags,
-        "amount_mismatch": amount_mismatch,
-        "ocr_amount": ocr_amount,
+        "font_consistency_score": round(font_consistency_score, 4),
+        "flagged_regions": _to_builtin(flagged_regions),
+        "is_suspicious": is_suspicious,
+        "mean_stroke_width": round(mean_stroke_width, 4),
+        "std_stroke_width": round(std_stroke_width, 4),
+        "mean_ocr_confidence": round(mean_confidence, 2),
+        "numeric_region_count": len(numeric_regions),
         "claimed_amount": claimed_amount,
-        "amount_delta_pct": amount_delta_pct,
-        "model": model_name,
+        "detected_total_amount": round(detected_total_amount, 2)
+        if detected_total_amount is not None
+        else None,
+        "amount_delta_ratio": round(amount_delta_ratio, 4)
+        if amount_delta_ratio is not None
+        else None,
+        "amount_mismatch": amount_mismatch,
+        "analysis": "\n".join(analysis),
+        "model": "tesseract-font-consistency",
     }
 
 
@@ -548,67 +570,120 @@ def fastapi_app():
         return abs(current_amount - past_amount) / denom
 
     def run_phash_layer(p_hash: str, past_hashes: list, current_amount: float) -> dict:
-        max_sim = 0.0
-        matched_id = None
-        matched_amount_delta = None
+        candidates = []
         for past in past_hashes:
-            if past.get("perceptual_hash"):
-                sim = phash_similarity(p_hash, past["perceptual_hash"])
-                if sim > max_sim:
-                    max_sim = sim
-                    matched_id = past["id"]
-                    matched_amount_delta = amount_delta_ratio(
-                        current_amount, past.get("amount")
-                    )
+            if not past.get("perceptual_hash"):
+                continue
+            sim = phash_similarity(p_hash, past["perceptual_hash"])
+            delta = amount_delta_ratio(current_amount, past.get("amount"))
+            candidates.append(
+                {"id": past["id"], "similarity": sim, "amountDelta": delta}
+            )
 
-        likely_template_only = (
-            matched_amount_delta is not None and matched_amount_delta > 0.20
+        if not candidates:
+            return {
+                "score": 0.0,
+                "matched": False,
+                "matchedExpenseId": None,
+                "amountDeltaRatio": None,
+                "likelyTemplateOnly": False,
+                "templatePattern": False,
+                "similarity": 0.0,
+                "details": "No perceptual duplicates to compare",
+                "hash": p_hash,
+                "topMatches": [],
+                "highSimilarityCount": 0,
+                "veryHighSimilarityCount": 0,
+            }
+
+        candidates.sort(key=lambda item: item["similarity"], reverse=True)
+        top = candidates[0]
+        max_sim = top["similarity"]
+        matched_id = top["id"]
+        matched_amount_delta = top["amountDelta"]
+
+        high_count = sum(
+            1
+            for item in candidates
+            if item["similarity"] >= THRESHOLDS["pHash"]["high"]
         )
+        very_high_count = sum(
+            1
+            for item in candidates
+            if item["similarity"] >= THRESHOLDS["pHash"]["veryHigh"]
+        )
+        likely_template_only = (
+            matched_amount_delta is not None and matched_amount_delta > 0.25
+        )
+        template_pattern = high_count >= 3 and very_high_count == 0
 
         if max_sim >= THRESHOLDS["pHash"]["veryHigh"]:
-            if likely_template_only:
+            if matched_amount_delta is not None and matched_amount_delta <= 0.10:
                 score, detail = (
-                    0.20,
-                    f"Very high template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, but amount differs significantly",
+                    0.72,
+                    f"Near-identical pHash ({max_sim*100:.1f}%) to expense #{matched_id} with close amount",
+                )
+            elif likely_template_only:
+                score, detail = (
+                    0.42,
+                    f"Very high pHash ({max_sim*100:.1f}%) to expense #{matched_id} but amount differs significantly",
                 )
             else:
                 score, detail = (
-                    0.65,
-                    f"Very high similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
+                    0.56,
+                    f"Very high pHash similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
                 )
         elif max_sim >= THRESHOLDS["pHash"]["high"]:
-            if likely_template_only:
+            if template_pattern:
                 score, detail = (
-                    0.12,
-                    f"High template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, likely same receipt format",
+                    0.30,
+                    f"High pHash similarity pattern across {high_count} past expenses suggests repeated template reuse",
+                )
+            elif likely_template_only:
+                score, detail = (
+                    0.24,
+                    f"High pHash similarity ({max_sim*100:.1f}%) but amount delta indicates template-only overlap",
                 )
             else:
                 score, detail = (
-                    0.35,
-                    f"High similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
+                    0.38,
+                    f"High pHash similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
                 )
         elif max_sim >= THRESHOLDS["pHash"]["suspicious"]:
-            score, detail = (
-                0.15,
-                f"Moderate similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
-            )
+            score = 0.20 if template_pattern else 0.14
+            detail = f"Moderate pHash similarity ({max_sim*100:.1f}%) to expense #{matched_id}"
         else:
             score, detail = (
                 0.0,
-                f"No perceptual duplicates (max similarity: {max_sim*100:.1f}%)",
+                f"No meaningful pHash overlap (max similarity: {max_sim*100:.1f}%)",
             )
+
+        top_matches = [
+            {
+                "id": item["id"],
+                "similarity": round(item["similarity"], 4),
+                "amountDeltaRatio": round(item["amountDelta"], 4)
+                if item["amountDelta"] is not None
+                else None,
+            }
+            for item in candidates[:3]
+        ]
 
         return {
             "score": score,
-            "matched": max_sim >= THRESHOLDS["pHash"]["suspicious"],
+            "matched": max_sim >= THRESHOLDS["pHash"]["suspicious"] or template_pattern,
             "matchedExpenseId": matched_id,
             "amountDeltaRatio": round(matched_amount_delta, 4)
             if matched_amount_delta is not None
             else None,
             "likelyTemplateOnly": likely_template_only,
+            "templatePattern": template_pattern,
             "similarity": round(max_sim, 4),
             "details": detail,
             "hash": p_hash,
+            "topMatches": top_matches,
+            "highSimilarityCount": high_count,
+            "veryHighSimilarityCount": very_high_count,
         }
 
     def run_clip_layer(
@@ -622,84 +697,137 @@ def fastapi_app():
                 "embedding": clip_embedding,
                 "similarity": 0.0,
             }
-        max_sim = 0.0
-        matched_id = None
-        matched_amount_delta = None
+        candidates = []
         for past in past_embeddings:
             sim = cosine_similarity(clip_embedding, past["embedding"])
-            if sim > max_sim:
-                max_sim = sim
-                matched_id = past["id"]
-                matched_amount_delta = amount_delta_ratio(
-                    current_amount, past.get("amount")
-                )
+            delta = amount_delta_ratio(current_amount, past.get("amount"))
+            candidates.append(
+                {"id": past["id"], "similarity": sim, "amountDelta": delta}
+            )
 
-        likely_template_only = (
-            matched_amount_delta is not None and matched_amount_delta > 0.20
+        candidates.sort(key=lambda item: item["similarity"], reverse=True)
+        top = candidates[0]
+        max_sim = top["similarity"]
+        matched_id = top["id"]
+        matched_amount_delta = top["amountDelta"]
+
+        very_high_count = sum(
+            1
+            for item in candidates
+            if item["similarity"] >= THRESHOLDS["clip"]["veryHigh"]
         )
+        extreme_count = sum(
+            1
+            for item in candidates
+            if item["similarity"] >= THRESHOLDS["clip"]["extreme"]
+        )
+        likely_template_only = (
+            matched_amount_delta is not None and matched_amount_delta > 0.25
+        )
+        template_pattern = very_high_count >= 3 and extreme_count == 0
 
         if max_sim >= THRESHOLDS["clip"]["extreme"]:
-            if likely_template_only:
+            if matched_amount_delta is not None and matched_amount_delta <= 0.10:
                 score, detail = (
-                    0.25,
-                    f"Extremely high visual template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, but amount differs significantly",
+                    0.76,
+                    f"Extremely high CLIP similarity ({max_sim*100:.1f}%) to expense #{matched_id} with close amount",
+                )
+            elif likely_template_only:
+                score, detail = (
+                    0.44,
+                    f"Extreme visual similarity ({max_sim*100:.1f}%) to expense #{matched_id} with a large amount delta",
                 )
             else:
                 score, detail = (
-                    0.75,
-                    f"Extremely similar ({max_sim*100:.1f}%) to expense #{matched_id} - likely same receipt",
+                    0.58,
+                    f"Extremely high CLIP similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
                 )
         elif max_sim >= THRESHOLDS["clip"]["veryHigh"]:
-            if likely_template_only:
+            if template_pattern:
                 score, detail = (
-                    0.15,
-                    f"Very high visual template similarity ({max_sim*100:.1f}%) to expense #{matched_id}, likely same layout",
+                    0.30,
+                    f"High CLIP similarity pattern across {very_high_count} expenses indicates repeated visual template",
+                )
+            elif likely_template_only:
+                score, detail = (
+                    0.24,
+                    f"Very high visual similarity ({max_sim*100:.1f}%) but amount delta suggests layout reuse",
                 )
             else:
                 score, detail = (
-                    0.45,
-                    f"Very similar ({max_sim*100:.1f}%) to expense #{matched_id} - possibly rescanned",
+                    0.40,
+                    f"Very high CLIP similarity ({max_sim*100:.1f}%) to expense #{matched_id}",
                 )
         elif max_sim >= THRESHOLDS["clip"]["moderate"]:
-            score, detail = (
-                0.20,
-                f"Somewhat similar ({max_sim*100:.1f}%) to expense #{matched_id}",
-            )
+            score = 0.18 if template_pattern else 0.12
+            detail = f"Moderate visual similarity ({max_sim*100:.1f}%) to expense #{matched_id}"
         else:
             score, detail = (
                 0.0,
-                f"No visual duplicates (max similarity: {max_sim*100:.1f}%)",
+                f"No meaningful CLIP overlap (max similarity: {max_sim*100:.1f}%)",
             )
+
+        top_matches = [
+            {
+                "id": item["id"],
+                "similarity": round(item["similarity"], 4),
+                "amountDeltaRatio": round(item["amountDelta"], 4)
+                if item["amountDelta"] is not None
+                else None,
+            }
+            for item in candidates[:3]
+        ]
 
         return {
             "score": score,
-            "matched": max_sim >= THRESHOLDS["clip"]["moderate"],
+            "matched": max_sim >= THRESHOLDS["clip"]["moderate"] or template_pattern,
             "matchedExpenseId": matched_id,
             "amountDeltaRatio": round(matched_amount_delta, 4)
             if matched_amount_delta is not None
             else None,
             "likelyTemplateOnly": likely_template_only,
+            "templatePattern": template_pattern,
             "similarity": round(max_sim, 4),
             "details": detail,
             "embedding": clip_embedding,
+            "topMatches": top_matches,
+            "veryHighSimilarityCount": very_high_count,
+            "extremeSimilarityCount": extreme_count,
         }
 
     def run_florence_layer(florence_result: dict) -> dict:
-        flags = florence_result.get("flags", [])
-        detail = (
-            f"Detected {len(flags)} suspicious patterns: {', '.join(flags)}"
-            if flags
-            else "No forgery indicators detected"
-        )
+        flags = florence_result.get("flagged_regions", [])
+        detail_parts = ["Local text-region consistency analysis complete"]
+        if florence_result.get("amount_mismatch"):
+            detected = florence_result.get("detected_total_amount")
+            claimed = florence_result.get("claimed_amount")
+            detail_parts.append(
+                f"Claimed amount mismatch (detected={detected}, claimed={claimed})"
+            )
+        detail = " | ".join(detail_parts)
+        font_score = float(florence_result.get("font_consistency_score", 0.0))
+        base_score = 1.0 - font_score
+        if florence_result.get("amount_mismatch"):
+            base_score = max(base_score, 0.45)
         return {
-            "score": florence_result.get("fraud_score", 0.0),
+            "score": round(min(max(base_score, 0.0), 1.0), 4),
+            "matched": bool(florence_result.get("is_suspicious", False)),
             "flags": flags,
             "details": detail,
+            "font_consistency_score": florence_result.get(
+                "font_consistency_score", 0.0
+            ),
+            "flagged_regions": flags,
+            "is_suspicious": florence_result.get("is_suspicious", False),
+            "mean_stroke_width": florence_result.get("mean_stroke_width", 0.0),
+            "std_stroke_width": florence_result.get("std_stroke_width", 0.0),
+            "mean_ocr_confidence": florence_result.get("mean_ocr_confidence", 0.0),
+            "numeric_region_count": florence_result.get("numeric_region_count", 0),
+            "amount_mismatch": florence_result.get("amount_mismatch", False),
+            "claimed_amount": florence_result.get("claimed_amount"),
+            "detected_total_amount": florence_result.get("detected_total_amount"),
+            "amount_delta_ratio": florence_result.get("amount_delta_ratio"),
             "analysis": florence_result.get("analysis", ""),
-            "ocr_text": florence_result.get("ocr_text", ""),
-            "ocr_with_region": florence_result.get("ocr_with_region", []),
-            "forensic_vqa": florence_result.get("forensic_vqa", {}),
-            "semantic_scores": florence_result.get("semantic_scores", {}),
         }
 
     def run_anomaly_layer(amount: float, stats: Optional[dict]) -> dict:
@@ -737,21 +865,44 @@ def fastapi_app():
 
     def aggregate(layers: dict) -> tuple:
         """Returns (overallScore, status, confidence, recommendation)"""
-        # Weighted score
+        # Weighted score remains a supporting signal, but routing now prioritizes
+        # exact duplicates and anomaly behavior over blended averages.
         overall = sum(layers[k]["score"] * WEIGHTS[k] for k in WEIGHTS)
 
-        template_plus_anomaly = layers["anomaly"].get("score", 0) >= 0.80 and (
-            layers["pHash"].get("likelyTemplateOnly") is True
-            or layers["clip"].get("likelyTemplateOnly") is True
+        anomaly_score = layers["anomaly"].get("score", 0)
+        p_hash_strong = layers["pHash"].get("matched") is True and (
+            layers["pHash"].get("score", 0) >= 0.40
+            or layers["pHash"].get("similarity", 0) >= THRESHOLDS["pHash"]["veryHigh"]
         )
-        florence_strong = layers["florence"].get("score", 0) >= 0.65
+        clip_strong = layers["clip"].get("matched") is True and (
+            layers["clip"].get("score", 0) >= 0.40
+            or layers["clip"].get("similarity", 0) >= THRESHOLDS["clip"]["veryHigh"]
+        )
+        florence_support = (
+            layers["florence"].get("matched") is True
+            or layers["florence"].get("score", 0) >= 0.25
+        )
+        cross_layer_duplicate = (
+            layers["pHash"].get("similarity", 0) >= THRESHOLDS["pHash"]["high"]
+            and layers["clip"].get("similarity", 0) >= THRESHOLDS["clip"]["veryHigh"]
+            and (
+                layers["pHash"].get("amountDeltaRatio") is None
+                or layers["pHash"].get("amountDeltaRatio") <= 0.15
+            )
+            and (
+                layers["clip"].get("amountDeltaRatio") is None
+                or layers["clip"].get("amountDeltaRatio") <= 0.15
+            )
+        )
 
         # Status
         if layers["md5"]["matched"]:
             status = "fraudulent"
-        elif florence_strong:
+        elif anomaly_score >= 0.80:
             status = "fraudulent"
-        elif template_plus_anomaly:
+        elif cross_layer_duplicate:
+            status = "fraudulent"
+        elif anomaly_score >= 0.60 or p_hash_strong or clip_strong or florence_support:
             status = "suspicious"
         elif overall >= THRESHOLDS["overall"]["fraudulent"]:
             status = "fraudulent"
@@ -771,15 +922,22 @@ def fastapi_app():
         if status == "fraudulent":
             if layers["md5"]["matched"]:
                 rec = "REJECT - Exact duplicate file detected"
-            elif layers["pHash"]["matched"] and layers["clip"]["matched"]:
-                rec = "REJECT - Multiple duplicate detection methods confirm fraud"
+            elif anomaly_score >= 0.80:
+                rec = "REJECT - Strong statistical anomaly detected"
+            elif cross_layer_duplicate:
+                rec = "REJECT - Layer 2 and 3 agree on near-duplicate receipt with aligned amount"
             else:
-                rec = "ESCALATE TO HR - High fraud probability detected"
+                rec = "REJECT - Fraud indicators exceeded the hard threshold"
         elif status == "suspicious":
-            flagged = [k for k in layers if layers[k]["score"] > 0.4]
-            rec = (
-                f"MANUAL REVIEW REQUIRED - Suspicious patterns in: {', '.join(flagged)}"
-            )
+            if anomaly_score >= 0.60:
+                rec = "ESCALATE TO HR - Strong anomaly signal requires direct HR review"
+            else:
+                flagged = [
+                    k
+                    for k in ["pHash", "clip", "florence"]
+                    if layers[k]["score"] > 0.20
+                ]
+                rec = f"ESCALATE TO HR - Supporting evidence in: {', '.join(flagged)}"
         else:
             rec = "APPROVE - No fraud indicators detected"
 

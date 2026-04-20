@@ -126,7 +126,8 @@ async function runFraudDetection(imageBuffer, employeeId, amount) {
             clipResult = await runCLIPLayer(
                 mlResults.clipEmbedding,
                 employeeId,
-                pastExpenses
+                pastExpenses,
+                amount
             );
 
             // Layer 5: Florence-2 Forgery Detection
@@ -245,58 +246,114 @@ async function runPHashLayer(imageBuffer, employeeId) {
         limit: 100
     });
 
-    // Find most similar
-    let maxSimilarity = 0;
-    let matchedExpenseId = null;
+    const amountDeltaRatio = (a, b) => {
+        if (a === null || a === undefined || b === null || b === undefined) return null;
+        const amountA = Number(a);
+        const amountB = Number(b);
+        if (!Number.isFinite(amountA) || !Number.isFinite(amountB) || amountA <= 0 || amountB <= 0) return null;
+        return Math.abs(amountA - amountB) / Math.max(amountA, amountB);
+    };
 
+    const candidates = [];
     for (const expense of pastHashes) {
-        if (expense.perceptual_hash) {
-            const similarity = pHashSimilarity(pHash, expense.perceptual_hash);
-            if (similarity > maxSimilarity) {
-                maxSimilarity = similarity;
-                matchedExpenseId = expense.id;
-            }
-        }
+        if (!expense.perceptual_hash) continue;
+        const similarity = pHashSimilarity(pHash, expense.perceptual_hash);
+        const delta = amountDeltaRatio(amount, expense.total_amount);
+        candidates.push({ id: expense.id, similarity, amountDelta: delta });
     }
 
-    // Determine fraud score based on similarity
+    if (candidates.length === 0) {
+        return {
+            score: 0,
+            matched: false,
+            matchedExpenseId: null,
+            similarity: 0,
+            amountDeltaRatio: null,
+            likelyTemplateOnly: false,
+            templatePattern: false,
+            highSimilarityCount: 0,
+            veryHighSimilarityCount: 0,
+            details: 'No perceptual duplicates to compare',
+            hash: pHash,
+            topMatches: []
+        };
+    }
+
+    candidates.sort((a, b) => b.similarity - a.similarity);
+    const top = candidates[0];
+    const maxSimilarity = top.similarity;
+    const matchedExpenseId = top.id;
+    const matchedAmountDelta = top.amountDelta;
+
+    const highSimilarityCount = candidates.filter(c => c.similarity >= THRESHOLDS.pHash.highSimilarity).length;
+    const veryHighSimilarityCount = candidates.filter(c => c.similarity >= THRESHOLDS.pHash.veryHighSimilarity).length;
+    const likelyTemplateOnly = matchedAmountDelta !== null && matchedAmountDelta > 0.25;
+    const templatePattern = highSimilarityCount >= 3 && veryHighSimilarityCount === 0;
+
     let score = 0;
     let details = '';
 
     if (maxSimilarity >= THRESHOLDS.pHash.veryHighSimilarity) {
-        score = 0.90;  // Very likely rescanned/rotated duplicate
-        details = `Very high similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        if (matchedAmountDelta !== null && matchedAmountDelta <= 0.10) {
+            score = 0.72;
+            details = `Near-identical pHash (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId} with close amount`;
+        } else if (likelyTemplateOnly) {
+            score = 0.42;
+            details = `Very high pHash (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId} but amount differs significantly`;
+        } else {
+            score = 0.56;
+            details = `Very high pHash similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        }
     } else if (maxSimilarity >= THRESHOLDS.pHash.highSimilarity) {
-        score = 0.60;  // High similarity, needs review
-        details = `High similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        if (templatePattern) {
+            score = 0.30;
+            details = `High pHash similarity pattern across ${highSimilarityCount} expenses suggests repeated template reuse`;
+        } else if (likelyTemplateOnly) {
+            score = 0.24;
+            details = `High pHash similarity (${(maxSimilarity * 100).toFixed(1)}%) but amount delta indicates template-only overlap`;
+        } else {
+            score = 0.38;
+            details = `High pHash similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        }
     } else if (maxSimilarity >= THRESHOLDS.pHash.suspicious) {
-        score = 0.30;  // Suspicious
-        details = `Moderate similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        score = templatePattern ? 0.20 : 0.14;
+        details = `Moderate pHash similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
     } else {
-        score = 0.0;   // Clean
-        details = `No perceptual duplicates found (max similarity: ${(maxSimilarity * 100).toFixed(1)}%)`;
+        score = 0;
+        details = `No meaningful pHash overlap (max similarity: ${(maxSimilarity * 100).toFixed(1)}%)`;
     }
 
     return {
         score,
-        matched: maxSimilarity >= THRESHOLDS.pHash.suspicious,
+        matched: maxSimilarity >= THRESHOLDS.pHash.suspicious || templatePattern,
         matchedExpenseId,
         similarity: maxSimilarity,
+        amountDeltaRatio: matchedAmountDelta,
+        likelyTemplateOnly,
+        templatePattern,
+        highSimilarityCount,
+        veryHighSimilarityCount,
         details,
-        hash: pHash
+        hash: pHash,
+        topMatches: candidates.slice(0, 3).map(item => ({
+            id: item.id,
+            similarity: item.similarity,
+            amountDeltaRatio: item.amountDelta
+        }))
     };
 }
 
 /**
  * Layer 3: CLIP - Visual Similarity Detection
  */
-async function runCLIPLayer(clipEmbedding, employeeId, pastExpenses) {
+async function runCLIPLayer(clipEmbedding, employeeId, pastExpenses, amount) {
     // Filter expenses that have CLIP embeddings
     const pastEmbeddings = pastExpenses
         .filter(exp => exp.clip_embedding)
         .map(exp => ({
             id: exp.id,
-            embedding: JSON.parse(exp.clip_embedding)
+            embedding: JSON.parse(exp.clip_embedding),
+            total_amount: exp.total_amount
         }));
 
     if (pastEmbeddings.length === 0) {
@@ -308,34 +365,80 @@ async function runCLIPLayer(clipEmbedding, employeeId, pastExpenses) {
         };
     }
 
-    // Find most similar embedding
-    const { maxSimilarity, matchedExpenseId } = findMostSimilar(clipEmbedding, pastEmbeddings);
+    const amountDeltaRatio = (a, b) => {
+        if (a === null || a === undefined || b === null || b === undefined) return null;
+        const amountA = Number(a);
+        const amountB = Number(b);
+        if (!Number.isFinite(amountA) || !Number.isFinite(amountB) || amountA <= 0 || amountB <= 0) return null;
+        return Math.abs(amountA - amountB) / Math.max(amountA, amountB);
+    };
 
-    // Determine fraud score
+    const candidates = pastEmbeddings.map(past => ({
+        id: past.id,
+        similarity: cosineSimilarity(clipEmbedding, past.embedding),
+        amountDelta: amountDeltaRatio(amount, past.total_amount)
+    })).sort((a, b) => b.similarity - a.similarity);
+
+    const top = candidates[0];
+    const maxSimilarity = top.similarity;
+    const matchedExpenseId = top.id;
+    const matchedAmountDelta = top.amountDelta;
+
+    const verySimilarCount = candidates.filter(c => c.similarity >= THRESHOLDS.clip.verySimilar).length;
+    const extremeCount = candidates.filter(c => c.similarity >= THRESHOLDS.clip.extremelySimilar).length;
+    const likelyTemplateOnly = matchedAmountDelta !== null && matchedAmountDelta > 0.25;
+    const templatePattern = verySimilarCount >= 3 && extremeCount === 0;
+
     let score = 0;
     let details = '';
 
     if (maxSimilarity >= THRESHOLDS.clip.extremelySimilar) {
-        score = 0.95;
-        details = `Extremely similar (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId} - likely same receipt`;
+        if (matchedAmountDelta !== null && matchedAmountDelta <= 0.10) {
+            score = 0.76;
+            details = `Extremely high CLIP similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId} with close amount`;
+        } else if (likelyTemplateOnly) {
+            score = 0.44;
+            details = `Extreme visual similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId} with large amount delta`;
+        } else {
+            score = 0.58;
+            details = `Extremely high CLIP similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        }
     } else if (maxSimilarity >= THRESHOLDS.clip.verySimilar) {
-        score = 0.70;
-        details = `Very similar (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId} - possibly rescanned`;
+        if (templatePattern) {
+            score = 0.30;
+            details = `High CLIP similarity pattern across ${verySimilarCount} expenses indicates repeated visual template`;
+        } else if (likelyTemplateOnly) {
+            score = 0.24;
+            details = `Very high visual similarity (${(maxSimilarity * 100).toFixed(1)}%) but amount delta suggests layout reuse`;
+        } else {
+            score = 0.40;
+            details = `Very high CLIP similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        }
     } else if (maxSimilarity >= THRESHOLDS.clip.somewhatSimilar) {
-        score = 0.35;
-        details = `Somewhat similar (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
+        score = templatePattern ? 0.18 : 0.12;
+        details = `Moderate visual similarity (${(maxSimilarity * 100).toFixed(1)}%) to expense #${matchedExpenseId}`;
     } else {
-        score = 0.0;
-        details = `No visual duplicates found (max similarity: ${(maxSimilarity * 100).toFixed(1)}%)`;
+        score = 0;
+        details = `No meaningful CLIP overlap (max similarity: ${(maxSimilarity * 100).toFixed(1)}%)`;
     }
 
     return {
         score,
-        matched: maxSimilarity >= THRESHOLDS.clip.somewhatSimilar,
+        matched: maxSimilarity >= THRESHOLDS.clip.somewhatSimilar || templatePattern,
         matchedExpenseId,
         similarity: maxSimilarity,
+        amountDeltaRatio: matchedAmountDelta,
+        likelyTemplateOnly,
+        templatePattern,
+        veryHighSimilarityCount: verySimilarCount,
+        extremeSimilarityCount: extremeCount,
         details,
-        embedding: clipEmbedding
+        embedding: clipEmbedding,
+        topMatches: candidates.slice(0, 3).map(item => ({
+            id: item.id,
+            similarity: item.similarity,
+            amountDeltaRatio: item.amountDelta
+        }))
     };
 }
 
@@ -343,20 +446,32 @@ async function runCLIPLayer(clipEmbedding, employeeId, pastExpenses) {
  * Layer 4: Florence-2 - Forgery Detection
  */
 function runFlorenceLayer(florenceAnalysis) {
-    const { fraud_score, flags, analysis } = florenceAnalysis;
+    const flags = florenceAnalysis.flagged_regions || florenceAnalysis.flags || [];
+    const fontConsistency = Number(florenceAnalysis.font_consistency_score ?? 1);
+    let score = 1 - fontConsistency;
 
-    let details = '';
-    if (flags.length > 0) {
-        details = `Detected ${flags.length} suspicious patterns: ${flags.join(', ')}`;
-    } else {
-        details = 'No forgery indicators detected';
+    if (florenceAnalysis.amount_mismatch) {
+        score = Math.max(score, 0.45);
     }
 
+    const details = florenceAnalysis.amount_mismatch
+        ? `Local text consistency suspicious: claimed/detected total mismatch (claimed=${florenceAnalysis.claimed_amount}, detected=${florenceAnalysis.detected_total_amount})`
+        : (flags.length > 0
+            ? `Detected ${flags.length} local text consistency anomalies`
+            : 'No local text consistency anomalies detected');
+
     return {
-        score: fraud_score,
+        score: Math.max(0, Math.min(1, score)),
+        matched: Boolean(florenceAnalysis.is_suspicious),
         flags,
         details,
-        analysis
+        analysis: florenceAnalysis.analysis || '',
+        font_consistency_score: florenceAnalysis.font_consistency_score,
+        flagged_regions: flags,
+        amount_mismatch: Boolean(florenceAnalysis.amount_mismatch),
+        claimed_amount: florenceAnalysis.claimed_amount,
+        detected_total_amount: florenceAnalysis.detected_total_amount,
+        amount_delta_ratio: florenceAnalysis.amount_delta_ratio
     };
 }
 
@@ -452,6 +567,30 @@ function determineStatus(overallScore, layers) {
         return 'fraudulent';
     }
 
+    const crossLayerDuplicate =
+        (layers.pHash.similarity || 0) >= THRESHOLDS.pHash.highSimilarity &&
+        (layers.clip.similarity || 0) >= THRESHOLDS.clip.verySimilar &&
+        (layers.pHash.amountDeltaRatio == null || layers.pHash.amountDeltaRatio <= 0.15) &&
+        (layers.clip.amountDeltaRatio == null || layers.clip.amountDeltaRatio <= 0.15);
+
+    if ((layers.anomaly.score || 0) >= 0.80) {
+        return 'fraudulent';
+    }
+
+    if (crossLayerDuplicate) {
+        return 'fraudulent';
+    }
+
+    if (
+        (layers.anomaly.score || 0) >= 0.60 ||
+        (layers.pHash.matched && ((layers.pHash.score || 0) >= 0.40 || (layers.pHash.similarity || 0) >= THRESHOLDS.pHash.veryHighSimilarity)) ||
+        (layers.clip.matched && ((layers.clip.score || 0) >= 0.40 || (layers.clip.similarity || 0) >= THRESHOLDS.clip.verySimilar)) ||
+        layers.florence.matched ||
+        (layers.florence.score || 0) >= 0.25
+    ) {
+        return 'suspicious';
+    }
+
     // Check thresholds
     if (overallScore >= THRESHOLDS.overall.fraudulent) {
         return 'fraudulent';
@@ -495,20 +634,39 @@ function calculateConfidence(layers) {
  * Generate recommendation for action
  */
 function generateRecommendation(status, layers) {
+    const crossLayerDuplicate =
+        (layers.pHash.similarity || 0) >= THRESHOLDS.pHash.highSimilarity &&
+        (layers.clip.similarity || 0) >= THRESHOLDS.clip.verySimilar &&
+        (layers.pHash.amountDeltaRatio == null || layers.pHash.amountDeltaRatio <= 0.15) &&
+        (layers.clip.amountDeltaRatio == null || layers.clip.amountDeltaRatio <= 0.15);
+
     if (status === 'fraudulent') {
         if (layers.md5.matched) {
             return 'REJECT - Exact duplicate file detected';
-        } else if (layers.pHash.matched && layers.clip.matched) {
-            return 'REJECT - Multiple duplicate detection methods confirm fraud';
+        } else if ((layers.anomaly.score || 0) >= 0.80) {
+            return 'REJECT - Strong statistical anomaly detected';
+        } else if (crossLayerDuplicate) {
+            return 'REJECT - Layer 2 and 3 agree on a near-duplicate receipt with aligned amount';
         } else {
-            return 'ESCALATE TO HR - High fraud probability detected';
+            return 'REJECT - Fraud indicators exceeded the hard threshold';
         }
     } else if (status === 'suspicious') {
         const suspiciousLayers = Object.entries(layers)
-            .filter(([_, layer]) => layer.score > 0.4)
+            .filter(([name, layer]) => {
+                if (name === 'anomaly') return (layer.score || 0) >= 0.60;
+                if (name === 'md5') return false;
+                if (name === 'pHash') return layer.matched && ((layer.score || 0) >= 0.40 || (layer.similarity || 0) >= THRESHOLDS.pHash.veryHighSimilarity);
+                if (name === 'clip') return layer.matched && ((layer.score || 0) >= 0.40 || (layer.similarity || 0) >= THRESHOLDS.clip.verySimilar);
+                if (name === 'florence') return layer.matched || (layer.score || 0) >= 0.25;
+                return (layer.score || 0) > 0.4;
+            })
             .map(([name]) => name);
 
-        return `MANUAL REVIEW REQUIRED - Suspicious patterns in: ${suspiciousLayers.join(', ')}`;
+        if ((layers.anomaly.score || 0) >= 0.60) {
+            return 'ESCALATE TO HR - Strong anomaly signal requires direct HR review';
+        }
+
+        return `ESCALATE TO HR - Supporting evidence in: ${suspiciousLayers.join(', ')}`;
     } else {
         return 'APPROVE - No fraud indicators detected';
     }
