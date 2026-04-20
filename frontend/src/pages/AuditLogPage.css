@@ -1,0 +1,11 @@
+.audit-log-filters-grid .form-field {
+  margin-top: 0;
+}
+
+.audit-log-filters-grid .form-field + .form-field {
+  margin-top: 0;
+}
+
+.audit-log-filters-action {
+  min-height: 100%;
+}

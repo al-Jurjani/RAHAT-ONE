@@ -150,6 +150,35 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
 
   const canApproveReject = expense.workflow_status === 'pending_hr';
 
+  const toDisplayText = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch (_) {
+      return String(value);
+    }
+  };
+
+  const formatFlagLabel = (flag) => {
+    if (flag === null || flag === undefined) return '';
+    if (typeof flag === 'string' || typeof flag === 'number' || typeof flag === 'boolean') {
+      return String(flag);
+    }
+    if (typeof flag === 'object') {
+      const text = flag.text || 'value';
+      const region = flag.region || 'numeric';
+      const deviation = Number(flag.deviation);
+      if (Number.isFinite(deviation)) {
+        return `${region}: ${text} (${deviation.toFixed(2)}σ)`;
+      }
+      return `${region}: ${text}`;
+    }
+    return String(flag);
+  };
+
   return (
     <Dialog
       open={open}
@@ -250,20 +279,21 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
         {(() => {
           const layers = fraudDetails?.layers || {};
 
-          const renderLayer = (emoji, title, weight, layerData, extraContent) => {
+          const renderLayer = (title, weight, layerData, extraContent) => {
             // Handle both old format (string) and new format (object)
             const isLegacyString = typeof layerData === 'string';
             const score = isLegacyString ? null : (layerData?.score ?? null);
             const details = isLegacyString
               ? layerData
               : (layerData?.details || (fraudDetails ? 'No data available' : 'Not fetched â€” re-submit expense to generate analysis'));
+            const detailsText = toDisplayText(details);
             const skipped = details?.includes('Skipped') || details?.includes('unavailable');
             const hasError = layerData?.error;
             return (
               <Paper key={title} sx={{ p: 2, mb: 2, borderLeft: `4px solid ${score === null || skipped ? '#9e9e9e' : score >= 0.7 ? '#d32f2f' : score >= 0.4 ? '#ed6c02' : '#2e7d32'}` }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                    {emoji} {title} ({weight}% weight)
+                    {title} ({weight}% weight)
                   </Typography>
                   {score !== null && !skipped ? (
                     <Chip
@@ -276,7 +306,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                   )}
                 </Box>
                 <Typography variant="body2" color={hasError ? 'error' : 'textSecondary'} sx={{ mb: extraContent ? 1 : 0 }}>
-                  {details}
+                  {detailsText}
                 </Typography>
                 {extraContent}
               </Paper>
@@ -297,6 +327,16 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
               {layers.pHash?.similarity !== undefined && (
                 <Typography variant="caption" sx={{ display: 'block', color: '#616161' }}>
                   Max similarity to past invoices: {(layers.pHash.similarity * 100).toFixed(1)}%
+                </Typography>
+              )}
+              {layers.pHash?.amountDeltaRatio !== undefined && layers.pHash?.amountDeltaRatio !== null && (
+                <Typography variant="caption" sx={{ display: 'block', color: '#616161' }}>
+                  Amount delta vs closest match: {(Number(layers.pHash.amountDeltaRatio) * 100).toFixed(1)}%
+                </Typography>
+              )}
+              {layers.pHash?.templatePattern && (
+                <Typography variant="caption" sx={{ display: 'block', color: '#e65100', mt: 0.5 }}>
+                  Repeated template pattern detected across multiple historical receipts
                 </Typography>
               )}
               {expenseData.perceptual_hash && (
@@ -340,6 +380,16 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                     Max visual similarity to past invoices: {(similarity * 100).toFixed(1)}%
                   </Typography>
                 )}
+                {layers.clip?.amountDeltaRatio !== undefined && layers.clip?.amountDeltaRatio !== null && (
+                  <Typography variant="caption" sx={{ display: 'block', color: '#616161', mb: 0.5 }}>
+                    Amount delta vs closest visual match: {(Number(layers.clip.amountDeltaRatio) * 100).toFixed(1)}%
+                  </Typography>
+                )}
+                {layers.clip?.templatePattern && (
+                  <Typography variant="caption" sx={{ display: 'block', color: '#e65100', mb: 0.5 }}>
+                    Repeated visual template pattern detected
+                  </Typography>
+                )}
                 {embeddingEl || (
                   <Typography variant="caption" sx={{ color: '#9e9e9e' }}>
                     {layers.clip?.error ? 'ML service was unavailable' : 'No embedding stored (skipped or not yet run)'}
@@ -349,55 +399,62 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
             );
           })();
 
-          // Layer 4: Florence-2
+          // Layer 4: Local text consistency
           const florenceExtra = (() => {
-            const analysis = expenseData.florence_analysis || layers.florence?.analysis;
-            const flags = layers.florence?.flags;
-            const verifier = layers.florence?.forensic_vqa || {};
-            const semanticScores = layers.florence?.semantic_scores || {};
-            const topSemantic = Object.entries(semanticScores)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 3);
+            const analysis = expenseData.florence_analysis || layers.florence?.details || layers.florence?.analysis;
+            const flags = layers.florence?.flagged_regions || layers.florence?.flags || [];
+            const fontScore = layers.florence?.font_consistency_score;
+            const meanStroke = layers.florence?.mean_stroke_width;
+            const meanConfidence = layers.florence?.mean_ocr_confidence;
+            const numericCount = layers.florence?.numeric_region_count;
             return (
               <Box>
+                {fontScore !== undefined && (
+                  <Box sx={{ mb: 1, p: 1, bgcolor: '#f3f6ff', borderRadius: 1, border: '1px solid #c5d4ff' }}>
+                    <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
+                      Font consistency: {(Number(fontScore) * 100).toFixed(1)}%
+                    </Typography>
+                    {meanStroke !== undefined && (
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
+                        Mean stroke width: {Number(meanStroke).toFixed(2)}
+                      </Typography>
+                    )}
+                    {meanConfidence !== undefined && (
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
+                        OCR confidence: {Number(meanConfidence).toFixed(1)}%
+                      </Typography>
+                    )}
+                    {numericCount !== undefined && (
+                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
+                        Numeric regions analyzed: {numericCount}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
                 {flags && flags.length > 0 && (
                   <Box sx={{ mb: 1 }}>
-                    {flags.map(f => <Chip key={f} label={f} size="small" color="warning" sx={{ mr: 0.5, mb: 0.5 }} />)}
-                  </Box>
-                )}
-                {(verifier.top_prompt || verifier.max_fraud_prob !== undefined) && (
-                  <Box sx={{ mb: 1, p: 1, bgcolor: '#f3f6ff', borderRadius: 1, border: '1px solid #c5d4ff' }}>
-                    {verifier.top_prompt && (
-                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
-                        Semantic top prompt: {verifier.top_prompt}
-                      </Typography>
-                    )}
-                    {verifier.max_fraud_prob !== undefined && (
-                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
-                        Fraud confidence: {(verifier.max_fraud_prob * 100).toFixed(1)}% | Clean confidence: {((verifier.max_clean_prob || 0) * 100).toFixed(1)}%
-                      </Typography>
-                    )}
-                  </Box>
-                )}
-                {topSemantic.length > 0 && (
-                  <Box sx={{ mb: 1 }}>
                     <Typography variant="caption" sx={{ display: 'block', color: '#616161', mb: 0.5 }}>
-                      Top semantic matches:
+                      Flagged regions:
                     </Typography>
-                    {topSemantic.map(([label, val]) => (
-                      <Typography key={label} variant="caption" sx={{ display: 'block', color: '#757575' }}>
-                        â€¢ {label}: {(Number(val) * 100).toFixed(1)}%
-                      </Typography>
-                    ))}
+                    {flags.map((flag, idx) => {
+                      const label = typeof flag === 'object'
+                        ? `${flag.region || 'numeric'}: ${flag.text || 'value'}${flag.deviation !== undefined ? ` (${Number(flag.deviation).toFixed(2)}σ)` : ''}`
+                        : String(flag);
+                      return (
+                        <Typography key={`${label}-${idx}`} variant="caption" sx={{ display: 'block', color: '#757575' }}>
+                          • {label}
+                        </Typography>
+                      );
+                    })}
                   </Box>
                 )}
                 {analysis && analysis !== 'null' && analysis !== 'false' ? (
                   <Box sx={{ p: 1.5, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
                     <Typography variant="caption" sx={{ fontWeight: 600, color: '#e65100', display: 'block', mb: 0.5 }}>
-                      Semantic Verifier Reasoning:
+                      Layer reasoning:
                     </Typography>
                     <Typography variant="body2" sx={{ color: '#424242', whiteSpace: 'pre-wrap' }}>
-                      {analysis}
+                      {toDisplayText(analysis)}
                     </Typography>
                   </Box>
                 ) : (
@@ -427,11 +484,11 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
 
           return (
             <>
-              {renderLayer('ðŸ”’', 'Layer 1: MD5 Hash', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
-              {renderLayer('ðŸ–¼ï¸', 'Layer 2: Perceptual Hash (pHash)', Math.round((layerWeights.pHash || 0) * 100), layers.pHash, phashExtra)}
-              {renderLayer('ðŸ¤–', 'Layer 3: CLIP Visual Similarity', Math.round((layerWeights.clip || 0) * 100), layers.clip, clipExtra)}
-              {renderLayer('ðŸ§ ', 'Layer 4: Semantic Forensic Verifier', Math.round((layerWeights.florence || 0) * 100), layers.florence, florenceExtra)}
-              {renderLayer('ðŸ“Š', 'Layer 5: Anomaly Detection', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
+              {renderLayer('Layer 1: MD5 Hash', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
+              {renderLayer('Layer 2: Perceptual Hash (pHash)', Math.round((layerWeights.pHash || 0) * 100), layers.pHash, phashExtra)}
+              {renderLayer('Layer 3: CLIP Visual Similarity', Math.round((layerWeights.clip || 0) * 100), layers.clip, clipExtra)}
+              {renderLayer('Layer 4: Local Text Consistency', Math.round((layerWeights.florence || 0) * 100), layers.florence, florenceExtra)}
+              {renderLayer('Layer 5: Anomaly Detection', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
             </>
           );
         })()}

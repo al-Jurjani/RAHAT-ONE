@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -9,52 +9,48 @@ import {
   Box,
   IconButton,
   Typography,
-  Alert
+  Alert,
 } from '@mui/material';
 import { Close, Download } from '@mui/icons-material';
+import { hrAPI } from '../services/api';
 
 function DocumentViewerModal({ open, onClose, documentId, documentName, documentType }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
   const [documentUrl, setDocumentUrl] = useState(null);
 
-  const loadDocument = useCallback(async () => {
+  // Load when the modal opens (or documentId changes); revoke URL on cleanup.
+  useEffect(() => {
+    if (!open || !documentId) return;
+
+    let objectUrl = null;
+    let cancelled = false;
+
     setLoading(true);
     setError(null);
+    setDocumentUrl(null);
 
-    try {
-      const response = await fetch(
-        `http://localhost:5000/api/hr/verification/document/${documentId}`
-      );
+    hrAPI.getDocument(documentId)
+      .then((response) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(response.data);
+        setDocumentUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load document');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-      if (!response.ok) {
-        throw new Error('Failed to load document');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      setDocumentUrl(url);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [documentId]);
-
-  useEffect(() => {
-    if (open && documentId) {
-      loadDocument();
-    }
-
-    // Cleanup: revoke object URL when modal closes
     return () => {
-      if (documentUrl) {
-        URL.revokeObjectURL(documentUrl);
-      }
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [open, documentId, loadDocument, documentUrl]);
+  }, [open, documentId]); // intentionally excludes documentUrl to prevent loop
 
   const handleDownload = () => {
+    if (!documentUrl) return;
     const link = document.createElement('a');
     link.href = documentUrl;
     link.download = documentName;
@@ -62,61 +58,35 @@ function DocumentViewerModal({ open, onClose, documentId, documentName, document
   };
 
   const isImage = documentType?.startsWith('image/');
-  const isPDF = documentType === 'application/pdf';
+  const isPDF   = documentType === 'application/pdf';
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      PaperProps={{ sx: { height: '90vh' } }}
-    >
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth
+      PaperProps={{ sx: { height: '90vh' } }}>
       <DialogTitle>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Typography variant="h6">{documentName}</Typography>
-          <IconButton onClick={onClose} size="small">
-            <Close />
-          </IconButton>
+          <IconButton onClick={onClose} size="small"><Close /></IconButton>
         </Box>
       </DialogTitle>
 
       <DialogContent dividers sx={{ p: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         {loading && <CircularProgress />}
 
-        {error && (
-          <Alert severity="error">{error}</Alert>
-        )}
+        {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
 
         {!loading && !error && documentUrl && (
           <>
             {isImage && (
-              <Box
-                component="img"
-                src={documentUrl}
-                alt={documentName}
-                sx={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  objectFit: 'contain'
-                }}
-              />
+              <Box component="img" src={documentUrl} alt={documentName}
+                sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
             )}
-
             {isPDF && (
-              <iframe
-                src={documentUrl}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none'
-                }}
-                title={documentName}
-              />
+              <iframe src={documentUrl} style={{ width: '100%', height: '100%', border: 'none' }}
+                title={documentName} />
             )}
-
             {!isImage && !isPDF && (
-              <Alert severity="info">
+              <Alert severity="info" sx={{ m: 2 }}>
                 Preview not available for this file type. Please download to view.
               </Alert>
             )}
@@ -128,9 +98,7 @@ function DocumentViewerModal({ open, onClose, documentId, documentName, document
         <Button onClick={handleDownload} startIcon={<Download />} disabled={!documentUrl}>
           Download
         </Button>
-        <Button onClick={onClose} variant="contained">
-          Close
-        </Button>
+        <Button onClick={onClose} variant="contained">Close</Button>
       </DialogActions>
     </Dialog>
   );

@@ -66,9 +66,6 @@ const EMPLOYEE_NAV_SECTIONS = [
 function Sidebar({ collapsed, onToggle }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const nav = user?.role === 'hr'
-    ? HR_NAV_SECTIONS.flatMap((section) => section.items)
-    : EMPLOYEE_NAV_SECTIONS.flatMap((section) => section.items);
 
   const handleLogout = () => {
     logout();
