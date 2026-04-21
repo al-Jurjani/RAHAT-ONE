@@ -324,25 +324,20 @@ function RegistrationPage() {
           : null;
 
         return (
-          <Grid container spacing={3}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
-            {/* Assignment info — full width, shows even if only one is present */}
+            {/* Assignment info — full width */}
             {(assignedDept || assignedPos) && (
-              <Grid item xs={12}>
-                <Alert severity="info" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
-                  {assignedDept && (
-                    <Box><strong>Department:</strong> {assignedDept}</Box>
-                  )}
-                  {assignedPos && (
-                    <Box><strong>Position:</strong> {assignedPos}</Box>
-                  )}
-                </Alert>
-              </Grid>
+              <Alert severity="info">
+                {assignedDept && <Box><strong>Department:</strong> {assignedDept}</Box>}
+                {assignedPos  && <Box><strong>Position:</strong>   {assignedPos}</Box>}
+              </Alert>
             )}
 
-            {/* Left column */}
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Two columns — explicit flex so both always start at the same Y */}
+            <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+              {/* Left: personal identifiers */}
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                 <TextField required fullWidth label="Personal Email" name="personalEmail" type="email"
                   value={formData.personalEmail} onChange={handleInputChange} />
                 <TextField required fullWidth label="Full Name" name="name"
@@ -350,11 +345,9 @@ function RegistrationPage() {
                 <TextField required fullWidth label="Father's Name" name="fatherName"
                   value={formData.fatherName} onChange={handleInputChange} />
               </Box>
-            </Grid>
 
-            {/* Right column */}
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              {/* Right: document / contact details */}
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                 <TextField
                   required fullWidth label="CNIC Number" name="cnicNumber"
                   placeholder="12345-1234567-1"
@@ -377,17 +370,15 @@ function RegistrationPage() {
                   InputLabelProps={{ shrink: true }}
                 />
               </Box>
-            </Grid>
+            </Box>
 
-            {/* Work email preview — full width */}
+            {/* Work email preview */}
             {workEmailPreview && (
-              <Grid item xs={12}>
-                <Alert severity="info">
-                  Your work email will be: <strong>{workEmailPreview}</strong>
-                </Alert>
-              </Grid>
+              <Alert severity="info">
+                Your work email will be: <strong>{workEmailPreview}</strong>
+              </Alert>
             )}
-          </Grid>
+          </Box>
         );
       }
 
@@ -448,13 +439,13 @@ function RegistrationPage() {
             </Grid>
             {employeeType === 'office' && (
               <Grid item xs={12}>
-                <FileUploadField label="Degree Certificate (Optional)" name="degree"
+                <FileUploadField label="Degree Certificate" name="degree"
                   accept=".pdf,image/*" onChange={handleFileChange} file={files.degree} />
               </Grid>
             )}
             {employeeType === 'office' ? (
               <Grid item xs={12}>
-                <FileUploadField label="Medical Certificate (Optional)" name="medical"
+                <FileUploadField label="Medical Certificate" name="medical"
                   accept=".pdf,image/*" onChange={handleFileChange} file={files.medical} />
               </Grid>
             ) : (
