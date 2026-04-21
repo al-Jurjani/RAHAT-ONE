@@ -1,242 +1,187 @@
-/**
- * LeaveHistoryTable Component
- * Path: frontend/src/components/leave/LeaveHistoryTable.jsx
- *
- * Displays employee's leave request history
- */
-
 import React, { useState, useEffect } from 'react';
-import {
-  Card,
-  CardContent,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  CircularProgress,
-  Alert,
-  Box,
-  Tabs,
-  Tab,
-  IconButton,
-  Tooltip
-} from '@mui/material';
-import {
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  HourglassEmpty as HourglassEmptyIcon,
-  Notes as NotesIcon,
-  Timelapse as TimelapseIcon
-} from '@mui/icons-material';
+import { CircularProgress, Alert } from '@mui/material';
 import axios from 'axios';
-import LeaveMessagesDialog from './LeaveMessagesDialog';
+
+const STATUS_MAP = {
+  confirm:   { label: 'Pending',    color: 'var(--status-warning)',  bg: 'var(--status-warning-bg)'  },
+  validate1: { label: 'Pending HR', color: 'var(--status-info)',     bg: 'var(--status-info-bg)'     },
+  validate:  { label: 'Approved',   color: 'var(--status-success)',  bg: 'var(--status-success-bg)'  },
+  refuse:    { label: 'Rejected',   color: 'var(--status-danger)',   bg: 'var(--status-danger-bg)'   },
+  draft:     { label: 'Draft',      color: 'var(--text-muted)',      bg: 'var(--bg-elevated)'        },
+};
+
+const FILTERS = [
+  { label: 'All',      value: 'all'      },
+  { label: 'Pending',  value: 'confirm'  },
+  { label: 'Approved', value: 'validate' },
+  { label: 'Rejected', value: 'refuse'   },
+];
+
+const fmt = (d) =>
+  new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+const StatusChip = ({ state }) => {
+  const s = STATUS_MAP[state] || STATUS_MAP.draft;
+  return (
+    <span style={{
+      display: 'inline-block',
+      fontSize: 'var(--text-xs)',
+      fontWeight: 600,
+      color: s.color,
+      background: s.bg,
+      borderRadius: 'var(--radius-full)',
+      padding: '3px 10px',
+    }}>
+      {s.label}
+    </span>
+  );
+};
 
 const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
-  const [leaves, setLeaves] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedLeaveId, setSelectedLeaveId] = useState(null);
+  const [leaves, setLeaves]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [filter, setFilter]     = useState('all');
 
   useEffect(() => {
-    fetchLeaves();
-  }, [refreshTrigger, filterStatus]);
-
-  const fetchLeaves = async () => {
-  try {
-    setLoading(true);
-    const token = localStorage.getItem('accessToken');
-
-    console.log('🔍 Fetching employee leave history...');
-
-    // Use /my-leaves endpoint for employee's own leaves
-    const response = await axios.get('http://localhost:5000/api/leaves/my-leaves', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    console.log('✅ Employee leaves fetched:', response.data.length);
-    setLeaves(response.data);
-    setError('');
-    } catch (err) {
-      console.error('Error fetching leave history:', err);
-      setError(err.response?.data?.message || 'Failed to load leave history');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getStatusChip = (state) => {
-    const statusConfig = {
-      confirm: {
-        label: 'Pending',
-        color: 'warning',
-        icon: <HourglassEmptyIcon fontSize="small" />
-      },
-      validate1: {
-        label: 'Pending HR',
-        color: 'info',
-        icon: <TimelapseIcon fontSize="small" />
-      },
-      validate: {
-        label: 'Approved',
-        color: 'success',
-        icon: <CheckCircleIcon fontSize="small" />
-      },
-      refuse: {
-        label: 'Rejected',
-        color: 'error',
-        icon: <CancelIcon fontSize="small" />
-      },
-      draft: {
-        label: 'Draft',
-        color: 'default',
-        icon: null
+    let cancelled = false;
+    const fetch = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('accessToken');
+        const { data } = await axios.get('http://localhost:5000/api/leaves/my-leaves', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!cancelled) { setLeaves(data); setError(null); }
+      } catch (err) {
+        if (!cancelled) setError(err.response?.data?.message || 'Failed to load leave history');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
+    fetch();
+    return () => { cancelled = true; };
+  }, [refreshTrigger]);
 
-    const config = statusConfig[state] || statusConfig.draft;
-
-    return (
-      <Chip
-        label={config.label}
-        color={config.color}
-        size="small"
-        icon={config.icon}
-      />
-    );
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const handleTabChange = (event, newValue) => {
-    setFilterStatus(newValue);
-  };
+  const visible = filter === 'all' ? leaves : leaves.filter((l) => l.state === filter);
 
   if (loading) {
     return (
-      <Card>
-        <CardContent sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </CardContent>
-      </Card>
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-8)' }}>
+          <CircularProgress size={28} />
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardContent>
-          <Alert severity="error">{error}</Alert>
-        </CardContent>
-      </Card>
+      <div style={card}>
+        <Alert severity="error">{error}</Alert>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Leave History
-        </Typography>
+    <div style={card}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+        <p style={heading}>Leave History</p>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          {FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              style={{
+                padding: '4px 14px',
+                borderRadius: 'var(--radius-full)',
+                border: filter === f.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
+                background: filter === f.value ? 'var(--accent-subtle)' : 'transparent',
+                color: filter === f.value ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'var(--transition-fast)',
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {/* Status Filter Tabs */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={filterStatus} onChange={handleTabChange}>
-            <Tab label="All" value="all" />
-            <Tab label="Pending" value="confirm" />
-            <Tab label="Approved" value="validate" />
-            <Tab label="Rejected" value="refuse" />
-          </Tabs>
-        </Box>
-
-        {leaves.length === 0 ? (
-          <Alert severity="info">
-            No leave requests found.
-          </Alert>
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell><strong>Leave Type</strong></TableCell>
-                  <TableCell><strong>Start Date</strong></TableCell>
-                  <TableCell><strong>End Date</strong></TableCell>
-                  <TableCell align="center"><strong>Days</strong></TableCell>
-                  <TableCell><strong>Status</strong></TableCell>
-                  <TableCell><strong>Remarks</strong></TableCell>
-                  <TableCell><strong>Submitted</strong></TableCell>
-                  <TableCell align="center"><strong>Log</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {leaves.map((leave) => (
-                  <TableRow key={leave.id} hover>
-                    <TableCell>
-                      {leave.holiday_status_id[1]}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(leave.request_date_from)}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(leave.request_date_to)}
-                    </TableCell>
-                    <TableCell align="center">
-                      <strong>{leave.number_of_days}</strong>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusChip(leave.state)}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {leave.name || '-'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {formatDate(leave.create_date)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="View decision log">
-                        <IconButton size="small" onClick={() => setSelectedLeaveId(leave.id)}>
-                          <NotesIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
+      {visible.length === 0 ? (
+        <Alert severity="info">No leave requests found.</Alert>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
+                {['Leave Type', 'From', 'To', 'Days', 'Status', 'Remarks', 'Submitted'].map((h) => (
+                  <th key={h} style={th}>{h}</th>
                 ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((leave) => (
+                <tr key={leave.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td style={td}>{leave.holiday_status_id[1]}</td>
+                  <td style={td}>{fmt(leave.request_date_from)}</td>
+                  <td style={td}>{fmt(leave.request_date_to)}</td>
+                  <td style={{ ...td, fontWeight: 600, textAlign: 'center' }}>{leave.number_of_days}</td>
+                  <td style={td}><StatusChip state={leave.state} /></td>
+                  <td style={{ ...td, color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {leave.name || '—'}
+                  </td>
+                  <td style={{ ...td, color: 'var(--text-muted)' }}>{fmt(leave.create_date)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        {/* Summary */}
-        {leaves.length > 0 && (
-          <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              Showing <strong>{leaves.length}</strong> leave request{leaves.length !== 1 ? 's' : ''}
-            </Typography>
-          </Box>
-        )}
-      </CardContent>
-
-      <LeaveMessagesDialog
-        leaveId={selectedLeaveId}
-        open={!!selectedLeaveId}
-        onClose={() => setSelectedLeaveId(null)}
-      />
-    </Card>
+      {visible.length > 0 && (
+        <p style={{ marginTop: 'var(--space-3)', marginBottom: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+          {visible.length} record{visible.length !== 1 ? 's' : ''}
+        </p>
+      )}
+    </div>
   );
+};
+
+const card = {
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 'var(--radius-lg)',
+  padding: 'var(--space-6)',
+};
+
+const heading = {
+  margin: 0,
+  fontSize: 'var(--text-lg)',
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+  fontFamily: 'var(--font-display)',
+};
+
+const th = {
+  padding: 'var(--space-2) var(--space-3)',
+  textAlign: 'left',
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  color: 'var(--text-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  whiteSpace: 'nowrap',
+};
+
+const td = {
+  padding: 'var(--space-3)',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--text-primary)',
+  whiteSpace: 'nowrap',
 };
 
 export default LeaveHistoryTable;

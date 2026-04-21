@@ -140,6 +140,18 @@ router.get('/my-leaves', leaveController.getMyLeaves);
 router.get('/statistics', leaveController.getStatistics);
 
 /**
+ * GET /api/leaves/auto-approved
+ * Leaves approved automatically by the policy flow
+ */
+router.get('/auto-approved', leaveController.getAutoApprovedLeaves);
+
+/**
+ * GET /api/leaves/auto-rejected
+ * Leaves rejected automatically by the policy flow (probation/balance/blackout)
+ */
+router.get('/auto-rejected', leaveController.getAutoRejectedLeaves);
+
+/**
  * GET /api/leaves/employees
  * Get all employees for allocation management
  */

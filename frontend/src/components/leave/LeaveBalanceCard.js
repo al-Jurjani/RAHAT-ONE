@@ -1,179 +1,150 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Card,
-  CardContent,
-  Typography,
-  Box,
-  CircularProgress,
-  Alert,
-  Grid,
-  LinearProgress,
-  Chip
-} from '@mui/material';
+import { CircularProgress, Alert } from '@mui/material';
 import axios from 'axios';
 
-const LeaveBalanceCard = () => {
+const LeaveBalanceCard = ({ refreshTrigger = 0 }) => {
   const [balances, setBalances] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
 
   useEffect(() => {
-    fetchBalances();
-  }, []);
+    let cancelled = false;
+    const fetch = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('accessToken');
+        const headers = { Authorization: `Bearer ${token}` };
 
-  const fetchBalances = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('accessToken');
+        const { data: types } = await axios.get(
+          'http://localhost:5000/api/leaves/types', { headers }
+        );
 
-      console.log('🔍 Fetching leave types...');
+        const results = await Promise.all(
+          types.map(async (type) => {
+            try {
+              const { data } = await axios.get(
+                `http://localhost:5000/api/leaves/balance?leave_type_id=${type.id}`,
+                { headers }
+              );
+              return { ...type, balance: data.data || data };
+            } catch {
+              return { ...type, balance: { total: 0, used: 0, remaining: 0 } };
+            }
+          })
+        );
 
-      // First get all leave types
-      const typesResponse = await axios.get('http://localhost:5000/api/leaves/types', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const types = typesResponse.data;
-      console.log('✅ Leave types:', types);
-
-      // Then get balance for each type
-      const balancePromises = types.map(async (type) => {
-        try {
-          const balanceResponse = await axios.get(
-            `http://localhost:5000/api/leaves/balance?leave_type_id=${type.id}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-
-          return {
-            ...type,
-            balance: balanceResponse.data.data || balanceResponse.data
-          };
-        } catch (err) {
-          console.error(`Error fetching balance for ${type.name}:`, err);
-          return {
-            ...type,
-            balance: { total: 0, used: 0, remaining: 0 }
-          };
-        }
-      });
-
-      const balancesWithTypes = await Promise.all(balancePromises);
-      console.log('✅ Balances fetched:', balancesWithTypes);
-
-      setBalances(balancesWithTypes);
-      setError(null);
-    } catch (err) {
-      console.error('❌ Error fetching balances:', err);
-      setError('Failed to load leave balances');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculatePercentage = (used, total) => {
-    if (total === 0) return 0;
-    return (used / total) * 100;
-  };
+        if (!cancelled) { setBalances(results); setError(null); }
+      } catch {
+        if (!cancelled) setError('Failed to load leave balances');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetch();
+    return () => { cancelled = true; };
+  }, [refreshTrigger]);
 
   if (loading) {
     return (
-      <Card>
-        <CardContent sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </CardContent>
-      </Card>
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-8)' }}>
+          <CircularProgress size={28} />
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardContent>
-          <Alert severity="error">{error}</Alert>
-        </CardContent>
-      </Card>
+      <div style={card}>
+        <Alert severity="error">{error}</Alert>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Leave Balances
-        </Typography>
+    <div style={card}>
+      <p style={heading}>Leave Balances</p>
 
-        <Grid container spacing={2} sx={{ mt: 1 }}>
+      {balances.length === 0 ? (
+        <Alert severity="warning" sx={{ mt: 1 }}>
+          No leave types available. Contact HR for allocations.
+        </Alert>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {balances.map((item) => {
             const { balance } = item;
-            const percentage = calculatePercentage(balance.used, balance.total);
+            const pct = balance.total > 0
+              ? Math.min(100, (balance.used / balance.total) * 100)
+              : 0;
+            const color = balance.remaining > 5
+              ? 'var(--status-success)'
+              : balance.remaining > 0
+                ? 'var(--status-warning)'
+                : 'var(--status-danger)';
+            const bgColor = balance.remaining > 5
+              ? 'var(--status-success-bg)'
+              : balance.remaining > 0
+                ? 'var(--status-warning-bg)'
+                : 'var(--status-danger-bg)';
 
             return (
-              <Grid item xs={12} sm={6} key={item.id}>
-                <Box
-                  sx={{
-                    p: 2,
-                    border: '1px solid #e0e0e0',
-                    borderRadius: 1,
-                    backgroundColor: balance.remaining === 0 ? '#fff3e0' : '#fff'
-                  }}
-                >
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                      {item.name}
-                    </Typography>
-                    <Chip
-                      label={`${balance.remaining} days left`}
-                      color={balance.remaining > 5 ? 'success' : balance.remaining > 0 ? 'warning' : 'error'}
-                      size="small"
-                    />
-                  </Box>
+              <div key={item.id} style={{ ...balanceRow, background: bgColor }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {item.name}
+                  </span>
+                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color, background: 'var(--bg-surface)', borderRadius: 'var(--radius-full)', padding: '2px 10px', border: `1px solid ${color}` }}>
+                    {balance.remaining} left
+                  </span>
+                </div>
 
-                  <Box sx={{ mb: 1 }}>
-                    <LinearProgress
-                      variant="determinate"
-                      value={percentage}
-                      sx={{
-                        height: 8,
-                        borderRadius: 1,
-                        backgroundColor: '#e0e0e0',
-                        '& .MuiLinearProgress-bar': {
-                          backgroundColor: balance.remaining > 5 ? '#4caf50' : balance.remaining > 0 ? '#ff9800' : '#f44336'
-                        }
-                      }}
-                    />
-                  </Box>
+                {/* Progress bar */}
+                <div style={{ height: 6, borderRadius: 99, background: 'var(--bg-elevated)', overflow: 'hidden', marginBottom: 'var(--space-2)' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 0.4s ease' }} />
+                </div>
 
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                    <Typography variant="body2" color="textSecondary">
-                      Total: <strong>{balance.total}</strong>
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Used: <strong>{balance.used}</strong>
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Available: <strong>{balance.remaining}</strong>
-                    </Typography>
-                  </Box>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  {[['Total', balance.total], ['Used', balance.used], ['Available', balance.remaining]].map(([label, val]) => (
+                    <span key={label} style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                      {label}: <strong style={{ color: 'var(--text-primary)' }}>{val}</strong>
+                    </span>
+                  ))}
+                </div>
 
-                  {balance.total === 0 && (
-                    <Alert severity="info" sx={{ mt: 1 }}>
-                      No allocation for this leave type. Contact HR.
-                    </Alert>
-                  )}
-                </Box>
-              </Grid>
+                {balance.total === 0 && (
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)', marginBottom: 0 }}>
+                    No allocation — contact HR.
+                  </p>
+                )}
+              </div>
             );
           })}
-        </Grid>
-
-        {balances.length === 0 && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            No leave types available. Contact HR for leave allocations.
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
+};
+
+const card = {
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 'var(--radius-lg)',
+  padding: 'var(--space-6)',
+};
+
+const heading = {
+  margin: '0 0 var(--space-4)',
+  fontSize: 'var(--text-lg)',
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+  fontFamily: 'var(--font-display)',
+};
+
+const balanceRow = {
+  borderRadius: 'var(--radius-md)',
+  padding: 'var(--space-4)',
+  border: '1px solid var(--border-subtle)',
 };
 
 export default LeaveBalanceCard;

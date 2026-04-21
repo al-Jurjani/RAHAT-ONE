@@ -1,12 +1,5 @@
-/**
- * EmployeeLeavePage Component
- * Path: frontend/src/pages/EmployeeLeavePage.jsx
- *
- * Main page for employee leave management
- */
-
 import React, { useState } from 'react';
-import { Grid } from '@mui/material';
+import { Tabs, Tab, Box } from '@mui/material';
 import LeaveBalanceCard from '../components/leave/LeaveBalanceCard';
 import LeaveRequestForm from '../components/leave/LeaveRequestForm';
 import LeaveHistoryTable from '../components/leave/LeaveHistoryTable';
@@ -16,44 +9,57 @@ import { LoadingSpinner } from '../components/ui';
 
 const EmployeeLeavePage = () => {
   const { user, loading } = useAuth();
+  const [activeTab, setActiveTab] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   if (loading) {
     return (
-      <AppShell pageTitle="Leave Management">
+      <AppShell pageTitle="My Leaves">
         <LoadingSpinner />
       </AppShell>
     );
   }
 
-  if (!user) {
-    return null; // ProtectedRoute will redirect
-  }
+  if (!user) return null;
 
   const handleLeaveSubmitted = () => {
-    setRefreshTrigger(prev => prev + 1);
+    setRefreshTrigger((prev) => prev + 1);
+    // Switch to Leave History tab so the employee sees their new request
+    setActiveTab(1);
   };
 
   return (
-    <AppShell pageTitle="Leave Management">
-      <Grid container spacing={3}>
-        {/* Left Column: Balance + Form */}
-        <Grid item xs={12} md={4}>
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <LeaveBalanceCard refreshTrigger={refreshTrigger} />
-            </Grid>
-            <Grid item xs={12}>
-              <LeaveRequestForm onSubmitSuccess={handleLeaveSubmitted} />
-            </Grid>
-          </Grid>
-        </Grid>
+    <AppShell pageTitle="My Leaves">
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden',
+        marginBottom: 'var(--space-6)',
+      }}>
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
+          <Tab label="Overview" />
+          <Tab label="Leave History" />
+        </Tabs>
+      </div>
 
-        {/* Right Column: Leave History */}
-        <Grid item xs={12} md={8}>
-          <LeaveHistoryTable refreshTrigger={refreshTrigger} />
-        </Grid>
-      </Grid>
+      {activeTab === 0 && (
+        <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
+          {/* Leave Balances */}
+          <Box sx={{ flex: '0 0 320px' }}>
+            <LeaveBalanceCard refreshTrigger={refreshTrigger} />
+          </Box>
+
+          {/* Request Leave form */}
+          <Box sx={{ flex: 1 }}>
+            <LeaveRequestForm onSubmitSuccess={handleLeaveSubmitted} />
+          </Box>
+        </Box>
+      )}
+
+      {activeTab === 1 && (
+        <LeaveHistoryTable refreshTrigger={refreshTrigger} />
+      )}
     </AppShell>
   );
 };

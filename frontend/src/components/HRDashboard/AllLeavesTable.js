@@ -16,19 +16,15 @@ import {
   Select,
   MenuItem,
   Box,
-  IconButton,
-  Tooltip
 } from '@mui/material';
-import { Notes as NotesIcon } from '@mui/icons-material';
 import axios from 'axios';
-import LeaveMessagesDialog from '../leave/LeaveMessagesDialog';
 
 const AllLeavesTable = () => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedLeaveId, setSelectedLeaveId] = useState(null);
+  // Log column removed — no longer used
 
   const fetchLeaves = useCallback(async () => {
     try {
@@ -118,13 +114,12 @@ const AllLeavesTable = () => {
               <TableCell><strong>Days</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
               <TableCell><strong>Submitted</strong></TableCell>
-              <TableCell align="center"><strong>Log</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {leaves.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={7} align="center">
                   <Typography color="textSecondary">No leaves found</Typography>
                 </TableCell>
               </TableRow>
@@ -148,13 +143,6 @@ const AllLeavesTable = () => {
                   <TableCell>
                     {new Date(leave.create_date).toLocaleDateString()}
                   </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="View decision log">
-                      <IconButton size="small" onClick={() => setSelectedLeaveId(leave.id)}>
-                        <NotesIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -162,11 +150,6 @@ const AllLeavesTable = () => {
         </Table>
       </TableContainer>
 
-      <LeaveMessagesDialog
-        leaveId={selectedLeaveId}
-        open={!!selectedLeaveId}
-        onClose={() => setSelectedLeaveId(null)}
-      />
     </>
   );
 };

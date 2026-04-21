@@ -181,6 +181,130 @@ class LeaveController {
     }
   }
 
+  /**
+   * GET /api/leaves/auto-approved
+   * Returns leaves approved automatically by Flow I.
+   *
+   * Strategy: match audit_logs rows (action='leave_auto_approved') to Odoo
+   * leaves by employee_id + time proximity (≤60 min). This works for both old
+   * audit entries (no leaveId in details) and new ones (leaveId present).
+   */
+  async getAutoApprovedLeaves(req, res) {
+    try {
+      const { query } = require('../db/neon');
+
+      // Prefer leaveId when present; fall back to employee_id + timestamp.
+      const auditRows = await query(
+        `SELECT employee_id,
+                created_at,
+                (details->>'leaveId')::int AS leave_id
+         FROM audit_logs
+         WHERE module = 'leave' AND action = 'leave_auto_approved'
+         ORDER BY created_at DESC`,
+        []
+      );
+      if (!auditRows.rows.length) return res.json([]);
+
+      // Split into ID-matched (precise) vs proximity-matched (legacy)
+      const knownIds  = auditRows.rows.map(r => r.leave_id).filter(Boolean);
+      const proximityEntries = auditRows.rows.filter(r => !r.leave_id);
+
+      const leaveFields = ['employee_id', 'holiday_status_id', 'request_date_from',
+                           'request_date_to', 'number_of_days', 'state', 'name', 'create_date'];
+
+      let matched = [];
+
+      // Precise match by leaveId
+      if (knownIds.length) {
+        const byId = await odooAdapter.search('hr.leave', [['id', 'in', knownIds]], leaveFields, 500);
+        matched.push(...byId);
+      }
+
+      // Proximity match: all validated leaves → filter by employee + ±60 min
+      if (proximityEntries.length) {
+        const allApproved = await odooAdapter.search('hr.leave', [['state', '=', 'validate']], leaveFields, 500);
+        const WINDOW_MS = 60 * 60 * 1000;
+        for (const leave of allApproved) {
+          if (matched.some(m => m.id === leave.id)) continue; // already found by ID
+          const leaveTime = new Date(leave.create_date).getTime();
+          const hit = proximityEntries.some(row =>
+            row.employee_id === leave.employee_id[0] &&
+            Math.abs(leaveTime - new Date(row.created_at).getTime()) <= WINDOW_MS
+          );
+          if (hit) matched.push(leave);
+        }
+      }
+
+      matched.sort((a, b) => new Date(b.create_date) - new Date(a.create_date));
+      res.json(matched);
+    } catch (error) {
+      console.error('❌ [getAutoApprovedLeaves]', error.message);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  /**
+   * GET /api/leaves/auto-rejected
+   * Returns leaves rejected automatically by Flow I (probation / balance / blackout).
+   * Same dual strategy: leaveId when present, proximity match for legacy entries.
+   */
+  async getAutoRejectedLeaves(req, res) {
+    try {
+      const { query } = require('../db/neon');
+
+      const AUTO_REJECT_ACTIONS = [
+        'leave_rejected_probation',
+        'leave_rejected_insufficient_balance',
+        'leave_rejected_blackout',
+      ];
+
+      const auditRows = await query(
+        `SELECT employee_id,
+                created_at,
+                action,
+                (details->>'leaveId')::int AS leave_id
+         FROM audit_logs
+         WHERE module = 'leave' AND action = ANY($1)
+         ORDER BY created_at DESC`,
+        [AUTO_REJECT_ACTIONS]
+      );
+      if (!auditRows.rows.length) return res.json([]);
+
+      const knownIds         = auditRows.rows.map(r => r.leave_id).filter(Boolean);
+      const proximityEntries = auditRows.rows.filter(r => !r.leave_id);
+
+      const leaveFields = ['employee_id', 'holiday_status_id', 'request_date_from',
+                           'request_date_to', 'number_of_days', 'state', 'name', 'create_date'];
+
+      let matched = [];
+
+      if (knownIds.length) {
+        const byId = await odooAdapter.search('hr.leave', [['id', 'in', knownIds]], leaveFields, 500);
+        matched.push(...byId);
+      }
+
+      if (proximityEntries.length) {
+        const allRefused = await odooAdapter.search('hr.leave', [['state', '=', 'refuse']], leaveFields, 500);
+        const WINDOW_MS = 60 * 60 * 1000;
+        for (const leave of allRefused) {
+          if (matched.some(m => m.id === leave.id)) continue;
+          const leaveTime = new Date(leave.create_date).getTime();
+          const hit = proximityEntries.some(row =>
+            row.employee_id === leave.employee_id[0] &&
+            Math.abs(leaveTime - new Date(row.created_at).getTime()) <= WINDOW_MS
+          );
+          if (hit) matched.push(leave);
+        }
+      }
+
+      matched.sort((a, b) => new Date(b.create_date) - new Date(a.create_date));
+      res.json(matched);
+    } catch (error) {
+      console.error('❌ [getAutoRejectedLeaves]', error.message);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   /** GET /api/leaves/statistics */
   async getStatistics(req, res) {
     try {
