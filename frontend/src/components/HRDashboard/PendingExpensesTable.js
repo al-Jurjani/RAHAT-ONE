@@ -223,16 +223,6 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
 
                   <Box sx={{ my: 1 }}>
                     <Chip label={expense.expense_category} size="small" sx={{ mr: 1 }} />
-                    {expense.fraud_score !== null && expense.fraud_score !== undefined ? (
-                      <Chip
-                        label={`Fraud: ${(expense.fraud_score * 100).toFixed(0)}%`}
-                        size="small"
-                        color={expense.fraud_score >= 0.70 ? 'error' : expense.fraud_score >= 0.40 ? 'warning' : 'success'}
-                        variant="outlined"
-                      />
-                    ) : (
-                      <Chip label={`Fraud: N/A`} size="small" color="default" variant="outlined" />
-                    )}
                   </Box>
 
                   <Typography variant="body2" color="textSecondary">
@@ -399,7 +389,6 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
               <TableCell align="right"><strong>Amount (PKR)</strong></TableCell>
               <TableCell><strong>Vendor</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
-              <TableCell><strong>Fraud Score</strong></TableCell>
               <TableCell><strong>Date</strong></TableCell>
               <TableCell align="center"><strong>Actions</strong></TableCell>
             </TableRow>
@@ -434,17 +423,6 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   </TableCell>
                   <TableCell>{expense.vendor_name}</TableCell>
                   <TableCell>{getStatusChip(expense.workflow_status)}</TableCell>
-                  <TableCell>
-                    {expense.fraud_score !== null && expense.fraud_score !== undefined ? (
-                      <Chip
-                        label={`${(expense.fraud_score * 100).toFixed(0)}%`}
-                        size="small"
-                        color={expense.fraud_score >= 0.70 ? 'error' : expense.fraud_score >= 0.40 ? 'warning' : 'success'}
-                      />
-                    ) : (
-                      <Chip label="N/A" size="small" color="default" variant="outlined" />
-                    )}
-                  </TableCell>
                   <TableCell>
                     <Typography variant="body2">
                       {new Date(expense.expense_date || expense.create_date).toLocaleDateString('en-PK')}

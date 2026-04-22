@@ -44,7 +44,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
   // Pagination & Sorting
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [sortField, setSortField] = useState('fraud_score');
+  const [sortField, setSortField] = useState('fraud_status');
   const [sortDirection, setSortDirection] = useState('desc');
 
   // Filters
@@ -140,8 +140,6 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
 
     const getComparableValue = (expense) => {
       switch (sortField) {
-        case 'fraud_score':
-          return Number(expense.fraud_score || 0);
         case 'amount':
           return Number(expense.total_amount || 0);
         case 'category':
@@ -205,12 +203,12 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
     return <Chip label={config.label} size="small" color={config.color} variant="outlined" />;
   };
 
-  const getFraudStatusChip = (fraudStatus, fraudScore) => {
+  const getFraudStatusChip = (fraudStatus) => {
     if (fraudStatus === 'fraudulent') {
       return (
         <Chip
           icon={<ErrorIcon />}
-          label={`Fraudulent (${(fraudScore * 100).toFixed(0)}%)`}
+          label="Fraudulent"
           size="small"
           color="error"
         />
@@ -219,7 +217,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
       return (
         <Chip
           icon={<WarningIcon />}
-          label={`Suspicious (${(fraudScore * 100).toFixed(0)}%)`}
+          label="Suspicious"
           size="small"
           color="warning"
         />
@@ -339,7 +337,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   </Box>
 
                   <Box sx={{ my: 1 }}>
-                    {getFraudStatusChip(expense.fraud_detection_status, expense.fraud_score)}
+                    {getFraudStatusChip(expense.fraud_detection_status)}
                     <Chip label={expense.expense_category} size="small" sx={{ ml: 1 }} />
                   </Box>
 
@@ -457,15 +455,6 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
       </Box>
 
       <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: 'var(--bg-elevated)' }}>
-              <TableCell>
-                <TableSortLabel
-                  active={sortField === 'employee'}
-                  direction={sortField === 'employee' ? sortDirection : 'asc'}
-                  onClick={() => handleSortChange('employee')}
-                >
                   <strong>Employee</strong>
                 </TableSortLabel>
               </TableCell>
@@ -479,13 +468,6 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                 </TableSortLabel>
               </TableCell>
               <TableCell align="right">
-                <TableSortLabel
-                  active={sortField === 'fraud_score'}
-                  direction={sortField === 'fraud_score' ? sortDirection : 'asc'}
-                  onClick={() => handleSortChange('fraud_score')}
-                >
-                  <strong>Fraud Score</strong>
-                </TableSortLabel>
               </TableCell>
               <TableCell>
                 <TableSortLabel
@@ -548,12 +530,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   </Box>
                 </TableCell>
                 <TableCell>
-                  {getFraudStatusChip(expense.fraud_detection_status, expense.fraud_score)}
-                </TableCell>
-                <TableCell align="right">
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'var(--status-danger)' }}>
-                    {((expense.fraud_score || 0) * 100).toFixed(1)}%
-                  </Typography>
+                  {getFraudStatusChip(expense.fraud_detection_status)}
                 </TableCell>
                 <TableCell>
                   <Chip label={expense.expense_category} size="small" />

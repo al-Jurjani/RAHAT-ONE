@@ -105,7 +105,6 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
       let av, bv;
       switch (sortField) {
         case 'amount':  av = Number(a.total_amount || 0); bv = Number(b.total_amount || 0); break;
-        case 'fraud_score': av = Number(a.fraud_score || 0); bv = Number(b.fraud_score || 0); break;
         case 'category': av = (a.expense_category || '').toLowerCase(); bv = (b.expense_category || '').toLowerCase(); break;
         case 'employee': av = getEmployeeName(a).toLowerCase(); bv = getEmployeeName(b).toLowerCase(); break;
         default: av = new Date(a.create_date || 0).getTime(); bv = new Date(b.create_date || 0).getTime();
@@ -122,12 +121,6 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
   const handleSortChange = (field) => {
     if (sortField === field) setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDirection('asc'); }
-  };
-
-  const getFraudScoreChip = (score) => {
-    const pct = ((score || 0) * 100).toFixed(1);
-    const color = score < 0.3 ? 'success' : score < 0.6 ? 'warning' : 'error';
-    return <Chip label={`${pct}%`} size="small" color={color} variant="outlined" />;
   };
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>;
@@ -195,11 +188,6 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
                   <strong>Amount (PKR)</strong>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center">
-                <TableSortLabel active={sortField === 'fraud_score'} direction={sortField === 'fraud_score' ? sortDirection : 'asc'} onClick={() => handleSortChange('fraud_score')}>
-                  <strong>Fraud Score</strong>
-                </TableSortLabel>
-              </TableCell>
               <TableCell><strong>Status</strong></TableCell>
               <TableCell>
                 <TableSortLabel active={sortField === 'date'} direction={sortField === 'date' ? sortDirection : 'asc'} onClick={() => handleSortChange('date')}>
@@ -223,9 +211,6 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     {(expense.total_amount || 0).toLocaleString('en-PK')}
                   </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  {getFraudScoreChip(expense.fraud_score)}
                 </TableCell>
                 <TableCell>
                   <Chip

@@ -249,7 +249,7 @@ class ExpenseService {
           }
           if (Object.keys(workflowUpdates).length > 0) await odooAdapter.updateExpense(expenseId, workflowUpdates);
         } catch (fraudError) {
-          fraudResult = { status: 'error', overallScore: 0, recommendation: `Fraud detection unavailable: ${fraudError.message}`, error: true };
+          fraudResult = { status: 'error', recommendation: `Fraud detection unavailable: ${fraudError.message}`, error: true };
         }
       }
 
@@ -267,7 +267,7 @@ class ExpenseService {
 
       return { success: true, expenseId, expense: createdExpense, policyCheckPassed: policyCheck.passed,
         policyViolations: policyCheck.violations, escalatedForHR: createdExpense.hr_escalated || false,
-        fraudDetection: fraudResult ? { status: fraudResult.status, score: fraudResult.overallScore } : null,
+        fraudDetection: fraudResult ? { status: fraudResult.status } : null,
         message: policyCheck.passed ? 'Expense submitted successfully' : 'Expense rejected due to policy violations'
       };
     } catch (error) { console.error('Expense submission error:', error); throw error; }
