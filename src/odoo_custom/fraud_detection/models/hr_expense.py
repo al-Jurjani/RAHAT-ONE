@@ -57,8 +57,8 @@ class HrExpenseInherit(models.Model):
     )
 
     fraud_score = fields.Float(
-        string="Fraud Score",
-        help="Aggregated fraud confidence score (0.0 to 1.0)",
+        string="Legacy Fraud Score (V1)",
+        help="Legacy numeric score retained for backward compatibility with older records",
         default=0.0,
         readonly=True,
     )

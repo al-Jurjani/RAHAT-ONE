@@ -3,8 +3,7 @@ import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import AppShell from '../components/layout/AppShell';
 import api from '../services/api';
-import { Button, Card, DataTable, FormField, StatCard, StatusChip } from '../components/ui';
-import { useAuth } from '../contexts/AuthContext';
+import { Card, DataTable, FormField, StatCard, StatusChip } from '../components/ui';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -47,7 +46,6 @@ function statusTone(status) {
 }
 
 function ManagerAttendancePage() {
-  const { user } = useAuth();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);

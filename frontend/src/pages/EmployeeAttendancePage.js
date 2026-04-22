@@ -98,15 +98,17 @@ function EmployeeAttendancePage() {
   }, []);
 
   useEffect(() => {
-    if (!effectiveTodayRecord?.check_in || effectiveTodayRecord?.check_out) return undefined;
+    const checkIn = effectiveTodayRecord?.check_in;
+    const checkOut = effectiveTodayRecord?.check_out;
+    if (!checkIn || checkOut) return undefined;
 
-    setElapsed(formatElapsed(todayRecord.check_in));
+    setElapsed(formatElapsed(checkIn));
     const ticker = setInterval(() => {
-      setElapsed(formatElapsed(todayRecord.check_in));
+      setElapsed(formatElapsed(checkIn));
     }, 60000);
 
     return () => clearInterval(ticker);
-  }, [todayRecord]);
+  }, [effectiveTodayRecord?.check_in, effectiveTodayRecord?.check_out]);
 
   const fetchToday = useCallback(async () => {
     if (!employeeId) {

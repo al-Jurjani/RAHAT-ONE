@@ -455,6 +455,15 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
       </Box>
 
       <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow sx={{ backgroundColor: 'var(--bg-elevated)' }}>
+              <TableCell>
+                <TableSortLabel
+                  active={sortField === 'employee'}
+                  direction={sortField === 'employee' ? sortDirection : 'asc'}
+                  onClick={() => handleSortChange('employee')}
+                >
                   <strong>Employee</strong>
                 </TableSortLabel>
               </TableCell>
@@ -466,8 +475,6 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                 >
                   <strong>Fraud Status</strong>
                 </TableSortLabel>
-              </TableCell>
-              <TableCell align="right">
               </TableCell>
               <TableCell>
                 <TableSortLabel

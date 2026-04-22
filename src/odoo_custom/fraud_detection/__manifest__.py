@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "RAHAT-ONE Fraud Detection & Expense Workflow",
-    "version": "2.0",
+    "name": "RAHAT-ONE Fraud Detection & Expense Workflow V2",
+    "version": "2.1",
     "category": "Human Resources",
-    "summary": "Fraud detection and multi-level approval workflow for HR Expenses",
+    "summary": "V2 status-based fraud detection and multi-level approval workflow",
     "description": """
         This module extends the hr.expense model with:
 
-        Fraud Detection:
+        Fraud Detection (V2):
         - Document hash (MD5) for exact duplicate detection
         - Perceptual hash for visual similarity detection
-        - Fraud score and verification status
+        - 3-layer status-based fraud verification (clean/suspicious/fraudulent)
         - AI detection metadata
 
         Expense Workflow:
         - Expense categories (Medical, Petrol, Travel, Other)
         - Multi-level approval (Manager + HR escalation)
+        - Compatible with expense V2 n8n orchestration flows
         - Policy validation tracking
         - Secure token-based email approvals
         - Complete workflow state management

@@ -147,23 +147,6 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
     }
   };
 
-  const formatFlagLabel = (flag) => {
-    if (flag === null || flag === undefined) return '';
-    if (typeof flag === 'string' || typeof flag === 'number' || typeof flag === 'boolean') {
-      return String(flag);
-    }
-    if (typeof flag === 'object') {
-      const text = flag.text || 'value';
-      const region = flag.region || 'numeric';
-      const deviation = Number(flag.deviation);
-      if (Number.isFinite(deviation)) {
-        return `${region}: ${text} (${deviation.toFixed(2)}σ)`;
-      }
-      return `${region}: ${text}`;
-    }
-    return String(flag);
-  };
-
   return (
     <Dialog
       open={open}
