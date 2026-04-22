@@ -266,6 +266,38 @@ def detect_forgery_florence(
         except Exception:
             return None
 
+    def _is_amount_like_token(text):
+        raw = str(text or "").strip()
+        if not raw:
+            return False
+
+        # Likely time/date/reference formats, not payable amounts.
+        if ":" in raw:
+            return False
+        if re.search(r"\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b", raw):
+            return False
+
+        digits_only = re.sub(r"\D", "", raw)
+        if len(digits_only) == 0:
+            return False
+
+        # Long contiguous digit strings are usually IDs/invoice refs.
+        has_separator = "," in raw or "." in raw
+        if len(digits_only) > 6 and not has_separator:
+            return False
+
+        return True
+
+    def _candidate_relative_delta(candidate_value, target_value):
+        if (
+            candidate_value is None
+            or target_value is None
+            or candidate_value <= 0
+            or target_value <= 0
+        ):
+            return None
+        return abs(candidate_value - target_value) / max(candidate_value, target_value)
+
     image_array = np.array(image)
     tesseract_data = pytesseract.image_to_data(
         image_array, output_type=pytesseract.Output.DICT, config="--psm 6"
@@ -319,13 +351,21 @@ def detect_forgery_florence(
             label = "total"
 
         amount_value = _parse_amount(region["text"])
-        if amount_value is not None:
+        if amount_value is not None and _is_amount_like_token(region["text"]):
+            rel_delta = _candidate_relative_delta(amount_value, claimed_amount)
+            if claimed_amount and claimed_amount > 0:
+                plausible_lower = max(10.0, claimed_amount * 0.2)
+                plausible_upper = max(20000.0, claimed_amount * 8.0)
+                if amount_value < plausible_lower or amount_value > plausible_upper:
+                    continue
+
             total_candidates.append(
                 {
                     "value": amount_value,
                     "label": label,
                     "confidence": region["confidence"],
                     "text": region["text"],
+                    "relative_delta": rel_delta,
                 }
             )
 
@@ -349,14 +389,30 @@ def detect_forgery_florence(
     if flagged_regions:
         is_suspicious = True
 
-    total_candidates.sort(
-        key=lambda item: (
-            1 if item["label"] == "total" else 0,
-            item["confidence"],
-            item["value"],
-        ),
-        reverse=True,
-    )
+    def _candidate_priority(item):
+        keyword_bonus = 1.0 if item.get("label") == "total" else 0.0
+        conf_score = float(item.get("confidence") or 0.0) / 100.0
+
+        # Prefer values close to the claimed amount when available.
+        delta = item.get("relative_delta")
+        proximity = 0.0
+        if delta is not None:
+            proximity = max(0.0, 1.0 - float(delta))
+
+        # Slightly prefer realistic amount ranges over edge values.
+        value = float(item.get("value") or 0.0)
+        magnitude_penalty = 0.0
+        if value >= 500000:
+            magnitude_penalty = 0.2
+
+        return (
+            (keyword_bonus * 2.5)
+            + (proximity * 2.0)
+            + (conf_score * 1.2)
+            - magnitude_penalty
+        )
+
+    total_candidates.sort(key=_candidate_priority, reverse=True)
     detected_total_amount = total_candidates[0]["value"] if total_candidates else None
     amount_delta_ratio = None
     amount_mismatch = False
