@@ -166,7 +166,7 @@ class AttendanceController {
           if (!inDay || !inWindow) {
             status = 'rejected';
             rejectionReason = 'Check-in outside shift window';
-          } else if (currentMinutes > startMinutes && currentMinutes <= graceEndMinutes) {
+          } else if (currentMinutes > graceEndMinutes) {
             status = 'late';
           } else {
             status = 'present';
@@ -409,7 +409,7 @@ class AttendanceController {
 
       const records = await odooAdapter.execute('rahat.attendance', 'search_read', [
         domain,
-        ['id', 'employee_id', 'branch_id', 'status', 'check_in', 'check_out', 'worked_hours'],
+        ['id', 'employee_id', 'branch_id', 'shift_id', 'status', 'check_in', 'check_out', 'worked_hours', 'distance_from_branch'],
         0,
         500,
         'check_in desc'
@@ -433,10 +433,14 @@ class AttendanceController {
         employeeName: resolveEmployeeName(record.employee_id),
         branchId: Array.isArray(record.branch_id) ? record.branch_id[0] : null,
         branchName: Array.isArray(record.branch_id) ? record.branch_id[1] : null,
+        shiftName: Array.isArray(record.shift_id) ? record.shift_id[1] : null,
         status: record.status,
         check_in: record.check_in,
         check_out: record.check_out,
-        worked_hours: record.worked_hours
+        worked_hours: record.worked_hours,
+        distance_from_branch: record.distance_from_branch !== undefined && record.distance_from_branch !== false
+          ? record.distance_from_branch
+          : null
       }));
 
       return respondSuccess(res, summary, 'HR attendance summary fetched');

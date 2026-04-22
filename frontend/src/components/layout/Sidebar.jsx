@@ -15,7 +15,6 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PersonIcon from '@mui/icons-material/Person';
 import HistoryIcon from '@mui/icons-material/History';
 import FmdGoodIcon from '@mui/icons-material/FmdGood';
-import ChecklistIcon from '@mui/icons-material/Checklist';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -57,8 +56,7 @@ const EMPLOYEE_NAV_SECTIONS = [
   {
     title: 'Attendance',
     items: [
-      { to: '/employee/attendance',          icon: <FmdGoodIcon fontSize="small" />,         label: 'Check In / Out' },
-      { to: '/employee/attendance/history',  icon: <ChecklistIcon fontSize="small" />,       label: 'Attendance History' },
+      { to: '/employee/attendance', icon: <FmdGoodIcon fontSize="small" />, label: 'Attendance' },
     ]
   }
 ];

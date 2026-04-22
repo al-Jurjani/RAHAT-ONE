@@ -90,7 +90,9 @@ class DepartmentController {
         return respondError(res, 'Invalid department ID', 400);
       }
 
-      const [deptEmployees, managerTitleMatches, leadTitleMatches, headTitleMatches] = await Promise.all([
+      const keywords = ['manager', 'lead', 'head', 'coordinator', 'analyst'];
+
+      const [deptEmployees, ...keywordMatches] = await Promise.all([
         odooAdapter.execute('hr.employee', 'search_read', [
           [
             ['department_id', '=', departmentId],
@@ -98,34 +100,18 @@ class DepartmentController {
           ],
           ['id', 'name', 'job_title', 'image_128']
         ]),
-        odooAdapter.execute('hr.employee', 'search_read', [
+        ...keywords.map((kw) => odooAdapter.execute('hr.employee', 'search_read', [
           [
             ['active', '=', true],
-            ['job_title', 'ilike', 'manager']
+            ['job_title', 'ilike', kw]
           ],
           ['id', 'name', 'job_title', 'image_128']
-        ]),
-        odooAdapter.execute('hr.employee', 'search_read', [
-          [
-            ['active', '=', true],
-            ['job_title', 'ilike', 'lead']
-          ],
-          ['id', 'name', 'job_title', 'image_128']
-        ]),
-        odooAdapter.execute('hr.employee', 'search_read', [
-          [
-            ['active', '=', true],
-            ['job_title', 'ilike', 'head']
-          ],
-          ['id', 'name', 'job_title', 'image_128']
-        ])
+        ]))
       ]);
 
       const merged = [
         ...(deptEmployees || []),
-        ...(managerTitleMatches || []),
-        ...(leadTitleMatches || []),
-        ...(headTitleMatches || [])
+        ...keywordMatches.flat()
       ];
       const uniqueById = Array.from(new Map(merged.map((item) => [item.id, item])).values());
 

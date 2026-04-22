@@ -98,6 +98,15 @@ function EmployeeDashboard() {
   const employeeId = user?.employeeId;
 
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia?.('(max-width: 768px)').matches ?? false);
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 768px)');
+    if (!mq) return undefined;
+    const handler = () => setIsMobile(mq.matches);
+    mq.addEventListener?.('change', handler) ?? mq.addListener?.(handler);
+    return () => mq.removeEventListener?.('change', handler) ?? mq.removeListener?.(handler);
+  }, []);
   const [stats, setStats] = useState({
     leaveBalance: 0,
     pendingExpenseClaims: 0,
@@ -191,7 +200,7 @@ function EmployeeDashboard() {
         <StatCard icon={<AccessTimeIcon />} value={stats.leavesTakenThisYear} label="Leaves Taken This Year" />
       </div>
 
-      <Card
+      {!isMobile && <Card
         header="Recent Activity"
         headerRight={(
           <Button variant="ghost" onClick={() => navigate('/employee/activity')}>
@@ -249,8 +258,9 @@ function EmployeeDashboard() {
             ))}
           </div>
         )}
-      </Card>
+      </Card>}
 
+      {!isMobile && (
       <div
         style={{
           display: 'grid',
@@ -279,6 +289,7 @@ function EmployeeDashboard() {
           </div>
         </Card>
       </div>
+      )}
     </AppShell>
   );
 }

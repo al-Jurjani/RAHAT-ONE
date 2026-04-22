@@ -1,18 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import AppShell from '../components/layout/AppShell';
 import api from '../services/api';
-import { Button, Card, StatusChip } from '../components/ui';
+import { Button, Card, StatCard, StatusChip } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { employeeAPI } from '../services/api';
 import './EmployeeAttendancePage.css';
+import './EmployeeAttendanceHistoryPage.css';
 
-function formatTime(value) {
+const PKT = 'Asia/Karachi';
+const HISTORY_PAGE_SIZE = 30;
+
+function formatTimePKT(value) {
   if (!value) return '—';
-  const date = new Date(String(value).replace(' ', 'T'));
+  const date = new Date(String(value).replace(' ', 'T') + 'Z');
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: PKT });
 }
 
 function formatDate(value) {
@@ -25,7 +28,7 @@ function formatDate(value) {
 
 function formatElapsed(from) {
   if (!from) return '0m';
-  const start = new Date(String(from).replace(' ', 'T'));
+  const start = new Date(String(from).replace(' ', 'T') + 'Z');
   if (Number.isNaN(start.getTime())) return '0m';
 
   const totalMinutes = Math.max(0, Math.floor((Date.now() - start.getTime()) / 60000));
@@ -51,8 +54,27 @@ function formatWorkedHours(hoursValue) {
   return `${hours}h ${minutes}m`;
 }
 
+function formatDateLabel(value) {
+  if (!value) return '—';
+  const date = new Date(String(value).replace(' ', 'T') + 'Z');
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: PKT });
+}
+
+function statusTone(status) {
+  if (status === 'present') return 'success';
+  if (status === 'late') return 'warning';
+  if (status === 'rejected') return 'danger';
+  return 'neutral';
+}
+
+function leftBarClass(status) {
+  if (status === 'present') return 'employee-attendance-history__bar employee-attendance-history__bar--present';
+  if (status === 'late') return 'employee-attendance-history__bar employee-attendance-history__bar--late';
+  return 'employee-attendance-history__bar employee-attendance-history__bar--rejected';
+}
+
 function EmployeeAttendancePage() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const employeeId = user?.employeeId || user?.employee_id;
 
@@ -63,6 +85,12 @@ function EmployeeAttendancePage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [elapsed, setElapsed] = useState('0m');
+
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -98,14 +126,49 @@ function EmployeeAttendancePage() {
     }
   }, [employeeId]);
 
+  const fetchHistory = useCallback(async (nextOffset = 0, append = false) => {
+    if (!employeeId) {
+      setHistoryLoading(false);
+      return;
+    }
+
+    if (append) {
+      setHistoryLoadingMore(true);
+    } else {
+      setHistoryLoading(true);
+    }
+
+    try {
+      const response = await api.get(`/attendance/history/${employeeId}`, {
+        params: { limit: HISTORY_PAGE_SIZE, offset: nextOffset }
+      });
+
+      const payload = response.data?.data || {};
+      const nextRecords = payload.records || [];
+
+      setHistoryRecords((prev) => (append ? [...prev, ...nextRecords] : nextRecords));
+      setHistoryOffset(nextOffset + nextRecords.length);
+      setHistoryHasMore(nextRecords.length === HISTORY_PAGE_SIZE);
+    } catch (error) {
+      console.error('Failed to fetch attendance history:', error);
+      toast.error(error.response?.data?.message || 'Failed to fetch attendance history');
+    } finally {
+      setHistoryLoading(false);
+      setHistoryLoadingMore(false);
+    }
+  }, [employeeId]);
+
   useEffect(() => {
     fetchToday();
   }, [fetchToday]);
 
   useEffect(() => {
+    fetchHistory(0, false);
+  }, [fetchHistory]);
+
+  useEffect(() => {
     const fetchProfile = async () => {
       if (!employeeId) return;
-
       try {
         const response = await employeeAPI.getProfile(employeeId);
         setProfile(response.data?.data || null);
@@ -113,7 +176,6 @@ function EmployeeAttendancePage() {
         console.warn('Failed to load employee profile for attendance summary:', error);
       }
     };
-
     fetchProfile();
   }, [employeeId]);
 
@@ -123,6 +185,14 @@ function EmployeeAttendancePage() {
     if (todayRecord.status === 'present' || todayRecord.status === 'late') return 'checked_in';
     return 'not_checked_in';
   }, [todayRecord]);
+
+  const historyStats = useMemo(() => {
+    const firstThirty = historyRecords.slice(0, 30);
+    const presentDays = firstThirty.filter((r) => r.status === 'present' || r.status === 'late').length;
+    const lateDays = firstThirty.filter((r) => r.status === 'late').length;
+    const absentDays = Math.max(30 - firstThirty.length, 0);
+    return { presentDays, lateDays, absentDays };
+  }, [historyRecords]);
 
   const branchName = Array.isArray(todayRecord?.branch_id)
     ? todayRecord?.branch_id?.[1]
@@ -173,6 +243,7 @@ function EmployeeAttendancePage() {
       }
 
       await fetchToday();
+      await fetchHistory(0, false);
     } catch (error) {
       if (error?.code === 1) {
         setFeedback({
@@ -187,10 +258,7 @@ function EmployeeAttendancePage() {
           message: `You are ${distance}m away from your branch (limit: ${allowed}m). Please check in from your branch location.`
         });
       } else if (error?.response?.data?.error === 'NO_BRANCH') {
-        setFeedback({
-          type: 'info',
-          message: 'No branch assigned. Please contact HR.'
-        });
+        setFeedback({ type: 'info', message: 'No branch assigned. Please contact HR.' });
       } else {
         setFeedback({
           type: 'danger',
@@ -220,6 +288,7 @@ function EmployeeAttendancePage() {
 
       setFeedback({ type: 'success', message: 'Checked out successfully.' });
       await fetchToday();
+      await fetchHistory(0, false);
     } catch (error) {
       if (error?.code === 1) {
         setFeedback({
@@ -239,7 +308,7 @@ function EmployeeAttendancePage() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Check In / Out">
+      <AppShell pageTitle="Attendance">
         <div className="employee-attendance-page">
           <Card>
             <div className="employee-attendance-page__loading">Loading attendance...</div>
@@ -250,14 +319,16 @@ function EmployeeAttendancePage() {
   }
 
   return (
-    <AppShell pageTitle="Check In / Out">
+    <AppShell pageTitle="Attendance">
       <div className="employee-attendance-page">
+
+        {/* Today's check-in state */}
         <Card className="employee-attendance-page__state-card">
           {state === 'not_checked_in' && (
             <div className="employee-attendance-page__state employee-attendance-page__state--center">
               <div className="employee-attendance-page__hero-icon" aria-hidden="true">📍</div>
               <h2 className="employee-attendance-page__headline">You haven't checked in yet</h2>
-              <div className="employee-attendance-page__clock">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+              <div className="employee-attendance-page__clock">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: PKT })}</div>
               <div className="employee-attendance-page__date">{formatDate(now)}</div>
 
               {feedback && (
@@ -276,7 +347,7 @@ function EmployeeAttendancePage() {
             <div className="employee-attendance-page__state employee-attendance-page__state--center">
               <div className="employee-attendance-page__hero-icon employee-attendance-page__hero-icon--success employee-attendance-page__pulse" aria-hidden="true">✓</div>
               <h2 className="employee-attendance-page__headline employee-attendance-page__headline--success">Checked In</h2>
-              <div className="employee-attendance-page__since">Since {formatTime(todayRecord?.check_in)}</div>
+              <div className="employee-attendance-page__since">Since {formatTimePKT(todayRecord?.check_in)}</div>
               <div className="employee-attendance-page__elapsed">{elapsed}</div>
               <div className="employee-attendance-page__branch">{branchName}</div>
               <div className="employee-attendance-page__chip-wrap">
@@ -300,11 +371,11 @@ function EmployeeAttendancePage() {
               <div className="employee-attendance-page__summary-grid">
                 <div>
                   <div className="employee-attendance-page__label">Check-In</div>
-                  <div className="employee-attendance-page__value">{formatTime(todayRecord?.check_in)}</div>
+                  <div className="employee-attendance-page__value">{formatTimePKT(todayRecord?.check_in)}</div>
                 </div>
                 <div>
                   <div className="employee-attendance-page__label">Check-Out</div>
-                  <div className="employee-attendance-page__value">{formatTime(todayRecord?.check_out)}</div>
+                  <div className="employee-attendance-page__value">{formatTimePKT(todayRecord?.check_out)}</div>
                 </div>
                 <div>
                   <div className="employee-attendance-page__label">Total Hours Worked</div>
@@ -318,13 +389,11 @@ function EmployeeAttendancePage() {
               <div className="employee-attendance-page__chip-wrap">
                 <StatusChip status={todayRecord?.status || 'present'} label={todayRecord?.status || 'present'} tone={todayRecord?.status === 'late' ? 'warning' : 'success'} />
               </div>
-              <Button className="employee-attendance-page__link-btn" variant="ghost" onClick={() => navigate('/employee/attendance/history')}>
-                View Attendance History
-              </Button>
             </div>
           )}
         </Card>
 
+        {/* Branch / shift info */}
         <Card>
           <div className="employee-attendance-page__today-summary">
             <div>
@@ -337,6 +406,62 @@ function EmployeeAttendancePage() {
             </div>
           </div>
         </Card>
+
+        {/* Attendance History */}
+        <div>
+          <h2 className="employee-attendance-history__title">Attendance History</h2>
+          <p className="employee-attendance-history__subtitle">Last 30 days summary</p>
+        </div>
+
+        <div className="employee-attendance-history__stats">
+          <StatCard value={historyStats.presentDays} label="Days Present" />
+          <StatCard value={historyStats.lateDays} label="Days Late" />
+          <StatCard value={historyStats.absentDays} label="Days Absent" />
+        </div>
+
+        {historyLoading ? (
+          <Card>
+            <div className="employee-attendance-history__loading">Loading history...</div>
+          </Card>
+        ) : (
+          <div className="employee-attendance-history__timeline">
+            {historyRecords.map((record) => {
+              const branchLabel = Array.isArray(record.branch_id) ? record.branch_id[1] : '—';
+              const status = record.status || 'rejected';
+
+              return (
+                <Card key={record.id} className="employee-attendance-history__item-card">
+                  <div className="employee-attendance-history__item">
+                    <div className={leftBarClass(status)} />
+                    <div className="employee-attendance-history__content">
+                      <div className="employee-attendance-history__row employee-attendance-history__row--top">
+                        <div className="employee-attendance-history__date">{formatDateLabel(record.check_in)}</div>
+                        <StatusChip status={status} label={status} tone={statusTone(status)} />
+                      </div>
+
+                      <div className="employee-attendance-history__time-range">
+                        {formatTimePKT(record.check_in)} → {record.check_out ? formatTimePKT(record.check_out) : 'Not checked out'}
+                      </div>
+
+                      <div className="employee-attendance-history__meta">Hours worked: {formatWorkedHours(record.worked_hours)}</div>
+                      <div className="employee-attendance-history__meta employee-attendance-history__meta--muted">{branchLabel}</div>
+
+                      {status === 'rejected' && record.rejection_reason && (
+                        <div className="employee-attendance-history__reason">{record.rejection_reason}</div>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {historyHasMore && (
+          <Button className="employee-attendance-history__load-more" variant="secondary" onClick={() => fetchHistory(historyOffset, true)} loading={historyLoadingMore}>
+            Load More
+          </Button>
+        )}
       </div>
     </AppShell>
   );

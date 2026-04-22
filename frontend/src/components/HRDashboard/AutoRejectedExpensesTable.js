@@ -190,6 +190,7 @@ const AutoRejectedExpensesTable = ({ refreshTrigger }) => {
               value={filterCategory}
               onChange={(e) => { setFilterCategory(e.target.value); setPage(0); }}
               SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
             >
               <option value="">All Categories</option>
               <option value="medical">Medical</option>
@@ -204,6 +205,7 @@ const AutoRejectedExpensesTable = ({ refreshTrigger }) => {
               value={filterReason}
               onChange={(e) => { setFilterReason(e.target.value); setPage(0); }}
               SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
             >
               <option value="">All Reasons</option>
               <option value="policy_violation">Policy Violation</option>

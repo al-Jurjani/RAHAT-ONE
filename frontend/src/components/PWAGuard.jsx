@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
 import FmdGoodIcon from '@mui/icons-material/FmdGood';
 import EventIcon from '@mui/icons-material/Event';
@@ -11,37 +11,19 @@ import { Button } from './ui';
 import rahatOneLogo from '../assets/rahat-one-logo.svg';
 import './PWAGuard.css';
 
-function detectStandaloneMode() {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  if (typeof window.matchMedia !== 'function') {
-    return window.navigator.standalone === true;
-  }
-
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-}
-
 function detectMobileMode() {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  if (typeof window.matchMedia !== 'function') {
-    return false;
-  }
-
+  if (typeof window === 'undefined') return false;
+  if (typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(max-width: 768px)').matches;
 }
 
 function PWABottomNav() {
   const navItems = useMemo(() => ([
-    { to: '/employee/home', icon: <HomeIcon fontSize="small" />, label: 'Home' },
-    { to: '/employee/attendance', icon: <FmdGoodIcon fontSize="small" />, label: 'Check In' },
-    { to: '/employee/leaves', icon: <EventIcon fontSize="small" />, label: 'Leaves' },
-    { to: '/employee/expenses', icon: <ReceiptIcon fontSize="small" />, label: 'Expenses' },
-    { to: '/employee/profile', icon: <PersonIcon fontSize="small" />, label: 'Profile' },
+    { to: '/employee/home',       icon: <HomeIcon fontSize="small" />,    label: 'Home'     },
+    { to: '/employee/attendance', icon: <FmdGoodIcon fontSize="small" />, label: 'Attendance' },
+    { to: '/employee/leaves',     icon: <EventIcon fontSize="small" />,   label: 'Leaves'   },
+    { to: '/expenses/submit',     icon: <ReceiptIcon fontSize="small" />, label: 'Expenses' },
+    { to: '/employee/profile',    icon: <PersonIcon fontSize="small" />,  label: 'Profile'  },
   ]), []);
 
   return createPortal(
@@ -63,54 +45,35 @@ function PWABottomNav() {
 }
 
 function PWAGuard({ children }) {
-  const { user, loading } = useAuth();
-  const [isStandalone, setIsStandalone] = useState(detectStandaloneMode);
+  const { user, loading, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(detectMobileMode);
 
   useEffect(() => {
-    if (typeof window.matchMedia !== 'function') {
-      return undefined;
-    }
+    if (typeof window.matchMedia !== 'function') return undefined;
 
-    const standaloneQuery = window.matchMedia('(display-mode: standalone)');
     const mobileQuery = window.matchMedia('(max-width: 768px)');
+    const updateMobile = () => setIsMobile(mobileQuery.matches);
 
-    const updateStandalone = () => setIsStandalone(detectStandaloneMode());
-    const updateMobile = () => setIsMobile(detectMobileMode());
-
-    updateStandalone();
-    updateMobile();
-
-    if (standaloneQuery.addEventListener) {
-      standaloneQuery.addEventListener('change', updateStandalone);
+    if (mobileQuery.addEventListener) {
       mobileQuery.addEventListener('change', updateMobile);
-      return () => {
-        standaloneQuery.removeEventListener('change', updateStandalone);
-        mobileQuery.removeEventListener('change', updateMobile);
-      };
+      return () => mobileQuery.removeEventListener('change', updateMobile);
     }
 
-    standaloneQuery.addListener(updateStandalone);
     mobileQuery.addListener(updateMobile);
-    return () => {
-      standaloneQuery.removeListener(updateStandalone);
-      mobileQuery.removeListener(updateMobile);
-    };
+    return () => mobileQuery.removeListener(updateMobile);
   }, []);
 
-  const isPwaEmployeeMode = isStandalone && isMobile && user?.role === 'employee';
-  const isPwaBlocked = isStandalone && !loading && !!user && user?.role === 'hr';
+  const isPwaEmployeeMode = isMobile && user?.role === 'employee';
+  const isPwaBlocked      = isMobile && !loading && !!user && user?.role === 'hr' && location.pathname !== '/login';
 
   useEffect(() => {
     document.body.classList.toggle('pwa-employee-mode', isPwaEmployeeMode);
-    return () => {
-      document.body.classList.remove('pwa-employee-mode');
-    };
+    return () => document.body.classList.remove('pwa-employee-mode');
   }, [isPwaEmployeeMode]);
 
-  if (loading) {
-    return children;
-  }
+  if (loading) return children;
 
   if (isPwaBlocked) {
     return (
@@ -127,6 +90,13 @@ function PWAGuard({ children }) {
             onClick={() => window.open('/', '_self')}
           >
             Open Web Portal
+          </Button>
+          <Button
+            className="pwa-block-page__button"
+            variant="ghost"
+            onClick={async () => { await logout(); navigate('/login'); }}
+          >
+            Sign in as Employee
           </Button>
         </div>
       </div>

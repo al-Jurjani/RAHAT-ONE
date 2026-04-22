@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, FormField } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import rahatOneLogo from '../assets/rahat-one-logo.svg';
@@ -10,7 +10,17 @@ function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const { login } = useAuth();
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 768px)');
+    if (!mq) return;
+    setIsMobile(mq.matches);
+    const handler = () => setIsMobile(mq.matches);
+    mq.addEventListener?.('change', handler) ?? mq.addListener?.(handler);
+    return () => mq.removeEventListener?.('change', handler) ?? mq.removeListener?.(handler);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,6 +38,12 @@ function Login() {
 
   return (
     <div className="login-page">
+      {isMobile && (
+        <div className="login-mobile-notice">
+          This app is for <strong>employees only</strong> on mobile.
+          HR staff should use a desktop browser.
+        </div>
+      )}
       <div className="login-card">
         <div className="login-header">
           <img src={rahatOneLogo} alt="RAHAT-ONE logo" className="login-logo" />

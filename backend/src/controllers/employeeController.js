@@ -247,7 +247,9 @@ class EmployeeController {
         'emergency_contact_name',
         'emergency_contact_phone',
         'emergency_contact',
-        'emergency_phone'
+        'emergency_phone',
+        'branch_id',
+        'shift_id'
       ];
 
       const fields = pickExistingFields(fieldMap, requestedFields);
@@ -260,6 +262,8 @@ class EmployeeController {
       const manager = normalizeMany2one(employee.parent_id);
       const department = normalizeMany2one(employee.department_id);
       const job = normalizeMany2one(employee.job_id);
+      const branch = normalizeMany2one(employee.branch_id);
+      const shift = normalizeMany2one(employee.shift_id);
 
       const emergencyContactName =
         fieldValue(employee, 'emergency_contact_name') ||
@@ -281,6 +285,8 @@ class EmployeeController {
         jobTitle: fieldValue(employee, 'job_title') || (job ? job.name : null),
         department,
         manager,
+        branch,
+        shift,
         workEmail: fieldValue(employee, 'work_email'),
         personalEmail: fieldValue(employee, 'private_email'),
         personalPhone: fieldValue(employee, 'mobile_phone'),

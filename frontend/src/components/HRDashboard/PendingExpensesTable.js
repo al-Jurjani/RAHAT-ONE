@@ -451,38 +451,43 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleViewFraudAnalysis(expense)}
-                      title="View Fraud Analysis"
-                    >
-                      <VisibilityIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => loadInvoicePreview(expense.id)}
-                      disabled={invoiceLoading}
-                      title="View Invoice"
-                    >
-                      <DescriptionIcon />
-                    </IconButton>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="success"
-                      onClick={() => handleAction(expense, 'approve')}
-                      sx={{ mr: 1 }}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                      onClick={() => handleAction(expense, 'reject')}
-                    >
-                      Reject
-                    </Button>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                      <Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleViewFraudAnalysis(expense)}
+                          title="View Fraud Analysis"
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => loadInvoicePreview(expense.id)}
+                          disabled={invoiceLoading}
+                          title="View Invoice"
+                        >
+                          <DescriptionIcon />
+                        </IconButton>
+                      </Box>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        fullWidth
+                        onClick={() => handleAction(expense, 'approve')}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        fullWidth
+                        onClick={() => handleAction(expense, 'reject')}
+                      >
+                        Reject
+                      </Button>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))

@@ -71,10 +71,14 @@
 
   .app-shell-content {
     padding: var(--space-4);
-    padding-bottom: calc(60px + var(--space-4));
+    padding-bottom: calc(64px + var(--space-4) + env(safe-area-inset-bottom, 0px));
   }
 
+  /* AppShell's basic bottom nav is only a fallback — hidden when PWAGuard's
+     employee mode is active (it renders its own richer nav via portal). */
   .bottom-nav {
     display: flex;
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }

@@ -55,19 +55,19 @@ function EmployeeProfile() {
   }, [employeeId]);
 
   const avatarSrc = useMemo(() => {
-    if (!profile) {
-      return '';
-    }
+    if (!profile) return '';
     return profile.photoDataUri || profile.photoUrl || '';
   }, [profile]);
 
   const lockedRows = [
-    { label: 'Job Title', value: profile?.jobTitle || '-' },
-    { label: 'Department', value: profile?.department?.name || '-' },
-    { label: 'Manager', value: profile?.manager?.name || '-' },
-    { label: 'Work Email', value: profile?.workEmail || '-' },
+    { label: 'Job Title',   value: profile?.jobTitle || '-' },
+    { label: 'Department',  value: profile?.department?.name || '-' },
+    { label: 'Manager',     value: profile?.manager?.name || '-' },
+    { label: 'Branch',      value: profile?.branch?.name || '-' },
+    { label: 'Shift',       value: profile?.shift?.name || '-' },
+    { label: 'Work Email',  value: profile?.workEmail || '-' },
     { label: 'Employee ID', value: profile?.employeeId || '-' },
-    { label: 'Join Date', value: profile?.joinDate ? new Date(profile.joinDate).toLocaleDateString() : '-' }
+    { label: 'Join Date',   value: profile?.joinDate ? new Date(profile.joinDate).toLocaleDateString() : '-' }
   ];
 
   const handleFieldChange = (event) => {
@@ -81,9 +81,7 @@ function EmployeeProfile() {
   };
 
   const handleSave = async () => {
-    if (!employeeId) {
-      return;
-    }
+    if (!employeeId) return;
 
     setSaving(true);
     try {
@@ -136,10 +134,12 @@ function EmployeeProfile() {
   return (
     <AppShell pageTitle="Employee Profile">
       <div style={{ display: 'grid', gap: 'var(--space-5)' }}>
+
+        {/* Header card: avatar + name/title/dept + photo upload on the right */}
         <Card>
           <div style={{ display: 'flex', gap: 'var(--space-5)', alignItems: 'center', flexWrap: 'wrap' }}>
             <Avatar name={profile?.name || ''} src={avatarSrc} size="lg" />
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 700 }}>
                 {profile?.name || 'Employee'}
               </div>
@@ -150,9 +150,32 @@ function EmployeeProfile() {
                 {profile?.department?.name || 'No department'}
               </div>
             </div>
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-1)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Profile Photo
+              </div>
+              <label
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: 'var(--space-2) var(--space-3)',
+                  color: editing ? 'var(--text-primary)' : 'var(--text-muted)',
+                  background: 'var(--bg-elevated)',
+                  cursor: editing ? 'pointer' : 'not-allowed'
+                }}
+              >
+                <UploadFileOutlinedIcon fontSize="small" />
+                <span style={{ fontSize: 'var(--text-sm)' }}>{photoFile ? photoFile.name : 'Choose image'}</span>
+                <input type="file" hidden disabled={!editing} accept="image/*" onChange={handlePhotoChange} />
+              </label>
+            </div>
           </div>
         </Card>
 
+        {/* Editable details: 2-column grid, no orphaned rows */}
         <Card
           header="Editable Details"
           headerRight={(
@@ -171,7 +194,7 @@ function EmployeeProfile() {
             </div>
           )}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--space-4)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-4)', alignItems: 'end' }}>
             <FormField
               label="Personal Phone Number"
               name="mobile_phone"
@@ -206,29 +229,9 @@ function EmployeeProfile() {
               placeholder="Enter emergency contact phone"
             />
           </div>
-
-          <div style={{ marginTop: 'var(--space-4)' }}>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)' }}>Profile Photo</div>
-            <label
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-2) var(--space-3)',
-                color: editing ? 'var(--text-primary)' : 'var(--text-muted)',
-                background: 'var(--bg-elevated)',
-                cursor: editing ? 'pointer' : 'not-allowed'
-              }}
-            >
-              <UploadFileOutlinedIcon fontSize="small" />
-              <span style={{ fontSize: 'var(--text-sm)' }}>{photoFile ? photoFile.name : 'Choose image'}</span>
-              <input type="file" hidden disabled={!editing} accept="image/*" onChange={handlePhotoChange} />
-            </label>
-          </div>
         </Card>
 
+        {/* Locked details */}
         <Card header="Locked Details">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-4)' }}>
             {lockedRows.map((row) => (

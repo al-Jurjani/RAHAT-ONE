@@ -290,6 +290,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
               setPage(0);
             }}
             SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
             sx={{ mb: 1 }}
           >
             <option value="">All Fraud Statuses</option>
@@ -307,6 +308,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
               setPage(0);
             }}
             SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
           >
             <option value="">All Statuses</option>
             <option value="pending_manager">Pending Manager</option>
@@ -423,6 +425,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                 setPage(0);
               }}
               SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
             >
               <option value="">All Fraud Statuses</option>
               <option value="fraudulent">Fraudulent</option>
@@ -441,6 +444,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                 setPage(0);
               }}
               SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
             >
               <option value="">All Statuses</option>
               <option value="pending_manager">Pending Manager</option>
@@ -529,8 +533,8 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                 hover
                 sx={{
                   backgroundColor: expense.fraud_detection_status === 'fraudulent'
-                    ? '#ffebee'
-                    : '#fff3e0'
+                    ? 'var(--status-danger-bg)'
+                    : 'var(--status-warning-bg)'
                 }}
               >
                 <TableCell>
@@ -547,7 +551,7 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   {getFraudStatusChip(expense.fraud_detection_status, expense.fraud_score)}
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#d32f2f' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'var(--status-danger)' }}>
                     {((expense.fraud_score || 0) * 100).toFixed(1)}%
                   </Typography>
                 </TableCell>

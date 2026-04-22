@@ -20,7 +20,8 @@
 .hr-attendance-page__filters {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
 }
 
 .hr-attendance-page__stats {
@@ -45,7 +46,7 @@
   font-size: var(--text-sm);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   .hr-attendance-page__filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

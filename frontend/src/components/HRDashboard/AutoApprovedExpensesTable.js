@@ -164,6 +164,7 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
               value={filterCategory}
               onChange={(e) => { setFilterCategory(e.target.value); setPage(0); }}
               SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
             >
               <option value="">All Categories</option>
               <option value="medical">Medical</option>

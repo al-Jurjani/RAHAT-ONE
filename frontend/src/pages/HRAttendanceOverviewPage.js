@@ -31,9 +31,9 @@ function todayString() {
 
 function formatTimeLabel(value) {
   if (!value) return '—';
-  const date = new Date(String(value).replace(' ', 'T'));
+  const date = new Date(String(value).replace(' ', 'T') + 'Z');
   if (Number.isNaN(date.getTime())) return '—';
-  return format(date, 'h:mm a');
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Karachi' });
 }
 
 function formatHoursLabel(value) {
@@ -88,6 +88,7 @@ function HRAttendanceOverviewPage() {
   const [selectedDate, setSelectedDate] = useState(todayString());
   const [selectedBranch, setSelectedBranch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [employeeNameFilter, setEmployeeNameFilter] = useState('');
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -191,10 +192,20 @@ function HRAttendanceOverviewPage() {
   }, [records, selectedDate, stats.notCheckedIn, selectedBranch, branches]);
 
   const filteredRows = useMemo(() => {
-    if (statusFilter === '') return mappedRecords;
-    if (statusFilter === 'no_record') return mappedRecords.filter((row) => row.status === 'no_record');
-    return mappedRecords.filter((row) => row.status !== 'no_record' && row.status === statusFilter);
-  }, [mappedRecords, statusFilter]);
+    let rows = mappedRecords;
+    if (statusFilter !== '') {
+      if (statusFilter === 'no_record') {
+        rows = rows.filter((row) => row.status === 'no_record');
+      } else {
+        rows = rows.filter((row) => row.status !== 'no_record' && row.status === statusFilter);
+      }
+    }
+    if (employeeNameFilter.trim() !== '') {
+      const query = employeeNameFilter.trim().toLowerCase();
+      rows = rows.filter((row) => row.employeeName.toLowerCase().includes(query));
+    }
+    return rows;
+  }, [mappedRecords, statusFilter, employeeNameFilter]);
 
   const columns = [
     { key: 'employeeName', label: 'Employee Name' },
@@ -303,6 +314,14 @@ function HRAttendanceOverviewPage() {
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </FormField>
+
+            <FormField
+              label="Employee Name"
+              type="text"
+              value={employeeNameFilter}
+              onChange={(event) => setEmployeeNameFilter(event.target.value)}
+              placeholder="Search by name..."
+            />
           </div>
         </Card>
 
