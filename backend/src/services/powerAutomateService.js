@@ -12,6 +12,9 @@ class PowerAutomateService {
     this.expenseFlowUrl = process.env.N8N_EXPENSE_WEBHOOK_URL;
     this.expenseManagerDecisionUrl = process.env.N8N_MANAGER_DECISION_WEBHOOK;
     this.expenseHrDecisionUrl = process.env.N8N_HR_DECISION_WEBHOOK;
+    // HR admin assignment flows (branch/shift + department manager)
+    this.hrBranchShiftAssignmentUrl = process.env.N8N_HR_BRANCH_SHIFT_ASSIGNMENT_WEBHOOK;
+    this.departmentManagerCascadeUrl = process.env.N8N_DEPARTMENT_MANAGER_CASCADE_WEBHOOK || process.env.N8N_WEBHOOK_BASE_URL;
     // Old PA expense URLs (commented out):
     // this.expensePolicyFlowUrl = process.env.POWER_AUTOMATE_EXPENSE_POLICY_FLOW_URL;
     // this.expenseSubmissionFlowUrl = process.env.PA_EXPENSE_SUBMISSION_WEBHOOK;
@@ -204,6 +207,58 @@ class PowerAutomateService {
       return true;
     } catch (error) {
       console.error('[ExpenseFlow] HR decision webhook error:', error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      return null;
+    }
+  }
+
+  // ==========================================
+  // HR ADMIN ASSIGNMENT FLOWS (n8n)
+  // ==========================================
+
+  async triggerHrBranchShiftAssignment(payload) {
+    try {
+      if (!this.hrBranchShiftAssignmentUrl) {
+        console.warn('[HRFlow] N8N_HR_BRANCH_SHIFT_ASSIGNMENT_WEBHOOK not configured in .env');
+        return null;
+      }
+
+      const response = await axios.post(this.hrBranchShiftAssignmentUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      });
+
+      console.log(`[HRFlow] Branch/shift assignment webhook fired successfully (status: ${response.status})`);
+      return response.data;
+    } catch (error) {
+      console.error('[HRFlow] Branch/shift assignment webhook error:', error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      return null;
+    }
+  }
+
+  async triggerDepartmentManagerCascade(payload) {
+    try {
+      if (!this.departmentManagerCascadeUrl) {
+        console.warn('[HRFlow] N8N_DEPARTMENT_MANAGER_CASCADE_WEBHOOK (or N8N_WEBHOOK_BASE_URL) not configured in .env');
+        return null;
+      }
+
+      const response = await axios.post(this.departmentManagerCascadeUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      });
+
+      console.log(`[HRFlow] Department manager cascade webhook fired successfully (status: ${response.status})`);
+      return response.data;
+    } catch (error) {
+      console.error('[HRFlow] Department manager cascade webhook error:', error.message);
       if (error.response) {
         console.error('   Response status:', error.response.status);
         console.error('   Response data:', JSON.stringify(error.response.data, null, 2));

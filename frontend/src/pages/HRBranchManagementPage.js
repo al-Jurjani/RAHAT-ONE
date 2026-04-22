@@ -92,6 +92,13 @@ function HRBranchManagementPage() {
   const [branchToDeactivate, setBranchToDeactivate] = useState(null);
   const [deactivateLoading, setDeactivateLoading] = useState(false);
 
+  const [setManagerModalOpen, setSetManagerModalOpen] = useState(false);
+  const [setManagerBranch, setSetManagerBranch] = useState(null);
+  const [setManagerEmployees, setSetManagerEmployees] = useState([]);
+  const [setManagerEmployeeId, setSetManagerEmployeeId] = useState('');
+  const [setManagerLoading, setSetManagerLoading] = useState(false);
+  const [setManagerSaving, setSetManagerSaving] = useState(false);
+
   const fetchBranches = useCallback(async () => {
     setLoading(true);
     try {
@@ -270,6 +277,45 @@ function HRBranchManagementPage() {
     }
   };
 
+  const openSetManagerModal = async (branch) => {
+    setSetManagerBranch(branch);
+    setSetManagerEmployeeId('');
+    setSetManagerEmployees([]);
+    setSetManagerLoading(true);
+    setSetManagerModalOpen(true);
+    try {
+      const response = await api.get('/employees', { params: { branchId: branch.id, limit: 200, status: 'active' } });
+      setSetManagerEmployees(response.data?.employees || []);
+    } catch (error) {
+      toast.error('Failed to load branch employees');
+    } finally {
+      setSetManagerLoading(false);
+    }
+  };
+
+  const saveManager = async () => {
+    if (!setManagerEmployeeId) {
+      toast.error('Please select an employee');
+      return;
+    }
+    const selected = setManagerEmployees.find((e) => String(e.id) === String(setManagerEmployeeId));
+    setSetManagerSaving(true);
+    try {
+      await api.post(`/branches/${setManagerBranch.id}/set-manager`, {
+        employeeId: Number(setManagerEmployeeId),
+        employeeName: selected?.name || '',
+        branchName: setManagerBranch.name
+      });
+      toast.success('Manager assignment queued — emails will be sent shortly');
+      setSetManagerModalOpen(false);
+      await fetchBranches();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to assign manager');
+    } finally {
+      setSetManagerSaving(false);
+    }
+  };
+
   const shiftColumns = [
     { key: 'name', label: 'Shift Name' },
     {
@@ -355,10 +401,18 @@ function HRBranchManagementPage() {
                   </div>
 
                   <div className="hr-branch-page__employee-count">{branch.employee_count || 0} Employees</div>
+                  {branch.storeManager && (
+                    <div className="hr-branch-page__store-manager">
+                      Store Manager: <span>{branch.storeManager}</span>
+                    </div>
+                  )}
 
                   <div className="hr-branch-page__card-footer">
                     <Button size="sm" variant="ghost" onClick={() => openEditBranchModal(branch)}>
                       Edit
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => openSetManagerModal(branch)}>
+                      Set Manager
                     </Button>
                     <Button size="sm" variant="danger" onClick={() => openDeactivateModal(branch)}>
                       Deactivate
@@ -512,6 +566,45 @@ function HRBranchManagementPage() {
             })}
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={setManagerModalOpen}
+        onClose={() => setSetManagerModalOpen(false)}
+        title={`Set Manager — ${setManagerBranch?.name || ''}`}
+        maxWidth="480px"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => setSetManagerModalOpen(false)}>Cancel</Button>
+            <Button onClick={saveManager} loading={setManagerSaving}>Assign Manager</Button>
+          </>
+        )}
+      >
+        {setManagerBranch?.storeManager && (
+          <p className="hr-branch-page__helper-text">
+            Current manager: <strong>{setManagerBranch.storeManager}</strong>
+          </p>
+        )}
+        {setManagerLoading ? (
+          <p className="hr-branch-page__helper-text">Loading employees…</p>
+        ) : setManagerEmployees.length === 0 ? (
+          <p className="hr-branch-page__helper-text">No active employees found in this branch.</p>
+        ) : (
+          <FormField
+            label="Select New Manager"
+            required
+            type="select"
+            value={setManagerEmployeeId}
+            onChange={(e) => setSetManagerEmployeeId(e.target.value)}
+            options={[
+              { value: '', label: '— Select employee —' },
+              ...setManagerEmployees.map((emp) => ({ value: String(emp.id), label: emp.name }))
+            ]}
+          />
+        )}
+        <p className="hr-branch-page__helper-text">
+          This will set the selected employee as manager for all staff in this branch and send notification emails.
+        </p>
       </Modal>
 
       <Modal

@@ -32,6 +32,9 @@ import HREmployeeDirectoryPage from './pages/HREmployeeDirectoryPage';
 import HRDepartmentManagementPage from './pages/HRDepartmentManagementPage';
 import ExpenseSubmission from './pages/ExpenseSubmission';
 import ExpenseHistory from './pages/ExpenseHistory';
+import ManagerAttendancePage from './pages/ManagerAttendancePage';
+import ManagerTeamDirectoryPage from './pages/ManagerTeamDirectoryPage';
+import ManagerAttendanceReportPage from './pages/ManagerAttendanceReportPage';
 import PWAGuard from './components/PWAGuard';
 import { ThemeModeProvider } from './contexts/ThemeModeContext';
 
@@ -328,6 +331,11 @@ function App() {
                 <Route path="/expenses/submit" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseSubmission /></ProtectedRoute>} />
                 <Route path="/expenses/history" element={<ProtectedRoute allowedRoles={['employee']}><ExpenseHistory /></ProtectedRoute>} />
                 <Route path="/employee/leaves" element={<ProtectedRoute allowedRoles={['employee']}><EmployeeLeavePage /></ProtectedRoute>} />
+
+                {/* Manager Routes */}
+                <Route path="/manager/attendance" element={<ProtectedRoute allowedRoles={['employee']} requireManager><ManagerAttendancePage /></ProtectedRoute>} />
+                <Route path="/manager/team" element={<ProtectedRoute allowedRoles={['employee']} requireManager><ManagerTeamDirectoryPage /></ProtectedRoute>} />
+                <Route path="/manager/report" element={<ProtectedRoute allowedRoles={['employee']} requireManager><ManagerAttendanceReportPage /></ProtectedRoute>} />
 
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />

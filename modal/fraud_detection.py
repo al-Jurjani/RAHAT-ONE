@@ -474,17 +474,18 @@ def fastapi_app():
     # ===== THRESHOLDS & WEIGHTS (ported from fraudDetectionService.js) =====
 
     WEIGHTS = {
-        "md5": 0.30,
-        "pHash": 0.15,
-        "clip": 0.20,
-        "florence": 0.15,
-        "anomaly": 0.20,
+        "md5": 0.45,
+        "receiptMath": 0.20,
+        "anomaly": 0.35,
+        # Backward-compatible placeholders for existing consumers.
+        "pHash": 0.0,
+        "clip": 0.0,
+        "florence": 0.0,
     }
 
     THRESHOLDS = {
-        "pHash": {"veryHigh": 0.95, "high": 0.88, "suspicious": 0.80},
-        "clip": {"extreme": 0.98, "veryHigh": 0.93, "moderate": 0.85},
         "anomaly": {"extreme": 3.0, "high": 2.5, "moderate": 2.0},
+        "receiptMath": {"suspicious": 0.40},
         "overall": {"fraudulent": 0.70, "suspicious": 0.40},
     }
 
@@ -795,39 +796,70 @@ def fastapi_app():
             "extremeSimilarityCount": extreme_count,
         }
 
-    def run_florence_layer(florence_result: dict) -> dict:
-        flags = florence_result.get("flagged_regions", [])
-        detail_parts = ["Local text-region consistency analysis complete"]
-        if florence_result.get("amount_mismatch"):
-            detected = florence_result.get("detected_total_amount")
-            claimed = florence_result.get("claimed_amount")
-            detail_parts.append(
-                f"Claimed amount mismatch (detected={detected}, claimed={claimed})"
+    def run_receipt_math_layer(chandra_result: dict) -> dict:
+        """
+        Layer 2: Chandra OCR + Pydantic-style deterministic validation.
+        Current implementation uses the OCR extraction output and enforces deterministic
+        amount consistency rules with explicit validation errors.
+        """
+        flags = chandra_result.get("flagged_regions", [])
+        claimed_amount = chandra_result.get("claimed_amount")
+        detected_total = chandra_result.get("detected_total_amount")
+        amount_delta_ratio = chandra_result.get("amount_delta_ratio")
+        amount_mismatch = bool(chandra_result.get("amount_mismatch", False))
+        font_score = float(chandra_result.get("font_consistency_score", 0.0))
+
+        validation_errors = []
+        if detected_total is None:
+            validation_errors.append(
+                {
+                    "field": "detected_total_amount",
+                    "code": "missing_total",
+                    "message": "Could not reliably extract total amount from receipt",
+                }
             )
-        detail = " | ".join(detail_parts)
-        font_score = float(florence_result.get("font_consistency_score", 0.0))
+        if amount_mismatch:
+            validation_errors.append(
+                {
+                    "field": "total_amount",
+                    "code": "amount_mismatch",
+                    "message": f"Claimed amount {claimed_amount} does not match extracted total {detected_total}",
+                    "delta_ratio": str(amount_delta_ratio),
+                }
+            )
+
+        # Layer 2 is intentionally capped to suspicious-only influence.
         base_score = 1.0 - font_score
-        if florence_result.get("amount_mismatch"):
-            base_score = max(base_score, 0.45)
+        if amount_mismatch:
+            base_score = max(base_score, 0.55)
+        score = round(min(max(base_score, 0.0), 0.65), 4)
+
+        details = "Receipt OCR + deterministic math validation complete"
+        if validation_errors:
+            details += f" | Validation issues: {len(validation_errors)}"
+
+        structured_receipt = {
+            "claimed_amount": claimed_amount,
+            "detected_total_amount": detected_total,
+            "amount_delta_ratio": amount_delta_ratio,
+            "numeric_region_count": chandra_result.get("numeric_region_count", 0),
+        }
+
         return {
-            "score": round(min(max(base_score, 0.0), 1.0), 4),
-            "matched": bool(florence_result.get("is_suspicious", False)),
-            "flags": flags,
-            "details": detail,
-            "font_consistency_score": florence_result.get(
-                "font_consistency_score", 0.0
-            ),
+            "score": score,
+            "matched": bool(validation_errors),
+            "details": details,
+            "analysis": chandra_result.get("analysis", ""),
+            "validation_passed": len(validation_errors) == 0,
+            "validation_errors": validation_errors,
+            "structured_receipt": structured_receipt,
+            "amount_mismatch": amount_mismatch,
+            "claimed_amount": claimed_amount,
+            "detected_total_amount": detected_total,
+            "amount_delta_ratio": amount_delta_ratio,
+            "font_consistency_score": chandra_result.get("font_consistency_score", 0.0),
             "flagged_regions": flags,
-            "is_suspicious": florence_result.get("is_suspicious", False),
-            "mean_stroke_width": florence_result.get("mean_stroke_width", 0.0),
-            "std_stroke_width": florence_result.get("std_stroke_width", 0.0),
-            "mean_ocr_confidence": florence_result.get("mean_ocr_confidence", 0.0),
-            "numeric_region_count": florence_result.get("numeric_region_count", 0),
-            "amount_mismatch": florence_result.get("amount_mismatch", False),
-            "claimed_amount": florence_result.get("claimed_amount"),
-            "detected_total_amount": florence_result.get("detected_total_amount"),
-            "amount_delta_ratio": florence_result.get("amount_delta_ratio"),
-            "analysis": florence_result.get("analysis", ""),
+            "model": "chandra-ocr2+pydantic-validation",
         }
 
     def run_anomaly_layer(amount: float, stats: Optional[dict]) -> dict:
@@ -865,44 +897,27 @@ def fastapi_app():
 
     def aggregate(layers: dict) -> tuple:
         """Returns (overallScore, status, confidence, recommendation)"""
-        # Weighted score remains a supporting signal, but routing now prioritizes
-        # exact duplicates and anomaly behavior over blended averages.
-        overall = sum(layers[k]["score"] * WEIGHTS[k] for k in WEIGHTS)
+        overall = (
+            (layers["md5"].get("score", 0) * WEIGHTS["md5"])
+            + (layers["receiptMath"].get("score", 0) * WEIGHTS["receiptMath"])
+            + (layers["anomaly"].get("score", 0) * WEIGHTS["anomaly"])
+        )
 
         anomaly_score = layers["anomaly"].get("score", 0)
-        p_hash_strong = layers["pHash"].get("matched") is True and (
-            layers["pHash"].get("score", 0) >= 0.40
-            or layers["pHash"].get("similarity", 0) >= THRESHOLDS["pHash"]["veryHigh"]
-        )
-        clip_strong = layers["clip"].get("matched") is True and (
-            layers["clip"].get("score", 0) >= 0.40
-            or layers["clip"].get("similarity", 0) >= THRESHOLDS["clip"]["veryHigh"]
-        )
-        florence_support = (
-            layers["florence"].get("matched") is True
-            or layers["florence"].get("score", 0) >= 0.25
-        )
-        cross_layer_duplicate = (
-            layers["pHash"].get("similarity", 0) >= THRESHOLDS["pHash"]["high"]
-            and layers["clip"].get("similarity", 0) >= THRESHOLDS["clip"]["veryHigh"]
-            and (
-                layers["pHash"].get("amountDeltaRatio") is None
-                or layers["pHash"].get("amountDeltaRatio") <= 0.15
-            )
-            and (
-                layers["clip"].get("amountDeltaRatio") is None
-                or layers["clip"].get("amountDeltaRatio") <= 0.15
-            )
-        )
+        receipt_math_score = layers["receiptMath"].get("score", 0)
+        receipt_math_triggered = layers["receiptMath"].get("matched") is True
 
         # Status
         if layers["md5"]["matched"]:
             status = "fraudulent"
         elif anomaly_score >= 0.80:
             status = "fraudulent"
-        elif cross_layer_duplicate:
-            status = "fraudulent"
-        elif anomaly_score >= 0.60 or p_hash_strong or clip_strong or florence_support:
+        elif anomaly_score >= 0.60:
+            status = "suspicious"
+        elif (
+            receipt_math_triggered
+            or receipt_math_score >= THRESHOLDS["receiptMath"]["suspicious"]
+        ):
             status = "suspicious"
         elif overall >= THRESHOLDS["overall"]["fraudulent"]:
             status = "fraudulent"
@@ -912,11 +927,15 @@ def fastapi_app():
             status = "clean"
 
         # Confidence (layer agreement)
-        high_layers = sum(1 for layer in layers.values() if layer["score"] > 0.5)
-        confidence = high_layers / 5.0
-        critical = sum(1 for k in ["md5", "pHash", "clip"] if layers[k]["score"] > 0.5)
-        if critical >= 2:
-            confidence = min(confidence + 0.2, 1.0)
+        confidence = 0.34
+        if layers["md5"].get("matched"):
+            confidence = 1.0
+        elif anomaly_score >= 0.80:
+            confidence = 0.92
+        elif anomaly_score >= 0.60:
+            confidence = 0.82
+        elif receipt_math_triggered:
+            confidence = 0.74
 
         # Recommendation
         if status == "fraudulent":
@@ -924,24 +943,52 @@ def fastapi_app():
                 rec = "REJECT - Exact duplicate file detected"
             elif anomaly_score >= 0.80:
                 rec = "REJECT - Strong statistical anomaly detected"
-            elif cross_layer_duplicate:
-                rec = "REJECT - Layer 2 and 3 agree on near-duplicate receipt with aligned amount"
             else:
                 rec = "REJECT - Fraud indicators exceeded the hard threshold"
         elif status == "suspicious":
             if anomaly_score >= 0.60:
                 rec = "ESCALATE TO HR - Strong anomaly signal requires direct HR review"
+            elif receipt_math_triggered:
+                rec = "ESCALATE TO HR - Receipt validation failed deterministic consistency checks"
             else:
-                flagged = [
-                    k
-                    for k in ["pHash", "clip", "florence"]
-                    if layers[k]["score"] > 0.20
-                ]
-                rec = f"ESCALATE TO HR - Supporting evidence in: {', '.join(flagged)}"
+                rec = "ESCALATE TO HR - Receipt consistency looks suspicious"
         else:
             rec = "APPROVE - No fraud indicators detected"
 
         return round(overall, 4), status, round(confidence, 4), rec
+
+    def with_legacy_layer_aliases(base_layers: dict, p_hash_value: str = "") -> dict:
+        """
+        Keep old keys (`pHash`, `clip`, `florence`) so existing n8n/Odoo mappings keep
+        working while the active architecture uses 3 layers.
+        """
+        receipt_math = base_layers.get("receiptMath", {})
+        return {
+            **base_layers,
+            "pHash": {
+                "score": 0.0,
+                "matched": False,
+                "details": "Deprecated layer - replaced by receipt OCR + deterministic validation",
+                "hash": p_hash_value or "",
+                "deprecated": True,
+            },
+            "clip": {
+                "score": 0.0,
+                "matched": False,
+                "details": "Deprecated layer - replaced by receipt OCR + deterministic validation",
+                "embedding": None,
+                "similarity": 0.0,
+                "deprecated": True,
+            },
+            "florence": {
+                "score": receipt_math.get("score", 0.0),
+                "matched": receipt_math.get("matched", False),
+                "details": "Compatibility alias for Layer 2 receipt validation",
+                "analysis": receipt_math.get("analysis", ""),
+                "flags": receipt_math.get("flagged_regions", []),
+                "deprecated": True,
+            },
+        }
 
     # ===== REQUEST / RESPONSE MODELS =====
 
@@ -1056,7 +1103,9 @@ def fastapi_app():
                 image_bytes = raw_bytes
 
             # ===== PHASE 1: LOCAL LAYERS (CPU, instant) =====
-            print("[PIPELINE] Phase 1: Running local layers (MD5, pHash, Anomaly)...")
+            print(
+                "[PIPELINE] Phase 1: Running local layers (MD5, metadata pHash, Anomaly)..."
+            )
             past_hashes = [h.model_dump() for h in (request.past_hashes or [])]
             stats = (
                 request.employee_stats.model_dump() if request.employee_stats else None
@@ -1066,8 +1115,8 @@ def fastapi_app():
             md5_hash = compute_md5(raw_bytes)
             md5_result = run_md5_layer(md5_hash, past_hashes)
 
+            # pHash is kept as metadata only for backward-compatible storage fields.
             p_hash = compute_phash(image_bytes)
-            phash_result = run_phash_layer(p_hash, past_hashes, request.amount)
 
             anomaly_result = run_anomaly_layer(request.amount, stats)
 
@@ -1076,24 +1125,20 @@ def fastapi_app():
             # Early exit on exact MD5 match
             if md5_result["matched"]:
                 print("[PIPELINE] EXACT DUPLICATE â€” early exit")
-                layers = {
+                base_layers = {
                     "md5": md5_result,
-                    "pHash": phash_result,
-                    "clip": {
-                        "score": 0,
+                    "receiptMath": {
+                        "score": 0.0,
                         "matched": False,
-                        "details": "Skipped - MD5 match",
-                        "embedding": None,
-                        "similarity": 0,
-                    },
-                    "florence": {
-                        "score": 0,
-                        "flags": [],
-                        "details": "Skipped - MD5 match",
+                        "details": "Skipped - MD5 matched (hard duplicate)",
                         "analysis": "",
+                        "validation_passed": True,
+                        "validation_errors": [],
+                        "structured_receipt": {},
                     },
                     "anomaly": anomaly_result,
                 }
+                layers = with_legacy_layer_aliases(base_layers, p_hash)
                 overall, status, confidence, rec = aggregate(layers)
                 return JSONResponse(
                     content=to_json_safe(
@@ -1105,6 +1150,12 @@ def fastapi_app():
                             "recommendation": rec,
                             "layers": layers,
                             "weights": WEIGHTS,
+                            "clip_embedding": [],
+                            "florence_analysis": {
+                                "analysis": "Skipped - MD5 hard duplicate",
+                                "flags": [],
+                                "amount_mismatch": False,
+                            },
                             "processing_time_seconds": round(
                                 time.time() - start_time, 2
                             ),
@@ -1113,30 +1164,22 @@ def fastapi_app():
                     )
                 )
 
-            # ===== PHASE 2: GPU LAYERS (CLIP + Florence in parallel) =====
-            print("[PIPELINE] Phase 2: Spawning CLIP + Florence on GPU...")
-            clip_task = generate_clip_embedding.spawn(image_bytes)
-            florence_task = detect_forgery_florence.spawn(image_bytes, request.amount)
-
-            clip_embedding = clip_task.get()
-            florence_raw = florence_task.get()
+            # ===== PHASE 2: RECEIPT OCR + DETERMINISTIC VALIDATION =====
+            print(
+                "[PIPELINE] Phase 2: Running receipt OCR + deterministic math validation..."
+            )
+            chandra_raw = detect_forgery_florence.remote(image_bytes, request.amount)
             print("[PIPELINE] Phase 2 done.")
 
             # ===== PHASE 3: SCORE ALL LAYERS =====
-            past_embs = [
-                {"id": e.id, "embedding": e.embedding, "amount": e.amount}
-                for e in (request.past_embeddings or [])
-            ]
-            clip_result = run_clip_layer(clip_embedding, past_embs, request.amount)
-            florence_result = run_florence_layer(florence_raw)
+            receipt_math_result = run_receipt_math_layer(chandra_raw)
 
-            layers = {
+            base_layers = {
                 "md5": md5_result,
-                "pHash": phash_result,
-                "clip": clip_result,
-                "florence": florence_result,
+                "receiptMath": receipt_math_result,
                 "anomaly": anomaly_result,
             }
+            layers = with_legacy_layer_aliases(base_layers, p_hash)
 
             overall, status, confidence, rec = aggregate(layers)
 
@@ -1155,6 +1198,8 @@ def fastapi_app():
                         "recommendation": rec,
                         "layers": layers,
                         "weights": WEIGHTS,
+                        "clip_embedding": [],
+                        "florence_analysis": chandra_raw,
                         "processing_time_seconds": processing_time,
                     }
                 )

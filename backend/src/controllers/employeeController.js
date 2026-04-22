@@ -1,5 +1,6 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
+const powerAutomateService = require('../services/powerAutomateService');
 
 const EMPLOYEE_MODEL = 'hr.employee';
 
@@ -181,12 +182,27 @@ class EmployeeController {
         return respondError(res, 'branchId is required', 400);
       }
 
-      await odooAdapter.execute('hr.employee', 'write', [[employeeId], {
-        branch_id: branchId,
-        shift_id: shiftId || false
-      }]);
+      const payload = {
+        employeeId,
+        branchId,
+        shiftId,
+        triggeredBy: req.user?.name || req.user?.email || 'HR',
+        triggeredByRole: req.user?.role || 'hr',
+        requestedAt: new Date().toISOString()
+      };
 
-      return res.status(200).json({ success: true });
+      const triggered = await powerAutomateService.triggerHrBranchShiftAssignment(payload);
+      if (!triggered) {
+        return respondError(res, 'Failed to trigger branch/shift assignment workflow', 502);
+      }
+
+      return res.status(202).json({
+        success: true,
+        message: 'Branch/shift assignment accepted and handed off to workflow.',
+        employeeId,
+        branchId,
+        shiftId: shiftId || null
+      });
     } catch (error) {
       console.error('updateEmployeeBranch error:', error);
       return respondError(res, 'Failed to update employee branch', 500);

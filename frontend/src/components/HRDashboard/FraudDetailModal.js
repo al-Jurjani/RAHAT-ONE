@@ -105,11 +105,12 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
   };
 
   const layerWeights = fraudDetails?.weights || {
-    md5: 0.35,
-    pHash: 0.20,
-    clip: 0.25,
-    florence: 0.10,
-    anomaly: 0.10
+    md5: 0.45,
+    receiptMath: 0.20,
+    anomaly: 0.35,
+    pHash: 0,
+    clip: 0,
+    florence: 0
   };
 
   const handleHRDecision = async (decision) => {
@@ -270,9 +271,9 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
           )}
         </Paper>
 
-        {/* 5-Layer Analysis */}
+        {/* Layer Analysis */}
         <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
-          Detailed Layer Analysis
+          Detailed Fraud Layer Analysis
         </Typography>
 
         {/* Helper to render a score bar */}
@@ -399,31 +400,47 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
             );
           })();
 
-          // Layer 4: Local text consistency
-          const florenceExtra = (() => {
-            const analysis = expenseData.florence_analysis || layers.florence?.details || layers.florence?.analysis;
-            const flags = layers.florence?.flagged_regions || layers.florence?.flags || [];
-            const fontScore = layers.florence?.font_consistency_score;
-            const meanStroke = layers.florence?.mean_stroke_width;
-            const meanConfidence = layers.florence?.mean_ocr_confidence;
-            const numericCount = layers.florence?.numeric_region_count;
+          // Layer 2 (new): Receipt OCR + deterministic validation
+          const receiptMathLayer = layers.receiptMath || layers.florence || {};
+          const receiptMathExtra = (() => {
+            const analysis = receiptMathLayer?.analysis || expenseData.florence_analysis || receiptMathLayer?.details;
+            const flags = receiptMathLayer?.flagged_regions || receiptMathLayer?.flags || [];
+            const fontScore = receiptMathLayer?.font_consistency_score;
+            const numericCount = receiptMathLayer?.structured_receipt?.numeric_region_count ?? receiptMathLayer?.numeric_region_count;
+            const claimedAmount = receiptMathLayer?.claimed_amount ?? receiptMathLayer?.structured_receipt?.claimed_amount;
+            const detectedTotal = receiptMathLayer?.detected_total_amount ?? receiptMathLayer?.structured_receipt?.detected_total_amount;
+            const deltaRatio = receiptMathLayer?.amount_delta_ratio ?? receiptMathLayer?.structured_receipt?.amount_delta_ratio;
+            const validationPassed = receiptMathLayer?.validation_passed;
+            const validationErrors = Array.isArray(receiptMathLayer?.validation_errors)
+              ? receiptMathLayer.validation_errors
+              : [];
             return (
               <Box>
+                {validationPassed !== undefined && (
+                  <Typography variant="caption" sx={{ display: 'block', color: validationPassed ? '#2e7d32' : '#d32f2f', mb: 0.5 }}>
+                    Deterministic validation: {validationPassed ? 'Passed' : 'Failed'}
+                  </Typography>
+                )}
+                {claimedAmount !== undefined && claimedAmount !== null && (
+                  <Typography variant="caption" sx={{ display: 'block', color: '#616161' }}>
+                    Claimed amount: {Number(claimedAmount).toFixed(2)}
+                  </Typography>
+                )}
+                {detectedTotal !== undefined && detectedTotal !== null && (
+                  <Typography variant="caption" sx={{ display: 'block', color: '#616161' }}>
+                    OCR detected total: {Number(detectedTotal).toFixed(2)}
+                  </Typography>
+                )}
+                {deltaRatio !== undefined && deltaRatio !== null && (
+                  <Typography variant="caption" sx={{ display: 'block', color: '#616161', mb: 0.5 }}>
+                    Amount delta ratio: {(Number(deltaRatio) * 100).toFixed(1)}%
+                  </Typography>
+                )}
                 {fontScore !== undefined && (
                   <Box sx={{ mb: 1, p: 1, bgcolor: '#f3f6ff', borderRadius: 1, border: '1px solid #c5d4ff' }}>
                     <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
                       Font consistency: {(Number(fontScore) * 100).toFixed(1)}%
                     </Typography>
-                    {meanStroke !== undefined && (
-                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
-                        Mean stroke width: {Number(meanStroke).toFixed(2)}
-                      </Typography>
-                    )}
-                    {meanConfidence !== undefined && (
-                      <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
-                        OCR confidence: {Number(meanConfidence).toFixed(1)}%
-                      </Typography>
-                    )}
                     {numericCount !== undefined && (
                       <Typography variant="caption" sx={{ display: 'block', color: '#1a237e' }}>
                         Numeric regions analyzed: {numericCount}
@@ -448,10 +465,22 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                     })}
                   </Box>
                 )}
+                {validationErrors.length > 0 && (
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="caption" sx={{ display: 'block', color: '#616161', mb: 0.5 }}>
+                      Validation errors:
+                    </Typography>
+                    {validationErrors.map((err, idx) => (
+                      <Typography key={`${idx}-${err.code || 'validation'}`} variant="caption" sx={{ display: 'block', color: '#c62828' }}>
+                        • {err.message || toDisplayText(err)}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
                 {analysis && analysis !== 'null' && analysis !== 'false' ? (
                   <Box sx={{ p: 1.5, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
                     <Typography variant="caption" sx={{ fontWeight: 600, color: '#e65100', display: 'block', mb: 0.5 }}>
-                      Layer reasoning:
+                      VLM output / layer reasoning:
                     </Typography>
                     <Typography variant="body2" sx={{ color: '#424242', whiteSpace: 'pre-wrap' }}>
                       {toDisplayText(analysis)}
@@ -459,7 +488,7 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
                   </Box>
                 ) : (
                   <Typography variant="caption" sx={{ color: '#9e9e9e' }}>
-                    {layers.florence?.error ? 'ML service was unavailable' : 'No analysis stored (skipped or not yet run)'}
+                    {receiptMathLayer?.error ? 'ML service was unavailable' : 'No analysis stored (skipped or not yet run)'}
                   </Typography>
                 )}
               </Box>
@@ -482,12 +511,24 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
             </Box>
           );
 
+          const hasNewModel = Boolean(layers.receiptMath);
+
+          if (hasNewModel) {
+            return (
+              <>
+                {renderLayer('Layer 1: MD5 Hash (Global Duplicate Check)', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
+                {renderLayer('Layer 2: Chandra OCR + Pydantic Validation', Math.round((layerWeights.receiptMath || 0) * 100), layers.receiptMath, receiptMathExtra)}
+                {renderLayer('Layer 3: Statistical Category Anomaly', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
+              </>
+            );
+          }
+
           return (
             <>
               {renderLayer('Layer 1: MD5 Hash', Math.round((layerWeights.md5 || 0) * 100), layers.md5, md5Extra)}
               {renderLayer('Layer 2: Perceptual Hash (pHash)', Math.round((layerWeights.pHash || 0) * 100), layers.pHash, phashExtra)}
               {renderLayer('Layer 3: CLIP Visual Similarity', Math.round((layerWeights.clip || 0) * 100), layers.clip, clipExtra)}
-              {renderLayer('Layer 4: Local Text Consistency', Math.round((layerWeights.florence || 0) * 100), layers.florence, florenceExtra)}
+              {renderLayer('Layer 4: Local Text Consistency', Math.round((layerWeights.florence || 0) * 100), layers.florence, receiptMathExtra)}
               {renderLayer('Layer 5: Anomaly Detection', Math.round((layerWeights.anomaly || 0) * 100), layers.anomaly, anomalyExtra)}
             </>
           );

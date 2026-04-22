@@ -43,18 +43,19 @@ function jsDayToMondayFirst(jsDay) {
 }
 
 function pktDateRange(dateInput) {
-  const base = dateInput ? new Date(dateInput) : getPKTTime();
-  const pkt = new Date(base.getTime() + (5 * 60 - base.getTimezoneOffset()) * 60000);
+  const PKT_OFFSET_MS = 5 * 60 * 60000;
+  const baseUtc = dateInput ? new Date(dateInput) : new Date();
+  const pkt = new Date(baseUtc.getTime() + PKT_OFFSET_MS);
 
   const start = new Date(pkt);
-  start.setHours(0, 0, 0, 0);
+  start.setUTCHours(0, 0, 0, 0);
 
   const end = new Date(pkt);
-  end.setHours(23, 59, 59, 999);
+  end.setUTCHours(23, 59, 59, 999);
 
   return {
-    startUtc: new Date(start.getTime() - 5 * 60 * 60000),
-    endUtc: new Date(end.getTime() - 5 * 60 * 60000)
+    startUtc: new Date(start.getTime() - PKT_OFFSET_MS),
+    endUtc: new Date(end.getTime() - PKT_OFFSET_MS)
   };
 }
 
@@ -204,21 +205,24 @@ class AttendanceController {
           : (rejectionReason || 'Check-in rejected');
 
       // Fire and forget — don't await, don't let it block the response
+      const checkinPayload = {
+        event: 'checkin',
+        employeeId: employeeIdInt,
+        employeeName: employee.name,
+        employeeEmail: employee.work_email || 'noemail@company.com',
+        branchName: branch.name,
+        status,
+        checkIn: checkInTime.toISOString(),
+        distanceFromBranch: distanceRounded,
+        rejectionReason: rejectionReason || null
+      };
+      console.log('[Attendance] Firing check-in webhook →', process.env.N8N_ATTENDANCE_WEBHOOK_URL, JSON.stringify(checkinPayload));
       fetch(process.env.N8N_ATTENDANCE_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'checkin',
-          employeeId: employeeIdInt,
-          employeeName: employee.name,
-          employeeEmail: employee.work_email || 'noemail@company.com',
-          branchName: branch.name,
-          status,
-          checkIn: checkInTime.toISOString(),
-          distanceFromBranch: distanceRounded,
-          rejectionReason: rejectionReason || null
-        })
-      }).catch(() => {}); // silently ignore webhook failures
+        body: JSON.stringify(checkinPayload)
+      }).then((r) => console.log('[Attendance] Check-in webhook response:', r.status))
+        .catch((err) => console.error('[Attendance] Check-in webhook failed:', err.message));
 
       return res.status(200).json({
         success: true,
@@ -306,20 +310,23 @@ class AttendanceController {
       const branchName = branch && Array.isArray(branch.name) ? branch.name : (branch?.name || 'Unknown Branch');
 
       // Fire and forget — don't await, don't let it block the response
+      const checkoutPayload = {
+        event: 'checkout',
+        employeeId: employeeIdInt,
+        employeeName: employee?.name || 'Unknown',
+        employeeEmail: employee?.work_email || 'noemail@company.com',
+        branchName: branchName,
+        checkOut: checkoutTime.toISOString(),
+        workedHours: Number(workedHours.toFixed(2)),
+        distanceFromBranch: Math.round(distance)
+      };
+      console.log('[Attendance] Firing check-out webhook →', process.env.N8N_ATTENDANCE_WEBHOOK_URL, JSON.stringify(checkoutPayload));
       fetch(process.env.N8N_ATTENDANCE_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'checkout',
-          employeeId: employeeIdInt,
-          employeeName: employee?.name || 'Unknown',
-          employeeEmail: employee?.work_email || 'noemail@company.com',
-          branchName: branchName,
-          checkOut: checkoutTime.toISOString(),
-          workedHours: Number(workedHours.toFixed(2)),
-          distanceFromBranch: Math.round(distance)
-        })
-      }).catch(() => {}); // silently ignore webhook failures
+        body: JSON.stringify(checkoutPayload)
+      }).then((r) => console.log('[Attendance] Check-out webhook response:', r.status))
+        .catch((err) => console.error('[Attendance] Check-out webhook failed:', err.message));
 
       return res.status(200).json({
         success: true,
@@ -447,6 +454,143 @@ class AttendanceController {
     } catch (error) {
       console.error('getHrSummary error:', error);
       return respondError(res, 'Failed to fetch HR attendance summary', 500);
+    }
+  }
+
+  async getManagerSummary(req, res) {
+    try {
+      const branchId = req.user.managerBranchId;
+      if (!branchId) return respondError(res, 'No branch assigned to this manager', 400);
+
+      const inputDate = req.query.date;
+      const { startUtc, endUtc } = pktDateRange(inputDate);
+
+      const records = await odooAdapter.execute('rahat.attendance', 'search_read', [
+        [
+          ['branch_id', '=', branchId],
+          ['check_in', '>=', startUtc.toISOString().slice(0, 19).replace('T', ' ')],
+          ['check_in', '<=', endUtc.toISOString().slice(0, 19).replace('T', ' ')]
+        ],
+        ['id', 'employee_id', 'branch_id', 'shift_id', 'status', 'check_in', 'check_out', 'worked_hours', 'distance_from_branch'],
+        0, 500, 'check_in desc'
+      ]);
+
+      const resolveEmployeeName = (empField) => {
+        if (Array.isArray(empField)) return empField[1];
+        if (typeof empField === 'string') return empField;
+        if (typeof empField === 'number') return `Employee #${empField}`;
+        return 'Unknown';
+      };
+
+      const summary = records.map((record) => ({
+        id: record.id,
+        employeeId: Array.isArray(record.employee_id) ? record.employee_id[0] : null,
+        employeeName: resolveEmployeeName(record.employee_id),
+        branchId: Array.isArray(record.branch_id) ? record.branch_id[0] : null,
+        branchName: Array.isArray(record.branch_id) ? record.branch_id[1] : null,
+        shiftName: Array.isArray(record.shift_id) ? record.shift_id[1] : null,
+        status: record.status,
+        check_in: record.check_in,
+        check_out: record.check_out,
+        worked_hours: record.worked_hours,
+        distance_from_branch: record.distance_from_branch !== undefined && record.distance_from_branch !== false
+          ? record.distance_from_branch : null
+      }));
+
+      return respondSuccess(res, summary, 'Manager attendance summary fetched');
+    } catch (error) {
+      console.error('getManagerSummary error:', error);
+      return respondError(res, 'Failed to fetch manager attendance summary', 500);
+    }
+  }
+
+  async getManagerMonthlyReport(req, res) {
+    try {
+      const branchId = req.user.managerBranchId;
+      if (!branchId) return respondError(res, 'No branch assigned to this manager', 400);
+
+      const now = getPKTTime();
+      const monthParam = req.query.month; // YYYY-MM
+      let year = now.getFullYear();
+      let month = now.getMonth(); // 0-indexed
+
+      if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+        const parts = monthParam.split('-');
+        year = Number(parts[0]);
+        month = Number(parts[1]) - 1;
+      }
+
+      const monthStartPkt = new Date(year, month, 1, 0, 0, 0, 0);
+      const monthEndPkt = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      const startUtc = new Date(monthStartPkt.getTime() - 5 * 60 * 60000);
+      const endUtc = new Date(monthEndPkt.getTime() - 5 * 60 * 60000);
+
+      const records = await odooAdapter.execute('rahat.attendance', 'search_read', [
+        [
+          ['branch_id', '=', branchId],
+          ['check_in', '>=', startUtc.toISOString().slice(0, 19).replace('T', ' ')],
+          ['check_in', '<=', endUtc.toISOString().slice(0, 19).replace('T', ' ')]
+        ],
+        ['id', 'employee_id', 'status', 'check_in'],
+        0, 2000, 'check_in asc'
+      ]);
+
+      // Group by employee
+      const byEmployee = {};
+      records.forEach((record) => {
+        const empId = Array.isArray(record.employee_id) ? record.employee_id[0] : record.employee_id;
+        const empName = Array.isArray(record.employee_id) ? record.employee_id[1] : `Employee #${empId}`;
+        if (!byEmployee[empId]) {
+          byEmployee[empId] = { employeeId: empId, employeeName: empName, present: 0, late: 0, rejected: 0, days: new Set() };
+        }
+        const entry = byEmployee[empId];
+        const dayKey = record.check_in ? record.check_in.slice(0, 10) : null;
+        if (record.status === 'present') { entry.present++; if (dayKey) entry.days.add(dayKey); }
+        else if (record.status === 'late') { entry.late++; if (dayKey) entry.days.add(dayKey); }
+        else if (record.status === 'rejected') { entry.rejected++; }
+      });
+
+      const todayPkt = getPKTTime();
+      const daysElapsed = todayPkt.getFullYear() === year && todayPkt.getMonth() === month
+        ? todayPkt.getDate()
+        : new Date(year, month + 1, 0).getDate();
+
+      const report = Object.values(byEmployee).map((entry) => ({
+        employeeId: entry.employeeId,
+        employeeName: entry.employeeName,
+        daysPresent: entry.present,
+        daysLate: entry.late,
+        daysRejected: entry.rejected,
+        daysAbsent: Math.max(0, daysElapsed - entry.days.size)
+      })).sort((a, b) => b.daysAbsent - a.daysAbsent || b.daysLate - a.daysLate);
+
+      return respondSuccess(res, { report, daysElapsed, month: `${year}-${String(month + 1).padStart(2, '0')}` }, 'Monthly report fetched');
+    } catch (error) {
+      console.error('getManagerMonthlyReport error:', error);
+      return respondError(res, 'Failed to fetch monthly report', 500);
+    }
+  }
+
+  async getManagerTeam(req, res) {
+    try {
+      const branchId = req.user.managerBranchId;
+      const managerOdooId = req.user.employee_id;
+      const fields = ['id', 'name', 'job_title', 'work_email', 'mobile_phone', 'shift_id', 'image_128'];
+
+      let domain;
+      if (branchId) {
+        // Store manager — show everyone in their branch
+        domain = [['branch_id', '=', branchId], ['active', '=', true]];
+      } else {
+        // Department / HQ manager — show direct reports
+        domain = [['parent_id', '=', managerOdooId], ['active', '=', true]];
+      }
+
+      const employees = await odooAdapter.execute('hr.employee', 'search_read', [domain, fields]);
+      return respondSuccess(res, employees || [], 'Manager team fetched');
+    } catch (error) {
+      console.error('getManagerTeam error:', error);
+      return respondError(res, 'Failed to fetch manager team', 500);
     }
   }
 }

@@ -923,6 +923,10 @@ ODOO_PASSWORD=admin
 # Power Automate
 POWER_AUTOMATE_FLOW_URL=https://prod-xx.azure.com/workflows/.../triggers/manual/invoke
 
+# n8n HR assignment flows
+N8N_HR_BRANCH_SHIFT_ASSIGNMENT_WEBHOOK=http://localhost:5678/webhook/hr-employee-branch-shift-assign
+N8N_DEPARTMENT_MANAGER_CASCADE_WEBHOOK=http://localhost:5678/webhook/department-manager-cascade
+
 # Azure Document Intelligence
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
 AZURE_DOCUMENT_INTELLIGENCE_KEY=your-api-key-here

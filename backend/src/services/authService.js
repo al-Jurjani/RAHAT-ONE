@@ -58,11 +58,38 @@ class AuthService {
       // Reset failed login counter
       await odooAdapter.execute('res.users', 'reset_failed_login', [[user.id]]);
 
-      // Generate tokens
-      const accessToken = this._generateAccessToken(user);
-      const refreshToken = this._generateRefreshToken(user);
+      // Detect if this employee is a manager (anyone reports to them)
+      let isManager = false;
+      let managerBranchId = null;
 
-      console.log('✅ Login successful:', email, '| Role:', user.rahatone_role);
+      if (user.rahatone_role === 'employee' && Array.isArray(user.employee_id) && user.employee_id[0]) {
+        const employeeOdooId = user.employee_id[0];
+        console.log('[Auth] Checking manager status for employee Odoo ID:', employeeOdooId);
+
+        const reportCount = await odooAdapter.execute('hr.employee', 'search_count', [
+          [['parent_id', '=', employeeOdooId], ['active', '=', true]]
+        ]);
+        console.log('[Auth] Employees reporting to this user:', reportCount);
+
+        if (reportCount > 0) {
+          isManager = true;
+          const selfRecord = await odooAdapter.execute('hr.employee', 'search_read', [
+            [['id', '=', employeeOdooId]],
+            ['id', 'branch_id']
+          ]);
+          console.log('[Auth] Manager self record branch_id:', selfRecord?.[0]?.branch_id);
+          if (selfRecord && selfRecord[0] && Array.isArray(selfRecord[0].branch_id)) {
+            managerBranchId = selfRecord[0].branch_id[0];
+          }
+        }
+      }
+      console.log('[Auth] isManager:', isManager, '| managerBranchId:', managerBranchId);
+
+      // Generate tokens
+      const accessToken = this._generateAccessToken(user, isManager, managerBranchId);
+      const refreshToken = this._generateRefreshToken(user, isManager, managerBranchId);
+
+      console.log('✅ Login successful:', email, '| Role:', user.rahatone_role, isManager ? '| Manager of branch:' + managerBranchId : '');
 
       return {
         success: true,
@@ -73,7 +100,9 @@ class AuthService {
           name: user.name,
           email: user.email,
           role: user.rahatone_role,
-          employeeId: user.employee_id ? user.employee_id[0] : null
+          employeeId: user.employee_id ? user.employee_id[0] : null,
+          isManager,
+          managerBranchId
         }
       };
 
@@ -199,28 +228,32 @@ class AuthService {
   }
 
   // Private helper methods
-  _generateAccessToken(user) {
+  _generateAccessToken(user, isManager = false, managerBranchId = null) {
     return jwt.sign(
       {
         userId: user.id,
-        employee_id: user.employee_id ? user.employee_id[0] : null,  // ← ADDED
+        employee_id: user.employee_id ? user.employee_id[0] : null,
         email: user.email || user.login,
         name: user.name,
-        role: user.rahatone_role
+        role: user.rahatone_role,
+        isManager,
+        managerBranchId
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRY }
     );
   }
 
-  _generateRefreshToken(user) {
+  _generateRefreshToken(user, isManager = false, managerBranchId = null) {
     return jwt.sign(
       {
         userId: user.id,
-        employee_id: user.employee_id ? user.employee_id[0] : null,  // ← ADDED
+        employee_id: user.employee_id ? user.employee_id[0] : null,
         email: user.email || user.login,
         name: user.name,
-        role: user.rahatone_role
+        role: user.rahatone_role,
+        isManager,
+        managerBranchId
       },
       JWT_SECRET,
       { expiresIn: REFRESH_TOKEN_EXPIRY }

@@ -10,6 +10,7 @@ router.post('/', branchController.createBranch.bind(branchController));
 router.patch('/:branchId', branchController.updateBranch.bind(branchController));
 router.delete('/:branchId', branchController.deleteBranch.bind(branchController));
 
+router.post('/:branchId/set-manager', branchController.setManager.bind(branchController));
 router.get('/:branchId/shifts', branchController.getBranchShifts.bind(branchController));
 router.post('/:branchId/shifts', branchController.createShift.bind(branchController));
 router.patch('/shifts/:shiftId', branchController.updateShift.bind(branchController));

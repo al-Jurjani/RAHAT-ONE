@@ -1,5 +1,6 @@
 const odooAdapter = require('../adapters/odooAdapter');
 const { respondError } = require('../utils/responseHandler');
+const powerAutomateService = require('../services/powerAutomateService');
 
 function toInt(value) {
   const parsed = Number.parseInt(value, 10);
@@ -137,39 +138,24 @@ class DepartmentController {
         return respondError(res, 'managerId is required', 400);
       }
 
-      await odooAdapter.execute('hr.department', 'write', [[departmentId], {
-        manager_id: managerId
-      }]);
+      const payload = {
+        departmentId,
+        departmentName: departmentName || '',
+        managerId,
+        managerName: managerName || '',
+        triggeredBy: req.user?.name || req.user?.email || 'HR',
+        triggeredByRole: req.user?.role || 'hr',
+        requestedAt: new Date().toISOString()
+      };
 
-      const webhookBase = process.env.N8N_WEBHOOK_BASE_URL;
-      if (webhookBase) {
-        const payload = {
-          departmentId,
-          departmentName: departmentName || '',
-          managerId,
-          managerName: managerName || '',
-          triggeredBy: req.user?.name || 'HR'
-        };
-
-        console.log('[Department] Firing n8n webhook to:', process.env.N8N_WEBHOOK_BASE_URL);
-        console.log('[Department] Webhook payload:', JSON.stringify(payload));
-
-        fetch(`${webhookBase}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-          .then((response) => {
-            console.log('[Department] n8n webhook response status:', response.status);
-          })
-          .catch((err) => {
-            console.error('[Department] n8n webhook failed:', err.message);
-          });
+      const triggered = await powerAutomateService.triggerDepartmentManagerCascade(payload);
+      if (!triggered) {
+        return respondError(res, 'Failed to trigger department manager assignment workflow', 502);
       }
 
-      return res.status(200).json({
+      return res.status(202).json({
         success: true,
-        message: 'Manager assigned. Employee records are being updated automatically.',
+        message: 'Department manager assignment accepted and handed off to workflow.',
         departmentId,
         managerId
       });

@@ -66,6 +66,17 @@
   font-size: var(--text-sm);
 }
 
+.hr-branch-page__store-manager {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.hr-branch-page__store-manager span {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .hr-branch-page__card-footer {
   display: flex;
   align-items: center;

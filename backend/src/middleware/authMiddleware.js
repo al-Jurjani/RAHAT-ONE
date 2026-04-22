@@ -45,7 +45,14 @@ const requireRole = (...roles) => {
   };
 };
 
+const requireManager = (req, res, next) => {
+  if (!req.user) return respondError(res, 'Access denied. Not authenticated.', 401);
+  if (!req.user.isManager) return respondError(res, 'Access denied. Manager role required.', 403);
+  next();
+};
+
 module.exports = {
   authenticateToken,
-  requireRole
+  requireRole,
+  requireManager
 };

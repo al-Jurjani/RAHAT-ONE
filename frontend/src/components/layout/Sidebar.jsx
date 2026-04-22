@@ -17,6 +17,8 @@ import HistoryIcon from '@mui/icons-material/History';
 import FmdGoodIcon from '@mui/icons-material/FmdGood';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
+import GroupIcon from '@mui/icons-material/Group';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import LogoutIcon from '@mui/icons-material/Logout';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 
@@ -30,35 +32,31 @@ const HR_NAV_SECTIONS = [
       { to: '/hr/expense-dashboard',  icon: <ReceiptIcon fontSize="small" />,                 label: 'Expense Management' },
       { to: '/hr/employees',          icon: <PersonIcon fontSize="small" />,                  label: 'Employee Directory' },
       { to: '/hr/departments',        icon: <ApartmentIcon fontSize="small" />,               label: 'Department Management' },
+      { to: '/hr/branches',           icon: <ApartmentIcon fontSize="small" />,               label: 'Branch Management' },
+      { to: '/hr/attendance',         icon: <FactCheckIcon fontSize="small" />,               label: 'Attendance Overview' },
       { to: '/hr/audit-log',          icon: <HistoryIcon fontSize="small" />,                 label: 'Audit Log' },
       { to: '/hr/config',             icon: <SettingsIcon fontSize="small" />,                label: 'Configuration', disabled: true },
-    ]
-  },
-  {
-    title: 'Attendance',
-    items: [
-      { to: '/hr/branches',          icon: <ApartmentIcon fontSize="small" />,               label: 'Branch Management' },
-      { to: '/hr/attendance',        icon: <FactCheckIcon fontSize="small" />,               label: 'Attendance Overview' },
     ]
   }
 ];
 
 const EMPLOYEE_NAV_SECTIONS = [
   {
-    title: 'Employee',
+    title: 'Employee Tools',
     items: [
       { to: '/employee/dashboard',    icon: <HomeIcon fontSize="small" />,                   label: 'Home' },
       { to: '/employee/leaves',       icon: <EventIcon fontSize="small" />,                  label: 'My Leaves' },
       { to: '/expenses/submit',       icon: <AccountBalanceWalletIcon fontSize="small" />,   label: 'My Expenses' },
+      { to: '/employee/attendance',   icon: <FmdGoodIcon fontSize="small" />,                label: 'Attendance' },
       { to: '/employee/profile',      icon: <PersonIcon fontSize="small" />,                 label: 'Profile' },
     ]
-  },
-  {
-    title: 'Attendance',
-    items: [
-      { to: '/employee/attendance', icon: <FmdGoodIcon fontSize="small" />, label: 'Attendance' },
-    ]
   }
+];
+
+const MANAGER_NAV_ITEMS = [
+  { to: '/manager/attendance', icon: <FactCheckIcon fontSize="small" />, label: 'Team Attendance' },
+  { to: '/manager/team',       icon: <GroupIcon fontSize="small" />,     label: 'My Team' },
+  { to: '/manager/report',     icon: <BarChartIcon fontSize="small" />,  label: 'Monthly Report' },
 ];
 
 function Sidebar({ collapsed, onToggle }) {
@@ -121,26 +119,47 @@ function Sidebar({ collapsed, onToggle }) {
             </React.Fragment>
           ))
         ) : (
-          EMPLOYEE_NAV_SECTIONS.map((section) => (
-            <React.Fragment key={section.title}>
-              {!collapsed && <span className="sidebar-section-label">{section.title}</span>}
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/employee/dashboard'}
-                  className={({ isActive }) =>
-                    `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                  }
-                  data-tooltip={item.label}
-                  title={collapsed ? item.label : undefined}
-                >
-                  <span className="sidebar-link__icon">{item.icon}</span>
-                  <span className="sidebar-link__label">{item.label}</span>
-                </NavLink>
-              ))}
-            </React.Fragment>
-          ))
+          <>
+            {EMPLOYEE_NAV_SECTIONS.map((section) => (
+              <React.Fragment key={section.title}>
+                {!collapsed && <span className="sidebar-section-label">{section.title}</span>}
+                {section.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/employee/dashboard'}
+                    className={({ isActive }) =>
+                      `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                    }
+                    data-tooltip={item.label}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <span className="sidebar-link__icon">{item.icon}</span>
+                    <span className="sidebar-link__label">{item.label}</span>
+                  </NavLink>
+                ))}
+              </React.Fragment>
+            ))}
+            {user?.isManager && (
+              <React.Fragment>
+                {!collapsed && <span className="sidebar-section-label">Manager Tools</span>}
+                {MANAGER_NAV_ITEMS.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                    }
+                    data-tooltip={item.label}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <span className="sidebar-link__icon">{item.icon}</span>
+                    <span className="sidebar-link__label">{item.label}</span>
+                  </NavLink>
+                ))}
+              </React.Fragment>
+            )}
+          </>
         )}
       </nav>
 

@@ -1,5 +1,8 @@
+const axios = require('axios');
 const odooAdapter = require('../adapters/odooAdapter');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
+
+const N8N_BRANCH_MANAGER_ASSIGN_WEBHOOK = process.env.N8N_BRANCH_MANAGER_ASSIGN_WEBHOOK || 'http://localhost:5678/webhook/hr-branch-manager-assign';
 
 function toInt(value) {
   const parsed = Number.parseInt(value, 10);
@@ -31,9 +34,38 @@ class BranchController {
         return acc;
       }, {});
 
+      // Detect store manager per branch: employee in the branch who has direct reports
+      const branchManagerMap = {};
+      if (branchIds.length > 0) {
+        const branchEmployees = await odooAdapter.execute('hr.employee', 'search_read', [[
+          ['branch_id', 'in', branchIds],
+          ['active', '=', true]
+        ], ['id', 'name', 'branch_id']]);
+
+        if (branchEmployees.length > 0) {
+          const empIds = branchEmployees.map((e) => e.id);
+          const reporters = await odooAdapter.execute('hr.employee', 'search_read', [[
+            ['parent_id', 'in', empIds],
+            ['active', '=', true]
+          ], ['parent_id']]);
+
+          const managerIds = new Set(reporters.map((e) => (Array.isArray(e.parent_id) ? e.parent_id[0] : e.parent_id)));
+
+          for (const emp of branchEmployees) {
+            if (managerIds.has(emp.id)) {
+              const branchId = Array.isArray(emp.branch_id) ? emp.branch_id[0] : emp.branch_id;
+              if (branchId && !branchManagerMap[branchId]) {
+                branchManagerMap[branchId] = emp.name;
+              }
+            }
+          }
+        }
+      }
+
       const data = branches.map((branch) => ({
         ...branch,
-        shifts: shiftsByBranch[branch.id] || []
+        shifts: shiftsByBranch[branch.id] || [],
+        storeManager: branchManagerMap[branch.id] || null
       }));
 
       return respondSuccess(res, data, 'Branches fetched successfully');
@@ -204,6 +236,39 @@ class BranchController {
     } catch (error) {
       console.error('deleteShift error:', error);
       return respondError(res, 'Failed to delete shift', 500);
+    }
+  }
+
+  async setManager(req, res) {
+    try {
+      const branchId = toInt(req.params.branchId);
+      const employeeId = toInt(req.body.employeeId);
+      const branchName = req.body.branchName || '';
+      const employeeName = req.body.employeeName || '';
+
+      if (!branchId) return respondError(res, 'Invalid branch ID', 400);
+      if (!employeeId) return respondError(res, 'employeeId is required', 400);
+
+      const triggeredBy = req.user?.name || req.user?.email || 'HR';
+
+      axios.post(N8N_BRANCH_MANAGER_ASSIGN_WEBHOOK, {
+        branchId,
+        branchName,
+        newManagerEmployeeId: employeeId,
+        newManagerName: employeeName,
+        triggeredBy,
+        triggeredByRole: req.user?.role || 'hr',
+        requestedAt: new Date().toISOString()
+      }).then(() => {
+        console.log('[Branch] Manager assign webhook fired for branch', branchId, '→ employee', employeeId);
+      }).catch((err) => {
+        console.error('[Branch] Manager assign webhook error:', err.message);
+      });
+
+      return respondSuccess(res, { queued: true }, 'Manager assignment queued successfully');
+    } catch (error) {
+      console.error('setManager error:', error);
+      return respondError(res, 'Failed to queue manager assignment', 500);
     }
   }
 }

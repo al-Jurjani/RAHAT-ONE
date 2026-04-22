@@ -98,7 +98,7 @@ function EmployeeAttendancePage() {
   }, []);
 
   useEffect(() => {
-    if (!todayRecord?.check_in || todayRecord?.check_out) return undefined;
+    if (!effectiveTodayRecord?.check_in || effectiveTodayRecord?.check_out) return undefined;
 
     setElapsed(formatElapsed(todayRecord.check_in));
     const ticker = setInterval(() => {
@@ -179,12 +179,23 @@ function EmployeeAttendancePage() {
     fetchProfile();
   }, [employeeId]);
 
+  const effectiveTodayRecord = useMemo(() => {
+    if (todayRecord) return todayRecord;
+    if (!historyRecords.length) return null;
+    const latest = historyRecords[0];
+    if (!latest?.check_in) return null;
+    const recDatePKT = new Date(String(latest.check_in).replace(' ', 'T') + 'Z')
+      .toLocaleDateString('en-CA', { timeZone: PKT });
+    const todayPKT = new Date().toLocaleDateString('en-CA', { timeZone: PKT });
+    return recDatePKT === todayPKT ? latest : null;
+  }, [todayRecord, historyRecords]);
+
   const state = useMemo(() => {
-    if (!todayRecord) return 'not_checked_in';
-    if (todayRecord.check_out) return 'checked_out';
-    if (todayRecord.status === 'present' || todayRecord.status === 'late') return 'checked_in';
+    if (!effectiveTodayRecord) return 'not_checked_in';
+    if (effectiveTodayRecord.check_out) return 'checked_out';
+    if (effectiveTodayRecord.status === 'present' || effectiveTodayRecord.status === 'late') return 'checked_in';
     return 'not_checked_in';
-  }, [todayRecord]);
+  }, [effectiveTodayRecord]);
 
   const historyStats = useMemo(() => {
     const firstThirty = historyRecords.slice(0, 30);
@@ -194,12 +205,12 @@ function EmployeeAttendancePage() {
     return { presentDays, lateDays, absentDays };
   }, [historyRecords]);
 
-  const branchName = Array.isArray(todayRecord?.branch_id)
-    ? todayRecord?.branch_id?.[1]
-    : (profile?.branch?.name || profile?.branchName || todayRecord?.branch_name || 'Not assigned');
+  const branchName = Array.isArray(effectiveTodayRecord?.branch_id)
+    ? effectiveTodayRecord?.branch_id?.[1]
+    : (profile?.branch?.name || profile?.branchName || effectiveTodayRecord?.branch_name || 'Not assigned');
 
-  const shiftName = Array.isArray(todayRecord?.shift_id)
-    ? todayRecord?.shift_id?.[1]
+  const shiftName = Array.isArray(effectiveTodayRecord?.shift_id)
+    ? effectiveTodayRecord?.shift_id?.[1]
     : (profile?.shift?.name || profile?.shiftName || 'Not assigned');
 
   const getCurrentPosition = () => new Promise((resolve, reject) => {
@@ -347,11 +358,11 @@ function EmployeeAttendancePage() {
             <div className="employee-attendance-page__state employee-attendance-page__state--center">
               <div className="employee-attendance-page__hero-icon employee-attendance-page__hero-icon--success employee-attendance-page__pulse" aria-hidden="true">✓</div>
               <h2 className="employee-attendance-page__headline employee-attendance-page__headline--success">Checked In</h2>
-              <div className="employee-attendance-page__since">Since {formatTimePKT(todayRecord?.check_in)}</div>
+              <div className="employee-attendance-page__since">Since {formatTimePKT(effectiveTodayRecord?.check_in)}</div>
               <div className="employee-attendance-page__elapsed">{elapsed}</div>
               <div className="employee-attendance-page__branch">{branchName}</div>
               <div className="employee-attendance-page__chip-wrap">
-                <StatusChip status={todayRecord?.status} label={todayRecord?.status || 'present'} tone={todayRecord?.status === 'late' ? 'warning' : 'success'} />
+                <StatusChip status={effectiveTodayRecord?.status} label={effectiveTodayRecord?.status || 'present'} tone={effectiveTodayRecord?.status === 'late' ? 'warning' : 'success'} />
               </div>
 
               {feedback && (
@@ -371,15 +382,15 @@ function EmployeeAttendancePage() {
               <div className="employee-attendance-page__summary-grid">
                 <div>
                   <div className="employee-attendance-page__label">Check-In</div>
-                  <div className="employee-attendance-page__value">{formatTimePKT(todayRecord?.check_in)}</div>
+                  <div className="employee-attendance-page__value">{formatTimePKT(effectiveTodayRecord?.check_in)}</div>
                 </div>
                 <div>
                   <div className="employee-attendance-page__label">Check-Out</div>
-                  <div className="employee-attendance-page__value">{formatTimePKT(todayRecord?.check_out)}</div>
+                  <div className="employee-attendance-page__value">{formatTimePKT(effectiveTodayRecord?.check_out)}</div>
                 </div>
                 <div>
                   <div className="employee-attendance-page__label">Total Hours Worked</div>
-                  <div className="employee-attendance-page__worked-hours">{formatWorkedHours(todayRecord?.worked_hours)}</div>
+                  <div className="employee-attendance-page__worked-hours">{formatWorkedHours(effectiveTodayRecord?.worked_hours)}</div>
                 </div>
                 <div>
                   <div className="employee-attendance-page__label">Branch</div>
@@ -387,7 +398,7 @@ function EmployeeAttendancePage() {
                 </div>
               </div>
               <div className="employee-attendance-page__chip-wrap">
-                <StatusChip status={todayRecord?.status || 'present'} label={todayRecord?.status || 'present'} tone={todayRecord?.status === 'late' ? 'warning' : 'success'} />
+                <StatusChip status={effectiveTodayRecord?.status || 'present'} label={effectiveTodayRecord?.status || 'present'} tone={effectiveTodayRecord?.status === 'late' ? 'warning' : 'success'} />
               </div>
             </div>
           )}
