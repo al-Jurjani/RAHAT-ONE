@@ -54,6 +54,39 @@ function formatWorkedHours(hoursValue) {
   return `${hours}h ${minutes}m`;
 }
 
+function decimalHourToMinutes(value) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return null;
+  return Math.round(number * 60);
+}
+
+function formatDecimalHour(value) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return '—';
+
+  const hours24 = Math.floor(number) % 24;
+  const minutes = Math.round((number - Math.floor(number)) * 60);
+  const period = hours24 >= 12 ? 'PM' : 'AM';
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  const minuteLabel = String(minutes).padStart(2, '0');
+
+  return `${hours12}:${minuteLabel} ${period}`;
+}
+
+function getMinutesInTimeZone(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const parts = formatter.formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0);
+  return hour * 60 + minute;
+}
+
 function formatDateLabel(value) {
   if (!value) return '—';
   const date = new Date(String(value).replace(' ', 'T') + 'Z');
@@ -96,6 +129,17 @@ function EmployeeAttendancePage() {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const effectiveTodayRecord = useMemo(() => {
+    if (todayRecord) return todayRecord;
+    if (!historyRecords.length) return null;
+    const latest = historyRecords[0];
+    if (!latest?.check_in) return null;
+    const recDatePKT = new Date(String(latest.check_in).replace(' ', 'T') + 'Z')
+      .toLocaleDateString('en-CA', { timeZone: PKT });
+    const todayPKT = new Date().toLocaleDateString('en-CA', { timeZone: PKT });
+    return recDatePKT === todayPKT ? latest : null;
+  }, [todayRecord, historyRecords]);
 
   useEffect(() => {
     const checkIn = effectiveTodayRecord?.check_in;
@@ -165,10 +209,6 @@ function EmployeeAttendancePage() {
   }, [fetchToday]);
 
   useEffect(() => {
-    fetchHistory(0, false);
-  }, [fetchHistory]);
-
-  useEffect(() => {
     const fetchProfile = async () => {
       if (!employeeId) return;
       try {
@@ -178,19 +218,9 @@ function EmployeeAttendancePage() {
         console.warn('Failed to load employee profile for attendance summary:', error);
       }
     };
+
     fetchProfile();
   }, [employeeId]);
-
-  const effectiveTodayRecord = useMemo(() => {
-    if (todayRecord) return todayRecord;
-    if (!historyRecords.length) return null;
-    const latest = historyRecords[0];
-    if (!latest?.check_in) return null;
-    const recDatePKT = new Date(String(latest.check_in).replace(' ', 'T') + 'Z')
-      .toLocaleDateString('en-CA', { timeZone: PKT });
-    const todayPKT = new Date().toLocaleDateString('en-CA', { timeZone: PKT });
-    return recDatePKT === todayPKT ? latest : null;
-  }, [todayRecord, historyRecords]);
 
   const state = useMemo(() => {
     if (!effectiveTodayRecord) return 'not_checked_in';
@@ -206,6 +236,12 @@ function EmployeeAttendancePage() {
     const absentDays = Math.max(30 - firstThirty.length, 0);
     return { presentDays, lateDays, absentDays };
   }, [historyRecords]);
+
+  const shiftStartMinutes = useMemo(() => decimalHourToMinutes(profile?.shift?.start_time), [profile?.shift?.start_time]);
+  const shiftStartLabel = useMemo(() => formatDecimalHour(profile?.shift?.start_time), [profile?.shift?.start_time]);
+  const currentPktMinutes = useMemo(() => getMinutesInTimeZone(now, PKT), [now]);
+  const hasShiftStartTime = profile?.shift?.start_time !== undefined && profile?.shift?.start_time !== null;
+  const canCheckInNow = hasShiftStartTime && shiftStartMinutes !== null && currentPktMinutes >= shiftStartMinutes;
 
   const branchName = Array.isArray(effectiveTodayRecord?.branch_id)
     ? effectiveTodayRecord?.branch_id?.[1]
@@ -341,6 +377,11 @@ function EmployeeAttendancePage() {
             <div className="employee-attendance-page__state employee-attendance-page__state--center">
               <div className="employee-attendance-page__hero-icon" aria-hidden="true">📍</div>
               <h2 className="employee-attendance-page__headline">You haven't checked in yet</h2>
+              {!canCheckInNow && hasShiftStartTime && (
+                <div className="employee-attendance-page__feedback employee-attendance-page__feedback--info">
+                  Check-in opens at {shiftStartLabel}.
+                </div>
+              )}
               <div className="employee-attendance-page__clock">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: PKT })}</div>
               <div className="employee-attendance-page__date">{formatDate(now)}</div>
 
@@ -350,9 +391,11 @@ function EmployeeAttendancePage() {
                 </div>
               )}
 
-              <Button className="employee-attendance-page__action-btn" onClick={handleCheckIn} loading={actionLoading}>
-                {actionLoading ? 'Getting your location...' : 'Check In'}
-              </Button>
+              {canCheckInNow && (
+                <Button className="employee-attendance-page__action-btn" onClick={handleCheckIn} loading={actionLoading}>
+                  {actionLoading ? 'Getting your location...' : 'Check In'}
+                </Button>
+              )}
             </div>
           )}
 
@@ -416,6 +459,10 @@ function EmployeeAttendancePage() {
             <div>
               <div className="employee-attendance-page__label">Assigned Shift</div>
               <div className="employee-attendance-page__value">{shiftName}</div>
+            </div>
+            <div>
+              <div className="employee-attendance-page__label">Shift Starts</div>
+              <div className="employee-attendance-page__value">{profile?.shift?.start_time !== undefined && profile?.shift?.start_time !== null ? shiftStartLabel : 'Not assigned'}</div>
             </div>
           </div>
         </Card>

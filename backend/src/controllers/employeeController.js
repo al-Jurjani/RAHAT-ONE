@@ -280,6 +280,29 @@ class EmployeeController {
       const job = normalizeMany2one(employee.job_id);
       const branch = normalizeMany2one(employee.branch_id);
       const shift = normalizeMany2one(employee.shift_id);
+      let shiftDetails = shift;
+
+      if (shift?.id) {
+        const shiftRecords = await odooAdapter.execute('rahat.shift', 'read', [[shift.id], [
+          'id',
+          'name',
+          'start_time',
+          'end_time',
+          'grace_minutes',
+          'days_of_week'
+        ]]);
+
+        if (shiftRecords && shiftRecords[0]) {
+          const shiftRecord = shiftRecords[0];
+          shiftDetails = {
+            ...shift,
+            start_time: shiftRecord.start_time ?? null,
+            end_time: shiftRecord.end_time ?? null,
+            grace_minutes: shiftRecord.grace_minutes ?? null,
+            days_of_week: shiftRecord.days_of_week ?? null
+          };
+        }
+      }
 
       const emergencyContactName =
         fieldValue(employee, 'emergency_contact_name') ||
@@ -302,7 +325,7 @@ class EmployeeController {
         department,
         manager,
         branch,
-        shift,
+        shift: shiftDetails,
         workEmail: fieldValue(employee, 'work_email'),
         personalEmail: fieldValue(employee, 'private_email'),
         personalPhone: fieldValue(employee, 'mobile_phone'),
