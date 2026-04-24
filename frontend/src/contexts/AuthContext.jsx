@@ -79,7 +79,13 @@ export const AuthProvider = ({ children }) => {
   }
 };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (_) {
+      // best-effort — clear client state regardless
+    }
+
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
