@@ -24,7 +24,9 @@ class OnboardingController {
         email: email.trim(),
         departmentId: parseInt(departmentId),
         jobId: parseInt(jobId),
-        manualReviewRequired: manualReviewRequired || false
+        manualReviewRequired: manualReviewRequired || false,
+        hrActorName: req.user?.name || 'HR',
+        hrActorId: req.user?.id || null
       });
 
       return respondSuccess(res, {
