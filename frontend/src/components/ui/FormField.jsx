@@ -14,6 +14,7 @@ function FormField({
   id,
   rows,
   children,
+  options,
   className = '',
 }) {
   const inputId = id || name || label?.toLowerCase().replace(/\s+/g, '-');
@@ -59,7 +60,11 @@ function FormField({
           required={required}
           disabled={disabled}
         >
-          {children}
+          {options
+            ? options.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))
+            : children}
         </select>
       ) : (
         <input
