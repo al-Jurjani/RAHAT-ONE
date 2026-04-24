@@ -115,7 +115,11 @@ class AuthService {
         ]);
         if (reportCount > 0) {
           isManager = true;
-          if (Array.isArray(emp.branch_id) && emp.branch_id[0]) managerBranchId = emp.branch_id[0];
+          // Only Store Managers get a branchId — regular dept managers use direct-report scope
+          const isStoreManager = jobLower.includes('store manager');
+          if (isStoreManager && Array.isArray(emp.branch_id) && emp.branch_id[0]) {
+            managerBranchId = emp.branch_id[0];
+          }
         }
       }
 

@@ -3,14 +3,17 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { toast } from 'react-toastify';
 import AppShell from '../components/layout/AppShell';
 import { Avatar, Button, Card, FormField, LoadingSpinner } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { employeeAPI } from '../services/api';
 
 function EmployeeProfile() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const employeeId = user?.employeeId;
 
   const [loading, setLoading] = useState(true);
@@ -258,6 +261,20 @@ function EmployeeProfile() {
             ))}
           </div>
         </Card>
+
+        <button
+          onClick={async () => { await logout(); navigate('/login'); }}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            width: '100%', padding: 'var(--space-4)',
+            background: 'transparent', border: '1px solid var(--status-danger)',
+            borderRadius: 'var(--radius-lg)', color: 'var(--status-danger)',
+            fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          <LogoutIcon fontSize="small" />
+          Sign Out
+        </button>
       </div>
     </AppShell>
   );
