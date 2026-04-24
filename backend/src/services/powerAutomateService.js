@@ -6,8 +6,8 @@ class PowerAutomateService {
     this.flowUrl = process.env.N8N_ONBOARDING_WEBHOOK || process.env.PA_ONBOARDING_WEBHOOK;
     this.onboardingInviteUrl = process.env.N8N_ONBOARDING_INVITE_URL || this.flowUrl;
     this.onboardingDecisionUrl = process.env.N8N_ONBOARDING_DECISION_URL || this.flowUrl;
-    this.leaveFlowUrl = process.env.POWER_AUTOMATE_LEAVE_FLOW_URL;
-    this.managerDecisionFlowUrl = process.env.PA_MANAGER_DECISION_WEBHOOK;
+    this.leaveFlowUrl = process.env.N8N_LEAVE_FLOW_URL;
+    this.managerDecisionFlowUrl = process.env.N8N_LEAVE_MANAGER_DECISION_WEBHOOK;
     // [n8n-migration] Expense flows now go to n8n instead of Power Automate
     this.expenseFlowUrl = process.env.N8N_EXPENSE_WEBHOOK_URL;
     this.expenseManagerDecisionUrl = process.env.N8N_MANAGER_DECISION_WEBHOOK;
