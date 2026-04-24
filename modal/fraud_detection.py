@@ -1,15 +1,13 @@
 """
 RAHAT-ONE Fraud Detection Modal Service
 
-Full 5-layer fraud detection pipeline:
-- Layer 1: MD5 Hash (0.35) â€” exact duplicate detection
-- Layer 2: pHash (0.20) â€” perceptual similarity via DCT
-- Layer 3: CLIP ViT-B-32 (0.25) â€” visual embedding similarity
-- Layer 4: Florence-2-large (0.10) â€” VLM forgery keyword scan
-- Layer 5: Anomaly Detection (0.10) â€” Z-score vs employee history
+Current 3-layer fraud detection pipeline:
+- Layer 1: Global duplicate check (MD5 hard match)
+- Layer 2: Receipt validation (OCR + deterministic amount/structure checks)
+- Layer 3: Statistical anomaly detection (category/amount behavior)
 
-CLIP and Florence-2 run on GPU containers (T4).
-MD5, pHash, anomaly, and aggregation run in the web endpoint container (CPU).
+Layer 2 inference runs on GPU containers (T4).
+Layer 1, Layer 3, and orchestration run in the web endpoint container (CPU).
 
 Author: RAHAT-ONE Team
 """
@@ -55,6 +53,7 @@ semantic_image = (
 
 
 @app.function(
+    name="layer2_visual_similarity_legacy",
     gpu="T4",
     image=clip_image,
     timeout=300,
@@ -117,6 +116,7 @@ def generate_clip_embedding(image_bytes: bytes) -> List[float]:
 
 
 @app.function(
+    name="layer2_receipt_validation",
     gpu="T4",
     image=semantic_image,
     timeout=600,
@@ -497,7 +497,7 @@ web_image = (
 @modal.asgi_app()
 def fastapi_app():
     """
-    FastAPI web endpoint for full 5-layer fraud detection pipeline.
+    FastAPI web endpoint for current 3-layer fraud detection pipeline.
 
     Endpoint: POST /analyze
     """
@@ -1099,7 +1099,7 @@ def fastapi_app():
     @web_app.post("/analyze")
     async def analyze_full_pipeline(request: FullAnalysisRequest):
         """
-        Full 5-layer fraud detection pipeline.
+        Full 3-layer fraud detection pipeline.
 
         n8n sends image + employee context, Modal returns complete verdict.
         CLIP and Florence-2 run on GPU in parallel.
@@ -1123,7 +1123,7 @@ def fastapi_app():
                 "overallScore": 0.23,
                 "confidence": 0.91,
                 "recommendation": "APPROVE - No fraud indicators detected",
-                "layers": { md5: {...}, pHash: {...}, clip: {...}, florence: {...}, anomaly: {...} },
+                "layers": { md5: {...}, receiptMath: {...}, anomaly: {...} },
                 "processing_time_seconds": 5.8
             }
         """

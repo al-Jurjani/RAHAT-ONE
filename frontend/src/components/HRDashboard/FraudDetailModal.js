@@ -31,6 +31,20 @@ import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+const LEGACY_APP_NAME_MAP = {
+  detect_forgery_florence: 'layer-2-receipt-validation',
+  generate_clip_embedding: 'layer-2-document-similarity',
+  fastapi_app: 'fraud-orchestrator-api'
+};
+
+const normalizeLegacyAppNames = (text) => {
+  if (typeof text !== 'string' || !text) return text;
+  return Object.entries(LEGACY_APP_NAME_MAP).reduce(
+    (acc, [legacyName, currentName]) => acc.replaceAll(legacyName, currentName),
+    text
+  );
+};
+
 const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showFullClipEmbedding, setShowFullClipEmbedding] = useState(false);
@@ -138,12 +152,12 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
   const toDisplayText = (value) => {
     if (value === null || value === undefined) return '';
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      return String(value);
+      return normalizeLegacyAppNames(String(value));
     }
     try {
-      return JSON.stringify(value);
+      return normalizeLegacyAppNames(JSON.stringify(value));
     } catch (_) {
-      return String(value);
+      return normalizeLegacyAppNames(String(value));
     }
   };
 
@@ -430,20 +444,20 @@ const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
           if (hasNewModel) {
             return (
               <>
-                {renderLayer('Layer 1: MD5 Hash (Global Duplicate Check)', layers.md5, md5Extra)}
-                {renderLayer('Layer 2: Chandra OCR + Pydantic Validation', layers.receiptMath, receiptMathExtra)}
-                {renderLayer('Layer 3: Statistical Category Anomaly', layers.anomaly, anomalyExtra)}
+                {renderLayer('Layer 1: Global Duplicate Check (MD5)', layers.md5, md5Extra)}
+                {renderLayer('Layer 2: Receipt Validation (OCR + Rules)', layers.receiptMath, receiptMathExtra)}
+                {renderLayer('Layer 3: Category/Amount Anomaly Detection', layers.anomaly, anomalyExtra)}
               </>
             );
           }
 
           return (
             <>
-              {renderLayer('Layer 1: MD5 Hash', layers.md5, md5Extra)}
-              {renderLayer('Layer 2: Perceptual Hash (pHash)', layers.pHash, phashExtra)}
-              {renderLayer('Layer 3: CLIP Visual Similarity', layers.clip, clipExtra)}
-              {renderLayer('Layer 4: Local Text Consistency', layers.florence, receiptMathExtra)}
-              {renderLayer('Layer 5: Anomaly Detection', layers.anomaly, anomalyExtra)}
+              {renderLayer('Layer 1: Global Duplicate Check (MD5)', layers.md5, md5Extra)}
+              {renderLayer('Layer 2a: Receipt Validation Signal (pHash)', layers.pHash, phashExtra)}
+              {renderLayer('Layer 2b: Receipt Validation Signal (Visual Similarity)', layers.clip, clipExtra)}
+              {renderLayer('Layer 2c: Receipt Validation Signal (OCR/Text Consistency)', layers.florence, receiptMathExtra)}
+              {renderLayer('Layer 3: Category/Amount Anomaly Detection', layers.anomaly, anomalyExtra)}
             </>
           );
         })()}

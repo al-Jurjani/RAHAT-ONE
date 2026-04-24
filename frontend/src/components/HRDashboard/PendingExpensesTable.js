@@ -35,6 +35,13 @@ import FraudDetailModal from './FraudDetailModal';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+const sanitizeEmployeeName = (value) => {
+  const name = String(value || '').trim();
+  const lowered = name.toLowerCase();
+  if (!name || lowered === 'n/a' || lowered === 'na' || lowered === 'unknown') return '';
+  return name;
+};
+
 const getPreviewType = (mimetype, name) => {
   const lowerName = (name || '').toLowerCase();
   if (mimetype?.includes('pdf') || lowerName.endsWith('.pdf')) return 'pdf';
@@ -95,6 +102,8 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
       setLoading(false);
     }
   };
+
+  const getEmployeeName = (expense) => sanitizeEmployeeName(expense?.employeeName || expense?.employee_id?.[1]);
 
   const getStatusChip = (status) => {
     const statusMap = {
@@ -208,7 +217,7 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                     <Box>
-                      <Typography variant="h6">{expense.employeeName}</Typography>
+                      <Typography variant="h6">{getEmployeeName(expense)}</Typography>
                       <Typography variant="body2" color="textSecondary">
                         {expense.vendor_name}
                       </Typography>
@@ -303,7 +312,7 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
           </DialogTitle>
           <DialogContent>
             <Typography variant="body2" sx={{ mb: 2, mt: 1 }}>
-              <strong>Employee:</strong> {selectedExpense?.employeeName}<br />
+              <strong>Employee:</strong> {getEmployeeName(selectedExpense)}<br />
               <strong>Amount:</strong> PKR {(selectedExpense?.total_amount || 0).toLocaleString('en-PK')}<br />
               <strong>Category:</strong> {selectedExpense?.expense_category}
             </Typography>
@@ -406,7 +415,7 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                   <TableCell>
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {expense.employeeName}
+                        {getEmployeeName(expense)}
                       </Typography>
                       <Typography variant="caption" color="textSecondary">
                         {expense.employeeEmail}
@@ -481,7 +490,7 @@ const PendingExpensesTable = ({ refreshTrigger, onActionComplete }) => {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2, mt: 1 }}>
-            <strong>Employee:</strong> {selectedExpense?.employeeName}<br />
+            <strong>Employee:</strong> {getEmployeeName(selectedExpense)}<br />
             <strong>Amount:</strong> PKR {(selectedExpense?.total_amount || 0).toLocaleString('en-PK')}<br />
             <strong>Category:</strong> {selectedExpense?.expense_category}
           </Typography>

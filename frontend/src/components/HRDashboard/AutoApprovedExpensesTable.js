@@ -29,6 +29,13 @@ import FraudDetailModal from './FraudDetailModal';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+const sanitizeEmployeeName = (value) => {
+  const name = String(value || '').trim();
+  const lowered = name.toLowerCase();
+  if (!name || lowered === 'n/a' || lowered === 'na' || lowered === 'unknown') return '';
+  return name;
+};
+
 const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +78,7 @@ const AutoApprovedExpensesTable = ({ refreshTrigger }) => {
     }
   };
 
-  const getEmployeeName = (e) => e.employeeName || e.employee_id?.[1] || 'Unknown';
+  const getEmployeeName = (e) => sanitizeEmployeeName(e.employeeName || e.employee_id?.[1]);
 
   const handleViewAttachment = async (expenseId) => {
     try {

@@ -36,6 +36,13 @@ import { expenseAPI } from '../../services/api';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+const sanitizeEmployeeName = (value) => {
+  const name = String(value || '').trim();
+  const lowered = name.toLowerCase();
+  if (!name || lowered === 'n/a' || lowered === 'na' || lowered === 'unknown') return '';
+  return name;
+};
+
 const getPreviewType = (mimetype, name) => {
   const lowerName = (name || '').toLowerCase();
   if (mimetype?.includes('pdf') || lowerName.endsWith('.pdf')) return 'pdf';
@@ -96,9 +103,7 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
     }
   };
 
-  const getEmployeeName = (expense) => (
-    expense.employeeName || expense.employee_id?.[1] || 'Unknown'
-  );
+  const getEmployeeName = (expense) => sanitizeEmployeeName(expense.employeeName || expense.employee_id?.[1]);
 
   const getEmployeeEmail = (expense) => (
     expense.employeeEmail || expense.employee_email || 'N/A'
