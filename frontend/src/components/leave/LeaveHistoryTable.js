@@ -49,7 +49,7 @@ const LeaveHistoryTable = ({ refreshTrigger = 0 }) => {
       try {
         setLoading(true);
         const token = localStorage.getItem('accessToken');
-        const { data } = await axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/my-leaves', {
+        const { data } = await axios.get(`${API_BASE_URL}/leaves/my-leaves`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!cancelled) { setLeaves(data); setError(null); }

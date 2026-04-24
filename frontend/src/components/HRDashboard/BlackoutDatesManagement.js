@@ -51,7 +51,7 @@ const BlackoutDatesManagement = () => {
 
       console.log('🔍 Fetching blackout dates...');
 
-      const response = await axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/config/blackout-dates', {
+      const response = await axios.get(`${API_BASE_URL}/leaves/config/blackout-dates`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -113,7 +113,7 @@ const BlackoutDatesManagement = () => {
       console.log('💾 Saving blackout dates:', periods);
 
       await axios.put(
-        ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/config/blackout-dates',
+        `${API_BASE_URL}/leaves/config/blackout-dates`,
         periods,
         { headers: { Authorization: `Bearer ${token}` } }
       );

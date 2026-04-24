@@ -18,7 +18,7 @@ const LeaveBalanceCard = ({ refreshTrigger = 0 }) => {
         const headers = { Authorization: `Bearer ${token}` };
 
         const { data: types } = await axios.get(
-          ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/types', { headers }
+          `${API_BASE_URL}/leaves/types`, { headers }
         );
 
         const results = await Promise.all(

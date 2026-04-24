@@ -31,7 +31,7 @@ const AllLeavesTable = () => {
       setLoading(true);
       const token = localStorage.getItem('accessToken');
 
-      let url = ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves';
+      let url = `${API_BASE_URL}/leaves`;
       if (statusFilter !== 'all') {
         url += `?status=${statusFilter}`;
       }
