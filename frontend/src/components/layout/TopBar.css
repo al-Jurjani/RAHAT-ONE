@@ -79,11 +79,20 @@
   text-overflow: ellipsis;
 }
 
+.topbar-back {
+  display: none;
+  flex-shrink: 0;
+  color: var(--text-primary) !important;
+}
+
 @media (max-width: 768px) {
   .topbar {
     padding: 0 var(--space-4);
   }
   .topbar-username {
     display: none;
+  }
+  .topbar-back {
+    display: flex;
   }
 }

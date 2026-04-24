@@ -44,8 +44,60 @@ function PWABottomNav() {
   );
 }
 
+function PWAInstallBanner() {
+  const [prompt, setPrompt] = useState(null);
+  const [dismissed, setDismissed] = useState(() => !!localStorage.getItem('pwa-install-dismissed'));
+  const [isStandalone] = useState(() =>
+    window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+  );
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  if (isStandalone || dismissed || !prompt) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 72, left: 12, right: 12, zIndex: 9999,
+      background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-lg)', padding: '12px 16px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+    }}>
+      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+        Install RAHAT app for quick access
+      </span>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => { localStorage.setItem('pwa-install-dismissed', '1'); setDismissed(true); }}
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--text-sm)' }}
+        >
+          Not now
+        </button>
+        <button
+          onClick={async () => {
+            prompt.prompt();
+            const { outcome } = await prompt.userChoice;
+            if (outcome === 'accepted') setPrompt(null);
+          }}
+          style={{
+            background: 'var(--brand-primary)', color: '#fff', border: 'none',
+            borderRadius: 'var(--radius-md)', padding: '6px 14px',
+            cursor: 'pointer', fontSize: 'var(--text-sm)', fontWeight: 600,
+          }}
+        >
+          Install
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PWAGuard({ children }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, viewMode, setViewMode } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(detectMobileMode);
@@ -68,6 +120,15 @@ function PWAGuard({ children }) {
   // HR individuals with a linked employee record can use the PWA as employees
   const isPwaEmployeeMode = isMobile && (user?.role === 'employee' || (user?.role === 'hr' && !!user?.employeeId));
   const isPwaBlocked      = isMobile && !loading && !!user && user?.role === 'hr' && !user?.employeeId && location.pathname !== '/login';
+
+  // Force HR employees into employee viewMode on mobile and redirect to employee home
+  useEffect(() => {
+    if (!isPwaEmployeeMode || loading || !user) return;
+    if (user.role === 'hr' && viewMode !== 'employee') {
+      setViewMode('employee');
+      navigate('/employee/home', { replace: true });
+    }
+  }, [isPwaEmployeeMode, user, viewMode, loading, setViewMode, navigate]);
 
   useEffect(() => {
     document.body.classList.toggle('pwa-employee-mode', isPwaEmployeeMode);
@@ -108,6 +169,7 @@ function PWAGuard({ children }) {
     <>
       {children}
       {isPwaEmployeeMode ? <PWABottomNav /> : null}
+      {isPwaEmployeeMode ? <PWAInstallBanner /> : null}
     </>
   );
 }
