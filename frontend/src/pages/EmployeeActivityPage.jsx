@@ -147,7 +147,7 @@ function EmployeeActivityPage() {
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [employeeId, loading, loadingMore, logs.length, offset, total]);
+  }, [employeeId, loading, loadingMore, logs.length, offset, total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const feedItems = useMemo(() => logs.map((log) => ({
     ...log,

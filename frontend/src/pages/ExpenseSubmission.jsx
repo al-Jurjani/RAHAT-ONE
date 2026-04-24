@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tabs, Tab, Box } from '@mui/material';
+import { Tabs, Tab } from '@mui/material';
 import { toast } from 'react-toastify';
 import { expenseAPI } from '../services/api';
 import ExpenseHistoryTable from '../components/expense/ExpenseHistoryTable';

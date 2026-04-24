@@ -272,7 +272,7 @@ function HRDepartmentManagementPage() {
         <div className="hr-department-management__grid">
           {filteredDepartments.map((department) => {
             const managerName = getFieldName(department.manager_id);
-            const managerId = getFieldId(department.manager_id);
+
             const parentName = getFieldName(department.parent_id);
             const cachedEmployees = employeesCache[department.id] || [];
             const previewEmployees = cachedEmployees.slice(0, 3);

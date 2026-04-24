@@ -14,7 +14,6 @@ import {
   CircularProgress,
   Checkbox,
   FormControlLabel,
-  Divider,
 } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { toast } from 'react-toastify';
