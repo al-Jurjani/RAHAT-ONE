@@ -238,10 +238,13 @@ function EmployeeAttendancePage() {
   }, [historyRecords]);
 
   const shiftStartMinutes = useMemo(() => decimalHourToMinutes(profile?.shift?.start_time), [profile?.shift?.start_time]);
-  const shiftStartLabel = useMemo(() => formatDecimalHour(profile?.shift?.start_time), [profile?.shift?.start_time]);
+  const shiftEndMinutes   = useMemo(() => decimalHourToMinutes(profile?.shift?.end_time),   [profile?.shift?.end_time]);
+  const shiftStartLabel   = useMemo(() => formatDecimalHour(profile?.shift?.start_time),     [profile?.shift?.start_time]);
+  const shiftEndLabel     = useMemo(() => formatDecimalHour(profile?.shift?.end_time),       [profile?.shift?.end_time]);
   const currentPktMinutes = useMemo(() => getMinutesInTimeZone(now, PKT), [now]);
   const hasShiftStartTime = profile?.shift?.start_time !== undefined && profile?.shift?.start_time !== null;
-  const canCheckInNow = hasShiftStartTime && shiftStartMinutes !== null && currentPktMinutes >= shiftStartMinutes;
+  const shiftEnded = shiftEndMinutes !== null && currentPktMinutes >= shiftEndMinutes;
+  const canCheckInNow = hasShiftStartTime && shiftStartMinutes !== null && currentPktMinutes >= shiftStartMinutes && !shiftEnded;
 
   const branchName = Array.isArray(effectiveTodayRecord?.branch_id)
     ? effectiveTodayRecord?.branch_id?.[1]
@@ -377,7 +380,12 @@ function EmployeeAttendancePage() {
             <div className="employee-attendance-page__state employee-attendance-page__state--center">
               <div className="employee-attendance-page__hero-icon" aria-hidden="true">📍</div>
               <h2 className="employee-attendance-page__headline">You haven't checked in yet</h2>
-              {!canCheckInNow && hasShiftStartTime && (
+              {!canCheckInNow && hasShiftStartTime && shiftEnded && (
+                <div className="employee-attendance-page__feedback employee-attendance-page__feedback--warning">
+                  Check-in window closed at {shiftEndLabel}.
+                </div>
+              )}
+              {!canCheckInNow && hasShiftStartTime && !shiftEnded && (
                 <div className="employee-attendance-page__feedback employee-attendance-page__feedback--info">
                   Check-in opens at {shiftStartLabel}.
                 </div>

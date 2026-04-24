@@ -201,9 +201,10 @@ function moduleTone(module) {
 }
 
 function actorTone(actor) {
-  if (actor === 'employee') return 'info';
-  if (actor === 'manager') return 'warning';
-  if (actor === 'hr') return 'success';
+  const lower = (actor || '').toLowerCase();
+  if (lower === 'employee') return 'info';
+  if (lower === 'manager') return 'warning';
+  if (lower.includes('hr')) return 'success';
   return 'neutral';
 }
 
@@ -394,9 +395,12 @@ function AuditLogPage() {
                 placeholder="Search loaded results"
               />
 
-              <div className="audit-log-filters-action" style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <div className="audit-log-filters-action" style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--space-2)' }}>
                 <Button variant="ghost" onClick={handleClearFilters}>
                   Clear Filters
+                </Button>
+                <Button variant="secondary" onClick={() => fetchLogs(0, true)} loading={loading}>
+                  Refresh
                 </Button>
               </div>
             </div>

@@ -21,14 +21,18 @@ const TABS = [
 
 const HRLeaveDashboard = () => {
   const [activeTab, setActiveTab] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const navigate = useNavigate();
 
   return (
     <AppShell pageTitle="Leave Management">
-      <div style={{ marginBottom: 'var(--space-4)' }}>
+      <div style={{ marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Button variant="ghost" onClick={() => navigate('/hr')} size="sm">
           <ArrowBack fontSize="small" style={{ marginRight: 'var(--space-1)' }} />
           Back to HR Portal
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setRefreshKey(k => k + 1)}>
+          Refresh
         </Button>
       </div>
 
@@ -48,12 +52,12 @@ const HRLeaveDashboard = () => {
         </Tabs>
 
         <Box sx={{ p: 3 }}>
-          {activeTab === 0 && <PendingLeavesTable onActionComplete={() => {}} />}
-          {activeTab === 1 && <AllLeavesTable />}
-          {activeTab === 2 && <AutoDecisionLeavesTable type="auto_approved" />}
-          {activeTab === 3 && <AutoDecisionLeavesTable type="auto_rejected" />}
-          {activeTab === 4 && <AllocationManagement />}
-          {activeTab === 5 && <BlackoutDatesManagement />}
+          {activeTab === 0 && <PendingLeavesTable key={refreshKey} onActionComplete={() => {}} />}
+          {activeTab === 1 && <AllLeavesTable key={refreshKey} />}
+          {activeTab === 2 && <AutoDecisionLeavesTable key={refreshKey} type="auto_approved" />}
+          {activeTab === 3 && <AutoDecisionLeavesTable key={refreshKey} type="auto_rejected" />}
+          {activeTab === 4 && <AllocationManagement key={refreshKey} />}
+          {activeTab === 5 && <BlackoutDatesManagement key={refreshKey} />}
         </Box>
       </div>
     </AppShell>

@@ -103,9 +103,14 @@ function HRDashboard() {
             <ArrowBack fontSize="small" /> Back to HR Portal
           </button>
 
-          <Button variant="contained" size="small" onClick={() => setInitiateDialogOpen(true)}>
-            Initiate Onboarding
-          </Button>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <Button variant="outlined" size="small" onClick={loadAllData}>
+              Refresh
+            </Button>
+            <Button variant="contained" size="small" onClick={() => setInitiateDialogOpen(true)}>
+              Initiate Onboarding
+            </Button>
+          </div>
         </div>
       </div>
 

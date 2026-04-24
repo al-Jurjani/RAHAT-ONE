@@ -10,7 +10,7 @@
   flex-direction: column;
   z-index: 200;
   transition: width var(--transition-base);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .sidebar--collapsed {

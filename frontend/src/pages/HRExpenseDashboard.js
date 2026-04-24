@@ -25,10 +25,13 @@ const HRExpenseDashboard = () => {
 
   return (
     <AppShell pageTitle="Expense Management">
-      <div style={{ marginBottom: 'var(--space-4)' }}>
+      <div style={{ marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Button variant="ghost" onClick={() => navigate('/hr')} size="sm">
           <ArrowBack fontSize="small" style={{ marginRight: 'var(--space-1)' }} />
           Back to HR Portal
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleActionComplete}>
+          Refresh
         </Button>
       </div>
 

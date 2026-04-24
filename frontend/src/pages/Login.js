@@ -92,11 +92,6 @@ function Login() {
           </Button>
         </form>
 
-        <div className="login-credentials">
-          <p className="login-credentials-label">Test Credentials</p>
-          <p>Email: hr@outfitters.com.pk</p>
-          <p>Password: hr123</p>
-        </div>
       </div>
     </div>
   );
