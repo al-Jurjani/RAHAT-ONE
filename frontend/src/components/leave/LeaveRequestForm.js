@@ -27,6 +27,8 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Send as SendIcon } from '@mui/icons-material';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const LeaveRequestForm = ({ onSubmitSuccess }) => {
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [formData, setFormData] = useState({

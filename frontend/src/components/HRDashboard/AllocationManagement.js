@@ -33,6 +33,8 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const EmployeeRow = ({ employee, leaveTypes, onAllocate, onRefresh }) => {
   const [open, setOpen] = useState(false);
   const [allocations, setAllocations] = useState([]);

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { CircularProgress, Alert } from '@mui/material';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const STATUS_MAP = {
   confirm:   { label: 'Pending',    color: 'var(--status-warning)',  bg: 'var(--status-warning-bg)'  },
   validate1: { label: 'Pending HR', color: 'var(--status-info)',     bg: 'var(--status-info-bg)'     },
