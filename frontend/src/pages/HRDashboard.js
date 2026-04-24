@@ -19,6 +19,11 @@ import AppShell from '../components/layout/AppShell';
 import { StatCard, LoadingSpinner } from '../components/ui';
 import InitiateOnboardingModal from '../components/InitiateOnboardingModal';
 
+function isVisibleOnboardingEmployee(employee) {
+  const name = String(employee?.name || '').trim().toLowerCase();
+  return name !== 'administrator';
+}
+
 function HRDashboard() {
   const [loading, setLoading] = useState(true);
   const [pendingList, setPendingList] = useState([]);
@@ -42,10 +47,13 @@ function HRDashboard() {
         hrAPI.getApproved(),
         hrAPI.getRejected(),
       ]);
-      setPendingList(pendingRes.data.data || []);
-      setAutoApprovedList(autoApprovedRes.data.data || []);
-      setApprovedList(approvedRes.data.data || []);
-      setRejectedList(rejectedRes.data.data || []);
+
+      const sanitize = (list) => (Array.isArray(list) ? list.filter(isVisibleOnboardingEmployee) : []);
+
+      setPendingList(sanitize(pendingRes.data.data));
+      setAutoApprovedList(sanitize(autoApprovedRes.data.data));
+      setApprovedList(sanitize(approvedRes.data.data));
+      setRejectedList(sanitize(rejectedRes.data.data));
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load dashboard data');

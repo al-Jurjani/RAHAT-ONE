@@ -58,6 +58,14 @@ function statusTone(status) {
   return 'neutral';
 }
 
+function isValidEmployeeName(name) {
+  const value = String(name || '').trim().toLowerCase();
+  if (!value) return false;
+  if (value === 'not checked in') return false;
+  if (value === 'unknown') return false;
+  return true;
+}
+
 function downloadCsv(filename, rows) {
   const escape = (value) => {
     const text = value == null ? '' : String(value);
@@ -160,36 +168,21 @@ function HRAttendanceOverviewPage() {
   }, [records, totalActiveEmployees, uniqueEmployeesWithRecord]);
 
   const mappedRecords = useMemo(() => {
-    const list = records.map((record) => ({
-      id: record.id,
-      employeeName: record.employee_name || getFieldName(record.employee_id_raw) || 'Unknown',
-      branchName: record.branchName || '—',
-      shiftName: record.shiftName || '—',
-      checkIn: record.check_in,
-      checkOut: record.check_out,
-      workedHours: record.worked_hours,
-      status: record.status || 'no_record',
-      distanceFromBranch: record.distance_from_branch,
-      date: selectedDate
-    }));
-
-    const noRecordRows = Array.from({ length: stats.notCheckedIn }).map((_, index) => ({
-      id: `no-record-${index + 1}`,
-      employeeName: 'Not Checked In',
-      branchName: selectedBranch
-        ? (branches.find((branch) => Number(branch.id) === Number(selectedBranch))?.name || '—')
-        : 'All Branches',
-      shiftName: '—',
-      checkIn: null,
-      checkOut: null,
-      workedHours: null,
-      status: 'no_record',
-      distanceFromBranch: null,
-      date: selectedDate
-    }));
-
-    return [...list, ...noRecordRows];
-  }, [records, selectedDate, stats.notCheckedIn, selectedBranch, branches]);
+    return records
+      .map((record) => ({
+        id: record.id,
+        employeeName: record.employee_name || getFieldName(record.employee_id_raw) || '',
+        branchName: record.branchName || '—',
+        shiftName: record.shiftName || '—',
+        checkIn: record.check_in,
+        checkOut: record.check_out,
+        workedHours: record.worked_hours,
+        status: record.status || 'no_record',
+        distanceFromBranch: record.distance_from_branch,
+        date: selectedDate
+      }))
+      .filter((row) => isValidEmployeeName(row.employeeName));
+  }, [records, selectedDate]);
 
   const filteredRows = useMemo(() => {
     let rows = mappedRecords;

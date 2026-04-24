@@ -30,6 +30,11 @@ const getAvatarSrc = (imageData) => {
   return null;
 };
 
+const isVisibleDepartment = (department) => {
+  const name = String(department?.name || '').trim().toLowerCase();
+  return name !== 'administration';
+};
+
 function HRDepartmentManagementPage() {
   const navigate = useNavigate();
 
@@ -80,7 +85,7 @@ function HRDepartmentManagementPage() {
         return acc;
       }, {});
 
-      setDepartments(deptData);
+      setDepartments(deptData.filter(isVisibleDepartment));
       setBranchesById(branchMap);
     } catch (error) {
       console.error('Failed to load department management data:', error);
