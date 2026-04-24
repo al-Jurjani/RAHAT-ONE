@@ -58,6 +58,20 @@ class LeaveController {
       const leaveTypeName = leaveType ? leaveType.name : 'Unknown';
       console.log('✅ [submitLeave] Leave type resolved:', leaveTypeName);
 
+      // Enforce max 3 annual leave requests per calendar year
+      if (leaveTypeName === 'Annual Leave') {
+        const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
+        const annualLeaveCount = await odooAdapter.execute('hr.leave', 'search_count', [[
+          ['employee_id', '=', employeeId],
+          ['holiday_status_id', '=', parseInt(leaveData.leave_type_id)],
+          ['state', '!=', 'refuse'],
+          ['request_date_from', '>=', yearStart]
+        ]]);
+        if (annualLeaveCount >= 3) {
+          return respondError(res, 'Annual leave limit reached. A maximum of 3 annual leave requests are allowed per year.', 400);
+        }
+      }
+
       // Create leave record in Odoo (state: confirm)
       const leaveResult = await leaveService.submitLeaveRequest(employeeId, leaveData);
       const leaveId = leaveResult.leaveId || leaveResult;
