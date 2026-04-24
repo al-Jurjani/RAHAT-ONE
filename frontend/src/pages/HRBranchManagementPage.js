@@ -284,7 +284,7 @@ function HRBranchManagementPage() {
     setSetManagerLoading(true);
     setSetManagerModalOpen(true);
     try {
-      const response = await api.get('/employees', { params: { branchId: branch.id, limit: 200, status: 'active' } });
+      const response = await api.get('/employees', { params: { limit: 200, status: 'active' } });
       setSetManagerEmployees(response.data?.employees || []);
     } catch (error) {
       toast.error('Failed to load branch employees');
