@@ -104,6 +104,8 @@ class EmployeeController {
         odooAdapter.execute('hr.employee', 'search_count', [domain])
       ]);
 
+      console.log(`[listEmployees] domain:${JSON.stringify(domain)} | found:${employees?.length} | total:${total}`);
+
       return res.status(200).json({
         employees: employees || [],
         total: total || 0,
