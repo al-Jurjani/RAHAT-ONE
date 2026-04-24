@@ -165,13 +165,14 @@ async function approveCandidate(req, res) {
       return respondError(res, 'Employee ID is required', 400);
     }
 
-    console.log('✅ Approving candidate (via n8n):', employeeId);
+    console.log('✅ Approving candidate (via n8n):', employeeId, '| hrActor:', req.user?.name);
 
     // Fire n8n Flow B — all provisioning handled there
     await powerAutomateService.triggerOnboardingFlow('decision', {
       employeeId,
       decision: 'approve',
-      notes: notes || ''
+      notes: notes || '',
+      hrActorName: req.user?.name || 'HR'
     });
 
     return respondSuccess(res, {
@@ -212,7 +213,8 @@ async function rejectCandidate(req, res) {
       employeeId: id,
       decision: 'reject',
       reason: reason || '',
-      details: details || ''
+      details: details || '',
+      hrActorName: req.user?.name || 'HR'
     });
 
     return respondSuccess(res, {

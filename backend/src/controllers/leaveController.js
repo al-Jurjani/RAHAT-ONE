@@ -433,7 +433,8 @@ class LeaveController {
         employeeEmail:employee.work_email || employee.private_email || '',
         managerName:  managerName || '',
         managerEmail: managerEmail || '',
-        remarks:      remarks || ''
+        remarks:      remarks || '',
+        hrActorName:  leave.state === 'validate1' ? (managerName || 'HR') : undefined
       };
 
       console.log('📤 [managerDecision] Triggering Flow B with payload:', JSON.stringify(payload, null, 2));

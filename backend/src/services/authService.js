@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const odooAdapter = require('../adapters/odooAdapter');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'rahatone-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is not set — refusing to start');
 const JWT_EXPIRY = '24h';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
@@ -58,38 +59,73 @@ class AuthService {
       // Reset failed login counter
       await odooAdapter.execute('res.users', 'reset_failed_login', [[user.id]]);
 
-      // Detect if this employee is a manager (anyone reports to them)
+      // Consolidated employee fetch: detect HR role via dept+job, then manager status
+      let effectiveRole = user.rahatone_role;
       let isManager = false;
       let managerBranchId = null;
+      // Prefer hr.employee.name over res.users.name — the user account may have a generic
+      // name (e.g. "HR") while the employee record holds the person's actual name.
+      let displayName = user.name;
+      const employeeOdooId = Array.isArray(user.employee_id) && user.employee_id[0] ? user.employee_id[0] : null;
 
-      if (user.rahatone_role === 'employee' && Array.isArray(user.employee_id) && user.employee_id[0]) {
-        const employeeOdooId = user.employee_id[0];
-        console.log('[Auth] Checking manager status for employee Odoo ID:', employeeOdooId);
+      console.log('[Auth] user.employee_id raw:', user.employee_id, '| employeeOdooId:', employeeOdooId);
 
-        const reportCount = await odooAdapter.execute('hr.employee', 'search_count', [
-          [['parent_id', '=', employeeOdooId], ['active', '=', true]]
+      const resolveEmployee = async (empId) => {
+        const records = await odooAdapter.execute('hr.employee', 'search_read', [
+          [['id', '=', empId]],
+          ['id', 'name', 'department_id', 'job_id', 'branch_id']
         ]);
-        console.log('[Auth] Employees reporting to this user:', reportCount);
+        return records[0] || null;
+      };
 
-        if (reportCount > 0) {
-          isManager = true;
-          const selfRecord = await odooAdapter.execute('hr.employee', 'search_read', [
-            [['id', '=', employeeOdooId]],
-            ['id', 'branch_id']
+      let emp = null;
+      if (employeeOdooId) {
+        emp = await resolveEmployee(employeeOdooId);
+      }
+
+      // Fallback: find employee by work email when employee_id is not linked on res.users
+      if (!emp) {
+        const loginEmail = user.email || user.login;
+        if (loginEmail) {
+          const byEmail = await odooAdapter.execute('hr.employee', 'search_read', [
+            [['work_email', '=', loginEmail], ['active', '=', true]],
+            ['id', 'name', 'department_id', 'job_id', 'branch_id']
           ]);
-          console.log('[Auth] Manager self record branch_id:', selfRecord?.[0]?.branch_id);
-          if (selfRecord && selfRecord[0] && Array.isArray(selfRecord[0].branch_id)) {
-            managerBranchId = selfRecord[0].branch_id[0];
-          }
+          emp = byEmail[0] || null;
+          if (emp) console.log('[Auth] Employee resolved by work_email fallback, id:', emp.id);
         }
       }
-      console.log('[Auth] isManager:', isManager, '| managerBranchId:', managerBranchId);
 
-      // Generate tokens
-      const accessToken = this._generateAccessToken(user, isManager, managerBranchId);
-      const refreshToken = this._generateRefreshToken(user, isManager, managerBranchId);
+      if (emp) {
+        if (emp.name) displayName = emp.name;
 
-      console.log('✅ Login successful:', email, '| Role:', user.rahatone_role, isManager ? '| Manager of branch:' + managerBranchId : '');
+        const deptName  = Array.isArray(emp.department_id) ? (emp.department_id[1] || '') : '';
+        const jobName   = Array.isArray(emp.job_id)        ? (emp.job_id[1]        || '') : '';
+        const deptLower = deptName.toLowerCase();
+        const jobLower  = jobName.toLowerCase();
+        const isHrDept      = deptLower.includes('hr') || deptLower.includes('human resource');
+        const isHrSeniorJob = ['hr manager', 'hr officer'].some((j) => jobLower.includes(j));
+        if (isHrDept && isHrSeniorJob) {
+          effectiveRole = 'hr';
+          console.log('[Auth] HR role granted via department+job:', deptName, '/', jobName);
+        }
+
+        const reportCount = await odooAdapter.execute('hr.employee', 'search_count', [
+          [['parent_id', '=', emp.id], ['active', '=', true]]
+        ]);
+        if (reportCount > 0) {
+          isManager = true;
+          if (Array.isArray(emp.branch_id) && emp.branch_id[0]) managerBranchId = emp.branch_id[0];
+        }
+      }
+
+      console.log('[Auth] effectiveRole:', effectiveRole, '| isManager:', isManager, '| displayName:', displayName);
+
+      const tokenUser = { ...user, name: displayName };
+      const accessToken = this._generateAccessToken(tokenUser, effectiveRole, isManager, managerBranchId);
+      const refreshToken = this._generateRefreshToken(tokenUser, effectiveRole, isManager, managerBranchId);
+
+      console.log('✅ Login successful:', email, '| Role:', effectiveRole, isManager ? '| Manager of branch:' + managerBranchId : '');
 
       return {
         success: true,
@@ -97,10 +133,10 @@ class AuthService {
         refreshToken,
         user: {
           id: user.id,
-          name: user.name,
+          name: displayName,
           email: user.email,
-          role: user.rahatone_role,
-          employeeId: user.employee_id ? user.employee_id[0] : null,
+          role: effectiveRole,
+          employeeId: employeeOdooId,
           isManager,
           managerBranchId
         }
@@ -207,7 +243,7 @@ class AuthService {
         oldPassword
       ]);
 
-      if (!isValid || !isValid[0]) {
+      if (!isValid) {
         return { success: false, message: 'Current password is incorrect' };
       }
 
@@ -228,14 +264,14 @@ class AuthService {
   }
 
   // Private helper methods
-  _generateAccessToken(user, isManager = false, managerBranchId = null) {
+  _generateAccessToken(user, effectiveRole = null, isManager = false, managerBranchId = null) {
     return jwt.sign(
       {
         userId: user.id,
         employee_id: user.employee_id ? user.employee_id[0] : null,
         email: user.email || user.login,
         name: user.name,
-        role: user.rahatone_role,
+        role: effectiveRole ?? user.rahatone_role,
         isManager,
         managerBranchId
       },
@@ -244,14 +280,14 @@ class AuthService {
     );
   }
 
-  _generateRefreshToken(user, isManager = false, managerBranchId = null) {
+  _generateRefreshToken(user, effectiveRole = null, isManager = false, managerBranchId = null) {
     return jwt.sign(
       {
         userId: user.id,
         employee_id: user.employee_id ? user.employee_id[0] : null,
         email: user.email || user.login,
         name: user.name,
-        role: user.rahatone_role,
+        role: effectiveRole ?? user.rahatone_role,
         isManager,
         managerBranchId
       },

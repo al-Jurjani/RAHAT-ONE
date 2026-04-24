@@ -65,8 +65,9 @@ function PWAGuard({ children }) {
     return () => mobileQuery.removeListener(updateMobile);
   }, []);
 
-  const isPwaEmployeeMode = isMobile && user?.role === 'employee';
-  const isPwaBlocked      = isMobile && !loading && !!user && user?.role === 'hr' && location.pathname !== '/login';
+  // HR individuals with a linked employee record can use the PWA as employees
+  const isPwaEmployeeMode = isMobile && (user?.role === 'employee' || (user?.role === 'hr' && !!user?.employeeId));
+  const isPwaBlocked      = isMobile && !loading && !!user && user?.role === 'hr' && !user?.employeeId && location.pathname !== '/login';
 
   useEffect(() => {
     document.body.classList.toggle('pwa-employee-mode', isPwaEmployeeMode);

@@ -198,7 +198,8 @@ class PowerAutomateService {
           expenseId: payload.expenseId,
           action: payload.action,
           reason: payload.reason,
-          token: payload.token
+          token: payload.token,
+          hrActorName: payload.hrActorName || 'HR'
         },
         timeout: 30000
       });

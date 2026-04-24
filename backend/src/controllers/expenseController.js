@@ -338,7 +338,7 @@ class ExpenseController {
         return respondError(res, validation.reason, 401);
       }
 
-      await expenseService.handleHRDecision(expenseId, decision, remarks, token);
+      await expenseService.handleHRDecision(expenseId, decision, remarks, token, req.user?.name || 'HR');
 
       return respondSuccess(res, {
         expenseId: Number(expenseId),

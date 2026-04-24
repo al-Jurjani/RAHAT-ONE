@@ -391,14 +391,15 @@ class ExpenseService {
     } catch (error) { console.error('Manager decision error:', error); throw error; }
   }
 
-  async handleHRDecision(expenseId, decision, remarks = '', approvalToken = null) {
+  async handleHRDecision(expenseId, decision, remarks = '', approvalToken = null, hrActorName = 'HR') {
     try {
       const action = decision === 'approve' ? 'approve' : 'reject';
       const triggerOk = await powerAutomateService.triggerExpenseHRDecision({
         expenseId,
         action,
         reason: remarks || (action === 'approve' ? 'Approved by HR' : 'Rejected by HR'),
-        token: approvalToken
+        token: approvalToken,
+        hrActorName
       });
 
       if (!triggerOk) {

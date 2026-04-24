@@ -21,6 +21,7 @@ import GroupIcon from '@mui/icons-material/Group';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import LogoutIcon from '@mui/icons-material/Logout';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 const HR_NAV_SECTIONS = [
   {
@@ -60,8 +61,19 @@ const MANAGER_NAV_ITEMS = [
 ];
 
 function Sidebar({ collapsed, onToggle }) {
-  const { user, logout } = useAuth();
+  const { user, logout, viewMode, setViewMode } = useAuth();
   const navigate = useNavigate();
+
+  const handleViewModeToggle = () => {
+    if (viewMode === 'hr') {
+      setViewMode('employee');
+      navigate('/employee/dashboard');
+    } else {
+      // Just change mode — ProtectedRoute on the current employee route
+      // will detect viewMode is no longer 'employee' and redirect to /hr
+      setViewMode('hr');
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -82,9 +94,25 @@ function Sidebar({ collapsed, onToggle }) {
 
       <div className="sidebar-divider" />
 
+      {/* View mode toggle for HR users with a linked employee */}
+      {user?.role === 'hr' && user?.employeeId && (
+        <div className="sidebar-viewmode">
+          <button
+            className="sidebar-viewmode-btn"
+            onClick={handleViewModeToggle}
+            title={viewMode === 'hr' ? 'Switch to Employee View' : 'Switch to HR View'}
+          >
+            <SwapHorizIcon fontSize="small" />
+            {!collapsed && (
+              <span>{viewMode === 'hr' ? 'Employee View' : 'HR View'}</span>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {user?.role === 'hr' ? (
+        {user?.role === 'hr' && viewMode !== 'employee' ? (
           HR_NAV_SECTIONS.map((section) => (
             <React.Fragment key={section.title}>
               {!collapsed && <span className="sidebar-section-label">{section.title}</span>}

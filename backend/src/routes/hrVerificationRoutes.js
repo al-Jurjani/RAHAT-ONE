@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const { authenticateToken } = require('../middleware/authMiddleware');
 const hrVerificationController = require('../controllers/hrVerificationController');
+
+router.use(authenticateToken);
 
 // HR-only routes
 router.get('/pending', hrVerificationController.getPendingRegistrations);
