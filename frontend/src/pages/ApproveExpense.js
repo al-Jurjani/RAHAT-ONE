@@ -21,7 +21,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DescriptionIcon from '@mui/icons-material/Description';
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace('/api', '');
 
 const ApproveExpense = () => {
   const { expenseId } = useParams();

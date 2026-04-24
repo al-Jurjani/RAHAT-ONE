@@ -14,7 +14,7 @@ import {
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace('/api', '');
 
 const ApproveLeave = () => {
   const { leaveId } = useParams();

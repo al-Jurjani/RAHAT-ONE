@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { CircularProgress, Alert } from '@mui/material';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const LeaveBalanceCard = ({ refreshTrigger = 0 }) => {
   const [balances, setBalances] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -16,14 +18,14 @@ const LeaveBalanceCard = ({ refreshTrigger = 0 }) => {
         const headers = { Authorization: `Bearer ${token}` };
 
         const { data: types } = await axios.get(
-          'http://localhost:5000/api/leaves/types', { headers }
+          ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/types', { headers }
         );
 
         const results = await Promise.all(
           types.map(async (type) => {
             try {
               const { data } = await axios.get(
-                `http://localhost:5000/api/leaves/balance?leave_type_id=${type.id}`,
+                `${API_BASE_URL}/leaves/balance?leave_type_id=${type.id}`,
                 { headers }
               );
               return { ...type, balance: data.data || data };

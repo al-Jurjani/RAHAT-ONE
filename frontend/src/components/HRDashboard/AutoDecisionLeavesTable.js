@@ -6,8 +6,8 @@ import {
 import axios from 'axios';
 
 const ENDPOINT = {
-  auto_approved: 'http://localhost:5000/api/leaves/auto-approved',
-  auto_rejected: 'http://localhost:5000/api/leaves/auto-rejected',
+  auto_approved: ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/auto-approved',
+  auto_rejected: ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/auto-rejected',
 };
 
 const CONFIG = {

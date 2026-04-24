@@ -18,6 +18,8 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const BOT_KEYWORDS = ['rpa bot', 'rahat rpa', 'auto-approved', 'auto-refused', 'auto-rejected', 'policy bot'];
 
 const isBot = (author, body) => {
@@ -37,7 +39,7 @@ const LeaveMessagesDialog = ({ leaveId, open, onClose }) => {
       const token = localStorage.getItem('accessToken');
 
       const response = await axios.get(
-        `http://localhost:5000/api/leaves/${leaveId}/messages`,
+        `${API_BASE_URL}/leaves/${leaveId}/messages`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 

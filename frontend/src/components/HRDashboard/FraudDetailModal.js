@@ -29,7 +29,7 @@ import {
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const FraudDetailModal = ({ open, expense, onClose, onActionComplete }) => {
   const [actionLoading, setActionLoading] = useState(false);

@@ -39,7 +39,7 @@
 //       setLoading(true);
 //       const token = localStorage.getItem('accessToken');
 //       const response = await axios.get(
-//         'http://localhost:5000/api/leaves?status=confirm',
+//         ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves?status=confirm',
 //         {
 //           headers: { Authorization: `Bearer ${token}` }
 //         }
@@ -297,10 +297,10 @@ const PendingLeavesTable = ({ onActionComplete }) => {
 
       // Fetch BOTH confirm (pending manager) AND validate1 (pending HR) leaves
       const [confirmLeaves, hrPendingLeaves] = await Promise.all([
-        axios.get('http://localhost:5000/api/leaves?status=confirm', {
+        axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves?status=confirm', {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get('http://localhost:5000/api/leaves?status=validate1', {
+        axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves?status=validate1', {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
@@ -348,7 +348,7 @@ const PendingLeavesTable = ({ onActionComplete }) => {
       const decision = action === 'approve' ? 'approved' : 'rejected';
 
       await axios.post(
-        `http://localhost:5000/api/leaves/${selectedLeave.id}/manager-decision`,
+        `${API_BASE_URL}/leaves/${selectedLeave.id}/manager-decision`,
         {
           decision,
           managerName: 'HR Admin',

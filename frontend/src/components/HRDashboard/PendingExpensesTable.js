@@ -33,7 +33,7 @@ import axios from 'axios';
 import { expenseAPI } from '../../services/api';
 import FraudDetailModal from './FraudDetailModal';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const getPreviewType = (mimetype, name) => {
   const lowerName = (name || '').toLowerCase();

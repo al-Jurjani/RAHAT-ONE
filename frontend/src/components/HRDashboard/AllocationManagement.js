@@ -53,7 +53,7 @@ const EmployeeRow = ({ employee, leaveTypes, onAllocate, onRefresh }) => {
             console.log(`  → Fetching balance for leave type ${type.id} (${type.name})`);
 
             const response = await axios.get(
-            `http://localhost:5000/api/leaves/employee/${employee.id}/balance?leave_type_id=${type.id}`,
+            `${API_BASE_URL}/leaves/employee/${employee.id}/balance?leave_type_id=${type.id}`,
             { headers: { Authorization: `Bearer ${token}` } }
             );
 
@@ -199,15 +199,15 @@ const AllocationManagement = () => {
 
       console.log('🔍 Fetching employees and leave types...');
 
-      const empResponse = await axios.get('http://localhost:5000/api/leaves/employees', {
+      const empResponse = await axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/employees', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      const typesResponse = await axios.get('http://localhost:5000/api/leaves/types', {
+      const typesResponse = await axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/types', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      const deptResponse = await axios.get('http://localhost:5000/api/lookup/departments', {
+      const deptResponse = await axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/lookup/departments', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -249,7 +249,7 @@ const AllocationManagement = () => {
       console.log('📝 Allocating leave...');
 
       await axios.post(
-        'http://localhost:5000/api/leaves/allocate',
+        ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/allocate',
         {
           employee_id: selectedEmployee.id,
           leave_type_id: parseInt(allocationForm.leave_type_id),
@@ -296,7 +296,7 @@ const AllocationManagement = () => {
       // Allocate to each employee
       const promises = targetEmployees.map(emp =>
         axios.post(
-          'http://localhost:5000/api/leaves/allocate',
+          ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/allocate',
           {
             employee_id: emp.id,
             leave_type_id: parseInt(bulkAllocationForm.leave_type_id),

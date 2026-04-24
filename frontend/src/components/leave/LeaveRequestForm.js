@@ -47,7 +47,7 @@ const LeaveRequestForm = ({ onSubmitSuccess }) => {
   const fetchLeaveTypes = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await axios.get('http://localhost:5000/api/leaves/types', {
+      const response = await axios.get(${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves/types', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -119,7 +119,7 @@ const LeaveRequestForm = ({ onSubmitSuccess }) => {
       const dateTo = formData.date_to.toISOString().split('T')[0];
 
       await axios.post(
-        'http://localhost:5000/api/leaves',
+        ${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/leaves',
         {
           leave_type_id: parseInt(formData.leave_type_id),
           date_from: dateFrom,
