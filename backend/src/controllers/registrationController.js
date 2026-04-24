@@ -146,6 +146,7 @@ async function completeRegistration(req, res) {
       entered_father_name: fatherName,
       birthday: dateOfBirth,
       mobile_phone: phone,
+      work_phone: false,
       onboarding_status: 'documents_submitted',
       cnic_uploaded: true,
       degree_uploaded: !!degreeFile,

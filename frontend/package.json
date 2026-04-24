@@ -50,8 +50,5 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0"
-  },
-  "optionalDependencies": {
-    "canvas": "^2.11.2"
   }
 }
