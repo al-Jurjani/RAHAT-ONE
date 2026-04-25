@@ -354,8 +354,8 @@ def detect_forgery_florence(
         if amount_value is not None and _is_amount_like_token(region["text"]):
             rel_delta = _candidate_relative_delta(amount_value, claimed_amount)
             if claimed_amount and claimed_amount > 0:
-                plausible_lower = max(10.0, claimed_amount * 0.2)
-                plausible_upper = max(20000.0, claimed_amount * 8.0)
+                plausible_lower = max(1.0, claimed_amount * 0.05)
+                plausible_upper = max(500000.0, claimed_amount * 30.0)
                 if amount_value < plausible_lower or amount_value > plausible_upper:
                     continue
 
@@ -393,24 +393,14 @@ def detect_forgery_florence(
         keyword_bonus = 1.0 if item.get("label") == "total" else 0.0
         conf_score = float(item.get("confidence") or 0.0) / 100.0
 
-        # Prefer values close to the claimed amount when available.
-        delta = item.get("relative_delta")
-        proximity = 0.0
-        if delta is not None:
-            proximity = max(0.0, 1.0 - float(delta))
-
-        # Slightly prefer realistic amount ranges over edge values.
+        # Do NOT reward proximity to claimed amount — that would deprioritize the
+        # real receipt total in fraud cases where claimed ≠ actual.
         value = float(item.get("value") or 0.0)
         magnitude_penalty = 0.0
         if value >= 500000:
             magnitude_penalty = 0.2
 
-        return (
-            (keyword_bonus * 2.5)
-            + (proximity * 2.0)
-            + (conf_score * 1.2)
-            - magnitude_penalty
-        )
+        return (keyword_bonus * 2.5) + (conf_score * 1.2) - magnitude_penalty
 
     total_candidates.sort(key=_candidate_priority, reverse=True)
     detected_total_amount = total_candidates[0]["value"] if total_candidates else None
