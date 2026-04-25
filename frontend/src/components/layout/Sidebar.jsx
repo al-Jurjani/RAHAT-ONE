@@ -9,7 +9,6 @@ import HomeIcon from '@mui/icons-material/Home';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import ReceiptIcon from '@mui/icons-material/Receipt';
-import SettingsIcon from '@mui/icons-material/Settings';
 import EventIcon from '@mui/icons-material/Event';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PersonIcon from '@mui/icons-material/Person';
@@ -36,7 +35,6 @@ const HR_NAV_SECTIONS = [
       { to: '/hr/branches',           icon: <ApartmentIcon fontSize="small" />,               label: 'Branch Management' },
       { to: '/hr/attendance',         icon: <FactCheckIcon fontSize="small" />,               label: 'Attendance Overview' },
       { to: '/hr/audit-log',          icon: <HistoryIcon fontSize="small" />,                 label: 'Audit Log' },
-      { to: '/hr/config',             icon: <SettingsIcon fontSize="small" />,                label: 'Configuration', disabled: true },
     ]
   }
 ];

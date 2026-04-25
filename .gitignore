@@ -29,6 +29,8 @@ wheels/
 *.swp
 *.swo
 
+.pdf
+
 # Environment variables
 .env
 .env.local
