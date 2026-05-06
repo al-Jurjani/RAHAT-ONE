@@ -164,6 +164,19 @@ class OdooAdapter {
     }
   }
 
+  async getEmployeesBatch(ids) {
+    if (!ids || ids.length === 0) return [];
+    try {
+      return await this.execute('hr.employee', 'read', [
+        ids,
+        ['id', 'name', 'work_email', 'department_id', 'job_id']
+      ]);
+    } catch (error) {
+      console.error('Error batch-reading employees:', error);
+      return [];
+    }
+  }
+
   /**
    * Create employee record
    */

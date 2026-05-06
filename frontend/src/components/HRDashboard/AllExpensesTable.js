@@ -31,8 +31,10 @@ import {
   FilterList as FilterListIcon
 } from '@mui/icons-material';
 import DescriptionIcon from '@mui/icons-material/Description';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import axios from 'axios';
 import { expenseAPI } from '../../services/api';
+import FraudDetailModal from './FraudDetailModal';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -57,6 +59,8 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
   const [invoicePreview, setInvoicePreview] = useState(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [fraudModalOpen, setFraudModalOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 960);
 
   // Pagination & Sorting
@@ -105,9 +109,14 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
 
   const getEmployeeName = (expense) => sanitizeEmployeeName(expense.employeeName || expense.employee_id?.[1]);
 
-  const getEmployeeEmail = (expense) => (
-    expense.employeeEmail || expense.employee_email || 'N/A'
-  );
+  const getEmployeeSubtitle = (expense) => {
+    const dept = expense.employeeDepartment;
+    const job = expense.employeeJob;
+    if (dept && job) return `${dept} · ${job}`;
+    if (dept) return dept;
+    if (job) return job;
+    return expense.employeeEmail || expense.employee_email || null;
+  };
 
   const filteredExpenses = useMemo(() => {
     let filtered = [...expenses];
@@ -510,9 +519,11 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {getEmployeeName(expense)}
                       </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        {getEmployeeEmail(expense)}
-                      </Typography>
+                      {getEmployeeSubtitle(expense) && (
+                        <Typography variant="caption" color="textSecondary">
+                          {getEmployeeSubtitle(expense)}
+                        </Typography>
+                      )}
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -531,6 +542,14 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      onClick={() => { setSelectedExpense(expense); setFraudModalOpen(true); }}
+                      color="primary"
+                      title="View Fraud Analysis"
+                    >
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
                     <IconButton
                       size="small"
                       onClick={() => loadInvoicePreview(expense.id)}
@@ -584,6 +603,13 @@ const AllExpensesTable = ({ refreshTrigger, onActionComplete }) => {
           <Button onClick={() => setPreviewDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <FraudDetailModal
+        open={fraudModalOpen}
+        expense={selectedExpense}
+        onClose={() => { setFraudModalOpen(false); setSelectedExpense(null); }}
+        onActionComplete={() => { setFraudModalOpen(false); setSelectedExpense(null); fetchAllExpenses(); if (onActionComplete) onActionComplete(); }}
+      />
     </>
   );
 };

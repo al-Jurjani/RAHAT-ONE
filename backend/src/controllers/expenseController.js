@@ -124,6 +124,25 @@ class ExpenseController {
         // HR and managers see all expenses
         expenses = await expenseService.getAllExpenses(filters);
         console.log('   HR/Manager view - Total expenses:', expenses.length);
+
+        // Batch-enrich with employee department/job data
+        const empIds = [...new Set(expenses.map(e => e.employee_id?.[0]).filter(Boolean))];
+        if (empIds.length > 0) {
+          const empRecords = await odooAdapter.getEmployeesBatch(empIds);
+          const empMap = {};
+          empRecords.forEach(e => { empMap[e.id] = e; });
+          expenses = expenses.map(e => {
+            const emp = empMap[e.employee_id?.[0]];
+            if (!emp) return e;
+            return {
+              ...e,
+              employeeName: emp.name,
+              employeeEmail: emp.work_email || null,
+              employeeDepartment: emp.department_id ? emp.department_id[1] : null,
+              employeeJob: emp.job_id ? emp.job_id[1] : null
+            };
+          });
+        }
       } else {
         // Employees see only their own expenses
         filters.employee_id = [employeeId];
