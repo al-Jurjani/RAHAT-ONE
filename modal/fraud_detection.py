@@ -932,24 +932,37 @@ def fastapi_app():
             if stats["stdDev"] > 0
             else 0.0
         )
+        suffix = f" [baseline: avg {stats['mean']:.0f}, stdDev {stats['stdDev']:.0f}, n={stats['count']}]"
         if z > THRESHOLDS["anomaly"]["extreme"]:
             score, detail = (
                 0.95,
-                f"Extreme outlier (Z={z:.2f}) - {amount} vs avg {stats['mean']:.0f}",
+                f"Extreme outlier (Z={z:.2f}) - {amount} vs avg {stats['mean']:.0f}"
+                + suffix,
             )
         elif z > THRESHOLDS["anomaly"]["high"]:
             score, detail = (
                 0.80,
-                f"High outlier (Z={z:.2f}) - {amount} vs avg {stats['mean']:.0f}",
+                f"High outlier (Z={z:.2f}) - {amount} vs avg {stats['mean']:.0f}"
+                + suffix,
             )
         elif z > THRESHOLDS["anomaly"]["moderate"]:
             score, detail = (
                 0.60,
-                f"Moderate outlier (Z={z:.2f}) - {amount} vs avg {stats['mean']:.0f}",
+                f"Moderate outlier (Z={z:.2f}) - {amount} vs avg {stats['mean']:.0f}"
+                + suffix,
             )
         else:
-            score, detail = 0.0, f"Normal amount (Z={z:.2f})"
-        return {"score": score, "zScore": round(z, 2), "details": detail}
+            score, detail = 0.0, f"Normal amount (Z={z:.2f}){suffix}"
+        return {
+            "score": score,
+            "zScore": round(z, 2),
+            "details": detail,
+            "stats_used": {
+                "mean": stats["mean"],
+                "stdDev": stats["stdDev"],
+                "count": stats["count"],
+            },
+        }
 
     # ===== AGGREGATION =====
 
