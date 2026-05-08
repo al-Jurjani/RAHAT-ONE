@@ -41,8 +41,8 @@ const categoryOptions = [
 const statusOptions = [
   { value: '', label: 'All Statuses' },
   { value: 'draft', label: 'Draft' },
-  { value: 'pending_manager', label: 'Pending Manager Approval' },
-  { value: 'pending_hr', label: 'Pending HR Approval' },
+  { value: 'pending_manager', label: 'Pending (Manager)' },
+  { value: 'pending_hr', label: 'Pending (HR)' },
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'flagged', label: 'Flagged' }

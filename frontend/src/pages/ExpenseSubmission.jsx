@@ -137,31 +137,34 @@ const ExpenseSubmission = () => {
 
             <form onSubmit={handleSubmit} noValidate>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
-                <FormField
-                  label="Category"
-                  type="select"
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  error={errors.category}
-                  required
-                >
-                  <option value="">Select category…</option>
-                  {categoryOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </FormField>
-
-                <FormField
-                  label="Amount (PKR)"
-                  type="number"
-                  name="amount"
-                  value={formData.amount}
-                  onChange={handleInputChange}
-                  error={errors.amount}
-                  placeholder="e.g. 5000"
-                  required
-                />
+                <div>
+                  <FormField
+                    label="Category"
+                    type="select"
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    error={errors.category}
+                    required
+                  >
+                    <option value="">Select category…</option>
+                    {categoryOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </FormField>
+                </div>
+                <div>
+                  <FormField
+                    label="Amount (PKR)"
+                    type="number"
+                    name="amount"
+                    value={formData.amount}
+                    onChange={handleInputChange}
+                    error={errors.amount}
+                    placeholder="e.g. 5000"
+                    required
+                  />
+                </div>
               </div>
 
               <FormField

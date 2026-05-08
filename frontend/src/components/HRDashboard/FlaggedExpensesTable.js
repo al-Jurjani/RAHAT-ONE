@@ -29,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import DescriptionIcon from '@mui/icons-material/Description';
 import axios from 'axios';
+import { expenseAPI } from '../../services/api';
 import FraudDetailModal from './FraudDetailModal';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -105,14 +106,17 @@ const FlaggedExpensesTable = ({ refreshTrigger, onActionComplete }) => {
 
   const handleViewAttachment = async (expenseId) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_BASE_URL}/expenses/${expenseId}/attachment`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error('Failed to load attachment');
-      const blob = await response.blob();
+      const response = await expenseAPI.getAttachment(expenseId);
+      const blob = response.data;
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error('Failed to open attachment:', err);
       alert('Could not load invoice attachment.');

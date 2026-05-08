@@ -107,17 +107,13 @@ class ExpenseController {
       const filters = {};
 
       // Add filter parameters if provided
-      if (status) filters.workflow_status = ['=', status];
-      if (category) filters.expense_category = ['=', category.toLowerCase()];
-      if (vendor) filters.vendor_name = ['ilike', vendor];
+      if (status) filters.workflow_status = status;
+      if (category) filters.expense_category = category.toLowerCase();
+      if (vendor) filters.vendor_name = vendor;
 
       // Date range filtering
-      if (dateFrom) {
-        filters.create_date_from = dateFrom;
-      }
-      if (dateTo) {
-        filters.create_date_to = dateTo;
-      }
+      if (dateFrom) filters.expense_date_from = dateFrom;
+      if (dateTo) filters.expense_date_to = dateTo;
 
       // Filter by role
       if (userRole === 'hr' || userRole === 'manager') {
