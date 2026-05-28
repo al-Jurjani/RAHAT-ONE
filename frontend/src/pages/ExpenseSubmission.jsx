@@ -3,6 +3,7 @@ import { Tabs, Tab } from '@mui/material';
 import { toast } from 'react-toastify';
 import { expenseAPI } from '../services/api';
 import ExpenseHistoryTable from '../components/expense/ExpenseHistoryTable';
+import ExpensePolicies from '../components/expense/ExpensePolicies';
 import AppShell from '../components/layout/AppShell';
 import { Card, Button, FormField } from '../components/ui';
 
@@ -237,6 +238,8 @@ const ExpenseSubmission = () => {
               </div>
             </form>
           </Card>
+
+          <ExpensePolicies />
         </div>
       )}
 
