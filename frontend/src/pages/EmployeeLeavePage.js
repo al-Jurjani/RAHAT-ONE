@@ -3,6 +3,7 @@ import { Tabs, Tab, Box } from '@mui/material';
 import LeaveBalanceCard from '../components/leave/LeaveBalanceCard';
 import LeaveRequestForm from '../components/leave/LeaveRequestForm';
 import LeaveHistoryTable from '../components/leave/LeaveHistoryTable';
+import LeavePolicies from '../components/leave/LeavePolicies';
 import { useAuth } from '../contexts/AuthContext';
 import AppShell from '../components/layout/AppShell';
 import { LoadingSpinner } from '../components/ui';
@@ -48,6 +49,7 @@ const EmployeeLeavePage = () => {
           {/* Leave Balances */}
           <Box sx={{ flex: '0 0 320px' }}>
             <LeaveBalanceCard refreshTrigger={refreshTrigger} />
+            <LeavePolicies />
           </Box>
 
           {/* Request Leave form */}
