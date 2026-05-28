@@ -279,9 +279,6 @@ function HRDepartmentManagementPage() {
             const managerName = getFieldName(department.manager_id);
 
             const parentName = getFieldName(department.parent_id);
-            const cachedEmployees = employeesCache[department.id] || [];
-            const previewEmployees = cachedEmployees.slice(0, 3);
-            const remainingCount = Math.max(0, Number(department.employee_count || 0) - previewEmployees.length);
 
             return (
               <Card
@@ -320,33 +317,6 @@ function HRDepartmentManagementPage() {
                         <WarningAmberIcon fontSize="small" />
                         <span>No manager assigned</span>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="hr-department-management__preview-block">
-                    <div className="hr-department-management__preview-label">Employee preview</div>
-
-                    {employeesLoadingByDept[department.id] ? (
-                      <div className="hr-department-management__preview-loading">Loading preview...</div>
-                    ) : previewEmployees.length > 0 ? (
-                      <div className="hr-department-management__preview-row">
-                        <div className="hr-department-management__preview-avatars">
-                          {previewEmployees.map((employee, index) => (
-                            <Avatar
-                              key={employee.id || `${department.id}-${index}`}
-                              name={employee.name || 'Employee'}
-                              src={getAvatarSrc(employee.image_128)}
-                              size="sm"
-                              className="hr-department-management__preview-avatar"
-                            />
-                          ))}
-                        </div>
-                        {remainingCount > 0 && (
-                          <span className="hr-department-management__preview-more">+{remainingCount} more</span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="hr-department-management__preview-empty">No preview loaded yet</div>
                     )}
                   </div>
                 </div>

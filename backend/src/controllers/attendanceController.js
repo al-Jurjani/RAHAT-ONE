@@ -189,6 +189,19 @@ class AttendanceController {
 
       let odooAttendanceId = false;
       if (status === 'present' || status === 'late') {
+        // Close any open hr.attendance record (no check_out) before creating a new one.
+        // This can happen when a previous session's check-out was never recorded in Odoo.
+        const openRecords = await odooAdapter.execute('hr.attendance', 'search_read', [[
+          ['employee_id', '=', employeeIdInt],
+          ['check_out', '=', false]
+        ], ['id', 'check_in'], 0, 1, 'check_in desc']);
+        if (openRecords && openRecords.length > 0) {
+          console.warn(`[Attendance] Closing stale open hr.attendance #${openRecords[0].id} for employee ${employeeIdInt} (checked in ${openRecords[0].check_in}, never checked out)`);
+          await odooAdapter.execute('hr.attendance', 'write', [[openRecords[0].id], {
+            check_out: checkInTime.toISOString().slice(0, 19).replace('T', ' ')
+          }]);
+        }
+
         odooAttendanceId = await odooAdapter.execute('hr.attendance', 'create', [{
           employee_id: employeeIdInt,
           check_in: checkInTime.toISOString().slice(0, 19).replace('T', ' ')

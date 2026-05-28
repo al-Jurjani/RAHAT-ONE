@@ -141,7 +141,7 @@ const ExpenseHistoryTable = ({ showTitle = true }) => {
   const [previewErrors, setPreviewErrors] = useState({});
 
   const buildParams = (values) => {
-    const params = {};
+    const params = { scope: 'me' };
     if (values.status) params.status = values.status;
     if (values.category) params.category = values.category;
     if (values.dateFrom) params.dateFrom = values.dateFrom;

@@ -95,9 +95,13 @@ class ExpenseController {
    */
   async listExpenses(req, res) {
     try {
-      const { status, category, dateFrom, dateTo, vendor } = req.query;
+      const { status, category, dateFrom, dateTo, vendor, scope } = req.query;
       const employeeId = req.user.employee_id;
       const userRole = req.user.role; // Should be set in authMiddleware
+
+      // scope=me forces self-scoped results (private "My Expenses" view),
+      // even for HR/managers who would otherwise see all expenses.
+      const selfOnly = scope === 'me';
 
       console.log('📋 Expense list request');
       console.log('   User Role:', userRole);
@@ -116,7 +120,7 @@ class ExpenseController {
       if (dateTo) filters.expense_date_to = dateTo;
 
       // Filter by role
-      if (userRole === 'hr' || userRole === 'manager') {
+      if ((userRole === 'hr' || userRole === 'manager') && !selfOnly) {
         // HR and managers see all expenses
         expenses = await expenseService.getAllExpenses(filters);
         console.log('   HR/Manager view - Total expenses:', expenses.length);
