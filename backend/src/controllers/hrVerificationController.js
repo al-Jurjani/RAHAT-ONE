@@ -2,6 +2,23 @@ const odooAdapter = require('../adapters/odooAdapter');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
 const powerAutomateService = require('../services/powerAutomateService');
 
+async function resolveHrActorName(user) {
+  const jwtName = user?.name;
+  if (jwtName && jwtName !== 'HR' && jwtName !== 'Manager') return jwtName;
+  // JWT name is generic — look up the actual employee name by work email
+  try {
+    const email = user?.email;
+    if (!email) return jwtName || 'HR';
+    const records = await odooAdapter.execute('hr.employee', 'search_read', [
+      [['work_email', '=', email], ['active', '=', true]],
+      ['name']
+    ]);
+    return records[0]?.name || jwtName || 'HR';
+  } catch {
+    return jwtName || 'HR';
+  }
+}
+
 /**
  * Get all pending registrations for HR review
  */
@@ -165,14 +182,15 @@ async function approveCandidate(req, res) {
       return respondError(res, 'Employee ID is required', 400);
     }
 
-    console.log('✅ Approving candidate (via n8n):', employeeId, '| hrActor:', req.user?.name);
+    const hrActorName = await resolveHrActorName(req.user);
+    console.log('✅ Approving candidate (via n8n):', employeeId, '| hrActor:', hrActorName);
 
     // Fire n8n Flow B — all provisioning handled there
     await powerAutomateService.triggerOnboardingFlow('decision', {
       employeeId,
       decision: 'approve',
       notes: notes || '',
-      hrActorName: req.user?.name || 'HR'
+      hrActorName
     });
 
     return respondSuccess(res, {
@@ -206,7 +224,8 @@ async function rejectCandidate(req, res) {
       return respondError(res, 'Employee ID is required', 400);
     }
 
-    console.log('❌ Rejecting candidate (via n8n):', id);
+    const hrActorName = await resolveHrActorName(req.user);
+    console.log('❌ Rejecting candidate (via n8n):', id, '| hrActor:', hrActorName);
 
     // Fire n8n Flow B — all Odoo updates and emails handled there
     await powerAutomateService.triggerOnboardingFlow('decision', {
@@ -214,7 +233,7 @@ async function rejectCandidate(req, res) {
       decision: 'reject',
       reason: reason || '',
       details: details || '',
-      hrActorName: req.user?.name || 'HR'
+      hrActorName
     });
 
     return respondSuccess(res, {
