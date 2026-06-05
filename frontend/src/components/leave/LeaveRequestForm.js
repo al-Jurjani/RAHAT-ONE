@@ -116,9 +116,18 @@ const LeaveRequestForm = ({ onSubmitSuccess }) => {
 
       const token = localStorage.getItem('accessToken');
 
-      // Format dates as YYYY-MM-DD
-      const dateFrom = formData.date_from.toISOString().split('T')[0];
-      const dateTo = formData.date_to.toISOString().split('T')[0];
+      // Format dates as YYYY-MM-DD using LOCAL date components.
+      // Using toISOString() converts local midnight to UTC, which shifts the
+      // date back a day in UTC+ timezones (e.g. PKT) and breaks same-day checks.
+      const toLocalYMD = (d) => {
+        const dt = new Date(d);
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      const dateFrom = toLocalYMD(formData.date_from);
+      const dateTo = toLocalYMD(formData.date_to);
 
       await axios.post(
         `${API_BASE_URL}/leaves`,
