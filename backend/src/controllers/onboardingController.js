@@ -1,6 +1,24 @@
 const onboardingService = require('../services/onboardingService');
 const powerAutomateService = require('../services/powerAutomateService');
+const odooAdapter = require('../adapters/odooAdapter');
 const { respondSuccess, respondError } = require('../utils/responseHandler');
+
+async function resolveHrActorName(user) {
+  const jwtName = user?.name;
+  if (jwtName && jwtName !== 'HR' && jwtName !== 'Manager') return jwtName;
+  // JWT name is generic — look up the actual employee name by work email
+  try {
+    const email = user?.email;
+    if (!email) return jwtName || 'HR';
+    const records = await odooAdapter.execute('hr.employee', 'search_read', [
+      [['work_email', '=', email], ['active', '=', true]],
+      ['name']
+    ]);
+    return records[0]?.name || jwtName || 'HR';
+  } catch {
+    return jwtName || 'HR';
+  }
+}
 
 class OnboardingController {
   /**
@@ -19,13 +37,16 @@ class OnboardingController {
         return respondError(res, 'Department and position are required', 400);
       }
 
+      const hrActorName = await resolveHrActorName(req.user);
+
       // Fire n8n webhook — all work happens in the flow
       await powerAutomateService.triggerOnboardingFlow('initiate', {
         email: email.trim(),
         departmentId: parseInt(departmentId),
         jobId: parseInt(jobId),
         manualReviewRequired: manualReviewRequired || false,
-        hrActorName: req.user?.name || 'HR',
+        hrActorName,
+        initiatedBy: hrActorName,
         hrActorId: req.user?.id || null
       });
 
